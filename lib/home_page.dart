@@ -323,7 +323,7 @@ class _TopBar extends StatelessWidget {
           ),
           if (update != null) ...[
             const SizedBox(width: 6),
-            _UpdateButton(build: update!.build, onTap: onUpdate),
+            _UpdateButton(buildNo: update!.build, onTap: onUpdate),
           ],
           const SizedBox(width: 4),
           const _ThemeDots(),
@@ -335,15 +335,15 @@ class _TopBar extends StatelessWidget {
 
 // ───────────────────────── кнопка обновления ─────────────────────────
 class _UpdateButton extends StatelessWidget {
-  final int build;
+  final int buildNo;
   final VoidCallback onTap;
-  const _UpdateButton({required this.build, required this.onTap});
+  const _UpdateButton({required this.buildNo, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
     return Tooltip(
-      message: 'Доступна сборка №$build',
+      message: 'Доступна сборка №$buildNo',
       child: Material(
         color: c.accent,
         borderRadius: BorderRadius.circular(11),
