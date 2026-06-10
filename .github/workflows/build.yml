@@ -6,6 +6,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# нужно право создавать релизы (для автообновления приложения)
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -27,11 +31,29 @@ jobs:
       - name: Зависимости
         run: flutter pub get
 
+      # номер сборки (${{ github.run_number }}) вшивается в приложение —
+      # по нему оно понимает, что вышла версия новее
       - name: Собрать приложение под Windows
-        run: flutter build windows --release
+        run: flutter build windows --release --dart-define=BUILD_NUMBER=${{ github.run_number }}
+
+      - name: Упаковать в zip
+        shell: pwsh
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath Capra-windows.zip -Force
 
       - name: Выложить готовое приложение как артефакт
         uses: actions/upload-artifact@v5
         with:
           name: aurora-gallery-windows
           path: build/windows/x64/runner/Release
+
+      # создаём релиз с готовым zip — отсюда приложение скачивает обновления
+      - name: Создать релиз с новой версией
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "build-${{ github.run_number }}" Capra-windows.zip
+          --repo ${{ github.repository }}
+          --title "Сборка ${{ github.run_number }}"
+          --notes "Автоматическая сборка из коммита ${{ github.sha }}"
+          --latest

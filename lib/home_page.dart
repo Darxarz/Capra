@@ -5,6 +5,7 @@ import 'theme.dart';
 import 'model.dart';
 import 'library_service.dart';
 import 'viewer_page.dart';
+import 'update_service.dart';
 
 enum ViewMode { all, dates, albums }
 
@@ -23,11 +24,56 @@ class _HomePageState extends State<HomePage> {
   List<AlbumItem> _albums = [];
   String? _folder;
   bool _loading = false;
+  UpdateInfo? _update; // доступное обновление (null = нет)
 
   @override
   void initState() {
     super.initState();
     _restore();
+    _checkUpdates();
+  }
+
+  Future<void> _checkUpdates() async {
+    final u = await UpdateService.check();
+    if (mounted && u != null) setState(() => _update = u);
+  }
+
+  Future<void> _startUpdate() async {
+    final u = _update;
+    if (u == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final c = AuroraTheme.of(ctx).colors;
+        return AlertDialog(
+          backgroundColor: c.surface,
+          title: Text('Обновить Capra?', style: TextStyle(color: c.text)),
+          content: Text(
+            'Доступна сборка №${u.build}. Приложение скачает её, '
+            'заменит файлы и перезапустится.',
+            style: TextStyle(color: c.muted),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('Позже', style: TextStyle(color: c.muted)),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: c.accent),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Обновить'),
+            ),
+          ],
+        );
+      },
+    );
+    if (ok != true || !mounted) return;
+    // диалог прогресса сам запускает скачивание; при успехе приложение выходит
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _UpdateProgressDialog(info: u),
+    );
   }
 
   Future<void> _restore() async {
@@ -77,6 +123,8 @@ class _HomePageState extends State<HomePage> {
                     onMode: (m) => setState(() => _mode = m),
                     onCell: (v) => setState(() => _cell = v),
                     onPickFolder: _pickFolder,
+                    update: _update,
+                    onUpdate: _startUpdate,
                   ),
                   _CountBar(
                     mode: _mode,
@@ -213,12 +261,16 @@ class _TopBar extends StatelessWidget {
   final ValueChanged<ViewMode> onMode;
   final ValueChanged<double> onCell;
   final VoidCallback onPickFolder;
+  final UpdateInfo? update;
+  final VoidCallback onUpdate;
   const _TopBar({
     required this.mode,
     required this.cell,
     required this.onMode,
     required this.onCell,
     required this.onPickFolder,
+    required this.update,
+    required this.onUpdate,
   });
 
   @override
@@ -269,10 +321,128 @@ class _TopBar extends StatelessWidget {
               onChanged: onCell,
             ),
           ),
+          if (update != null) ...[
+            const SizedBox(width: 6),
+            _UpdateButton(build: update!.build, onTap: onUpdate),
+          ],
           const SizedBox(width: 4),
           const _ThemeDots(),
         ],
       ),
+    );
+  }
+}
+
+// ───────────────────────── кнопка обновления ─────────────────────────
+class _UpdateButton extends StatelessWidget {
+  final int build;
+  final VoidCallback onTap;
+  const _UpdateButton({required this.build, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AuroraTheme.of(context).colors;
+    return Tooltip(
+      message: 'Доступна сборка №$build',
+      child: Material(
+        color: c.accent,
+        borderRadius: BorderRadius.circular(11),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(11),
+          onTap: onTap,
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.system_update_alt_rounded, size: 16, color: Colors.white),
+                SizedBox(width: 6),
+                Text('Обновить',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ───────────────── диалог прогресса скачивания обновления ─────────────────
+class _UpdateProgressDialog extends StatefulWidget {
+  final UpdateInfo info;
+  const _UpdateProgressDialog({required this.info});
+
+  @override
+  State<_UpdateProgressDialog> createState() => _UpdateProgressDialogState();
+}
+
+class _UpdateProgressDialogState extends State<_UpdateProgressDialog> {
+  double? _progress = 0;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _run();
+  }
+
+  Future<void> _run() async {
+    try {
+      // при успехе метод сам завершит приложение (exit), управление не вернётся
+      await UpdateService.downloadAndApply(
+        widget.info,
+        onProgress: (p) {
+          if (mounted) setState(() => _progress = p);
+        },
+      );
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AuroraTheme.of(context).colors;
+    return AlertDialog(
+      backgroundColor: c.surface,
+      title: Text(_error == null ? 'Обновление…' : 'Не удалось обновить',
+          style: TextStyle(color: c.text)),
+      content: _error != null
+          ? Text(_error!, style: TextStyle(color: c.muted))
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                LinearProgressIndicator(
+                  value: _progress,
+                  color: c.accent,
+                  backgroundColor: c.surface2,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  _progress == null
+                      ? 'Скачивание…'
+                      : 'Скачивание ${((_progress ?? 0) * 100).round()}%',
+                  style: TextStyle(color: c.muted, fontSize: 13),
+                ),
+                const SizedBox(height: 4),
+                Text('Приложение перезапустится автоматически.',
+                    style: TextStyle(color: c.muted, fontSize: 12)),
+              ],
+            ),
+      actions: _error == null
+          ? null
+          : [
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: c.accent),
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Закрыть'),
+              ),
+            ],
     );
   }
 }
