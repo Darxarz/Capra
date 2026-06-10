@@ -21,3 +21,6 @@ web/
 
 # Claude Code (локальные настройки)
 .claude/settings.local.json
+
+# временная папка восстановления
+_recover/
