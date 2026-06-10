@@ -1,13 +1,6 @@
 import 'package:flutter/material.dart';
 import 'theme.dart';
-import 'model.dart';
-
-/// Открыть просмотрщик на конкретном фото.
-void openViewer(BuildContext context, List<PhotoItem> photos, int index) {
-  Navigator.of(context).push(MaterialPageRoute(
-    builder: (_) => ViewerPage(photos: photos, initialIndex: index),
-  ));
-}
+import 'sample_data.dart';
 
 class ViewerPage extends StatefulWidget {
   final List<PhotoItem> photos;
@@ -51,12 +44,7 @@ class _ViewerPageState extends State<ViewerPage> {
               minScale: 1,
               maxScale: 5,
               child: Center(
-                child: Image(
-                  image: widget.photos[i].full,
-                  fit: BoxFit.contain,
-                  errorBuilder: (c2, e, s) =>
-                      const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
-                ),
+                child: Image.network(widget.photos[i].fullUrl, fit: BoxFit.contain),
               ),
             ),
           ),
@@ -122,13 +110,22 @@ class _InfoPanel extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             Text(k, style: TextStyle(color: c.muted, fontSize: 13)),
-            const SizedBox(width: 12),
             Flexible(
               child: Text(v,
                   textAlign: TextAlign.right,
                   style: TextStyle(color: c.text, fontSize: 13, fontWeight: FontWeight.w600)),
             ),
           ]),
+        );
+
+    Widget chip(String t) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: c.accentSoft,
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Text(t,
+              style: TextStyle(color: c.accentInk, fontSize: 12, fontWeight: FontWeight.w600)),
         );
 
     Widget action(IconData icon, String label) => Expanded(
@@ -143,8 +140,7 @@ class _InfoPanel extends StatelessWidget {
             child: Column(children: [
               Icon(icon, size: 19, color: c.text),
               const SizedBox(height: 4),
-              Text(label,
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: c.text)),
+              Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: c.text)),
             ]),
           ),
         );
@@ -153,20 +149,18 @@ class _InfoPanel extends StatelessWidget {
       color: c.surface,
       padding: const EdgeInsets.fromLTRB(22, 24, 22, 24),
       child: ListView(children: [
-        Text(photo.fileName,
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: c.text)),
+        Text('${photo.id}.png',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: c.text)),
         const SizedBox(height: 4),
-        Text(prettyDate(photo.modified), style: TextStyle(fontSize: 13, color: c.muted)),
+        Text('Сохранено 7 июня 2026 · ${photo.folder}',
+            style: TextStyle(fontSize: 13, color: c.muted)),
         const SizedBox(height: 18),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: c.accentSoft,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Text('Теги появятся после авто-тегирования (следующий шаг)',
-              style: TextStyle(color: c.accentInk, fontSize: 12)),
-        ),
+        Wrap(spacing: 6, runSpacing: 6, children: [
+          chip('#canine'),
+          chip('#warm'),
+          chip('@artist_name'),
+          if (photo.isGif) chip('GIF') else chip('4K'),
+        ]),
         const SizedBox(height: 20),
         Row(children: [
           action(Icons.favorite_border, 'В избранное'),
@@ -175,14 +169,11 @@ class _InfoPanel extends StatelessWidget {
         ]),
         const SizedBox(height: 22),
         Divider(color: c.line, height: 1),
-        row('Размер', prettySize(photo.sizeBytes)),
-        Divider(color: c.line, height: 1),
-        row('Папка', photo.folderName),
-        const SizedBox(height: 16),
-        Text('Путь', style: TextStyle(color: c.muted, fontSize: 13)),
-        const SizedBox(height: 4),
-        SelectableText(photo.path,
-            style: TextStyle(color: c.text, fontSize: 12)),
+        const SizedBox(height: 8),
+        row('Разрешение', '3840 × 2160'),
+        row('Формат · размер', 'PNG · 8.4 МБ'),
+        row('Источник', 'сохр. вручную'),
+        row('Папка', photo.folder),
       ]),
     );
   }

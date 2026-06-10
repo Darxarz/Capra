@@ -159,7 +159,7 @@ class _HomePageState extends State<HomePage> {
       case ViewMode.dates:
         return _DatesView(photos: _photos, cell: _cell);
       case ViewMode.albums:
-        return _AlbumsView(albums: _albums);
+        return _AlbumsView(albums: _albums, photos: _photos, cell: _cell);
     }
   }
 }
@@ -684,4 +684,187 @@ class _DatesView extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         sliver: SliverGrid(
           gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-      
+            maxCrossAxisExtent: cell,
+            mainAxisSpacing: 4,
+            crossAxisSpacing: 4,
+            childAspectRatio: 1,
+          ),
+          delegate: SliverChildBuilderDelegate(
+            (ctx, i) => PhotoTile(
+              photo: items[i],
+              cell: cell,
+              onTap: () => openViewer(ctx, photos, photos.indexOf(items[i])),
+            ),
+            childCount: items.length,
+          ),
+        ),
+      ));
+    });
+    slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 18)));
+    return CustomScrollView(slivers: slivers);
+  }
+}
+
+// ───────────────────────── альбомы (папки) ─────────────────────────
+class _AlbumsView extends StatelessWidget {
+  final List<AlbumItem> albums;
+  final List<PhotoItem> photos;
+  final double cell;
+  const _AlbumsView({
+    required this.albums,
+    required this.photos,
+    required this.cell,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 190,
+        mainAxisSpacing: 16,
+        crossAxisSpacing: 16,
+        childAspectRatio: 0.82,
+      ),
+      itemCount: albums.length,
+      itemBuilder: (ctx, i) {
+        final a = albums[i];
+        return _AlbumCard(
+          album: a,
+          onTap: () {
+            final inFolder =
+                photos.where((p) => p.folderPath == a.folderPath).toList();
+            Navigator.of(ctx).push(MaterialPageRoute(
+              builder: (_) =>
+                  _FolderPage(album: a, photos: inFolder, cell: cell),
+            ));
+          },
+        );
+      },
+    );
+  }
+}
+
+class _AlbumCard extends StatelessWidget {
+  final AlbumItem album;
+  final VoidCallback onTap;
+  const _AlbumCard({required this.album, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AuroraTheme.of(context).colors;
+    final dpr = MediaQuery.of(context).devicePixelRatio;
+    final cover = album.cover;
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Stack(fit: StackFit.expand, children: [
+                Container(color: c.surface2),
+                if (cover != null)
+                  Image(
+                    image: cover.thumb((190 * dpr).round().clamp(64, 512)),
+                    fit: BoxFit.cover,
+                    filterQuality: FilterQuality.low,
+                    errorBuilder: (ctx, e, s) => Icon(
+                        Icons.broken_image_outlined, color: c.muted, size: 22),
+                  ),
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.bottomCenter,
+                      end: Alignment.center,
+                      colors: [Colors.black54, Colors.transparent],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text('${album.count}',
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 11)),
+                  ),
+                ),
+              ]),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(album.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontSize: 14, fontWeight: FontWeight.w600, color: c.text)),
+          Text('${album.count} изображений',
+              style: TextStyle(fontSize: 12, color: c.muted)),
+        ],
+      ),
+    );
+  }
+}
+
+// ───────────────────────── экран содержимого папки ─────────────────────────
+class _FolderPage extends StatelessWidget {
+  final AlbumItem album;
+  final List<PhotoItem> photos;
+  final double cell;
+  const _FolderPage({
+    required this.album,
+    required this.photos,
+    required this.cell,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AuroraTheme.of(context).colors;
+    return Scaffold(
+      backgroundColor: c.bg,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
+              child: Row(children: [
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: Icon(Icons.arrow_back, color: c.text),
+                  tooltip: 'Назад',
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(album.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              color: c.text)),
+                      Text('${album.count} изображений',
+                          style: TextStyle(fontSize: 12, color: c.muted)),
+                    ],
+                  ),
+                ),
+              ]),
+            ),
+            Expanded(child: _AllGrid(photos: photos, cell: cell)),
+          ],
+        ),
+      ),
+    );
+  }
+}
