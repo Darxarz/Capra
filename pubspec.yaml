@@ -16,4 +16,7 @@ dependencies:
   path: ^1.9.0
 
 dev_dependencies:
-  flutter_li
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
