@@ -78,7 +78,6 @@ class UpdateService {
   }) async {
     final exe = Platform.resolvedExecutable; // полный путь к .exe
     final installDir = p.dirname(exe);
-    final exeName = p.basename(exe);
 
     final tmp = Directory.systemTemp.createTempSync('capra_update_');
     final zipPath = p.join(tmp.path, 'update.zip');
@@ -106,31 +105,43 @@ class UpdateService {
       client.close();
     }
 
-    // — помощник-обновлятор: ждёт выхода приложения, распаковывает zip,
-    //   копирует файлы поверх установленных и перезапускает приложение —
-    final bat = p.join(tmp.path, 'apply_update.bat');
+    // — помощник-обновлятор на PowerShell (скрытое окно): ждёт выхода
+    //   приложения, при необходимости закрывает принудительно (чтобы
+    //   разблокировать файлы), копирует новые файлы и перезапускает —
+    final exeBase = p.basenameWithoutExtension(exe);
+    final ps1 = p.join(tmp.path, 'apply_update.ps1');
     final script = '''
-@echo off
-chcp 65001 >nul
-:wait
-tasklist /FI "IMAGENAME eq $exeName" 2>nul | find /I "$exeName" >nul
-if not errorlevel 1 (
-  timeout /t 1 /nobreak >nul
-  goto wait
-)
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '$zipPath' -DestinationPath '$extractDir' -Force"
-robocopy "$extractDir" "$installDir" /E /IS /IT /R:3 /W:1 /NFL /NDL /NJH /NJS /NC /NS >nul
-start "" "$exe"
-del "$zipPath" >nul 2>&1
-rmdir /S /Q "$extractDir" >nul 2>&1
-(goto) 2>nul & del "%~f0"
+\$ErrorActionPreference = 'SilentlyContinue'
+# ждём штатного выхода приложения (до ~12 с)
+for (\$i = 0; \$i -lt 24; \$i++) {
+  if (-not (Get-Process -Name '$exeBase' -ErrorAction SilentlyContinue)) { break }
+  Start-Sleep -Milliseconds 500
+}
+# если всё ещё живо — закрываем принудительно (иначе файлы заняты)
+if (Get-Process -Name '$exeBase' -ErrorAction SilentlyContinue) {
+  Stop-Process -Name '$exeBase' -Force -ErrorAction SilentlyContinue
+  Start-Sleep -Milliseconds 800
+}
+Expand-Archive -LiteralPath '$zipPath' -DestinationPath '$extractDir' -Force
+robocopy '$extractDir' '$installDir' /E /IS /IT /R:2 /W:1 /NFL /NDL /NJH /NJS /NC /NS | Out-Null
+Start-Process -FilePath '$exe' -WorkingDirectory '$installDir'
+Remove-Item '$zipPath' -Force -ErrorAction SilentlyContinue
+Remove-Item '$extractDir' -Recurse -Force -ErrorAction SilentlyContinue
 ''';
-    await File(bat).writeAsString(script);
+    await File(ps1).writeAsString(script);
 
-    // запускаем помощник отдельным процессом и выходим — иначе файлы заняты
+    // запускаем помощник скрыто и отдельным процессом, затем выходим
     await Process.start(
-      'cmd.exe',
-      ['/c', bat],
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-WindowStyle',
+        'Hidden',
+        '-File',
+        ps1,
+      ],
       mode: ProcessStartMode.detached,
       runInShell: false,
     );
