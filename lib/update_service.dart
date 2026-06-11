@@ -130,10 +130,18 @@ Remove-Item '$extractDir' -Recurse -Force -ErrorAction SilentlyContinue
 ''';
     await File(ps1).writeAsString(script);
 
-    // запускаем помощник скрыто и отдельным процессом, затем выходим
+    // Запускаем помощник через `cmd /c start` — так он становится полностью
+    // независимым процессом и переживает выход приложения. Прямой detached-
+    // запуск powershell этого НЕ гарантирует (процесс гибнет вместе с
+    // родителем — проверено), поэтому обновление не применялось.
     await Process.start(
-      'powershell.exe',
+      'cmd.exe',
       [
+        '/c',
+        'start',
+        '/min',
+        '',
+        'powershell',
         '-NoProfile',
         '-ExecutionPolicy',
         'Bypass',
