@@ -125,48 +125,71 @@ class _TreeViewState extends State<TreeView> {
       w = nw + 52 + maxDepth * xGap;
       h = m + (leafCount - 1) * yGap + nh / 2 + 24;
     } else {
-      // радиальная раскладка: каждое поддерево растёт наружу от своей ветви,
-      // дети раскрываются узким веером вокруг направления роста (а не по кругу)
-      final leaves = <FolderNode, int>{};
-      int countLeaves(FolderNode n) {
-        final k = _isExpanded(n) ? n.children : const <FolderNode>[];
-        if (k.isEmpty) return leaves[n] = 1;
-        var s = 0;
-        for (final ch in k) {
-          s += countLeaves(ch);
+      // радиальная «гроздь» (balloon-раскладка): каждое поддерево — компактный
+      // пузырь; плотные ветви собираются в кучки, как листья/виноград, без наложений
+      final half = nw / 2;
+      const gap = 16.0;
+      final subR = <FolderNode, double>{}; // радиус пузыря поддерева
+      final ringR = <FolderNode, double>{}; // на каком радиусе сидят дети
+
+      double computeR(FolderNode n) {
+        final kids = _isExpanded(n) ? n.children : const <FolderNode>[];
+        if (kids.isEmpty) return subR[n] = half;
+        var maxKid = 0.0;
+        var circumference = 0.0;
+        for (final k in kids) {
+          final r = computeR(k);
+          if (r > maxKid) maxKid = r;
+          circumference += 2 * r + gap;
         }
-        return leaves[n] = s;
+        var rr = circumference / (2 * math.pi);
+        final minRR = half + maxKid + gap;
+        if (rr < minRR) rr = minRR;
+        ringR[n] = rr;
+        return subR[n] = rr + maxKid;
       }
 
-      countLeaves(widget.root);
+      computeR(widget.root);
 
-      final angle = <FolderNode, double>{};
-      void assign(FolderNode n, double center, double span, int depth) {
-        angle[n] = center;
-        final k = _isExpanded(n) ? n.children : const <FolderNode>[];
-        if (k.isEmpty) return;
-        final total = k.fold<int>(0, (s, ch) => s + leaves[ch]!);
-        var cursor = center - span / 2;
-        for (final ch in k) {
-          final kSpan = span * (leaves[ch]! / total);
-          // веер детей ограничиваем «конусом», сужающимся с глубиной — рост наружу
-          final cone = math.min(kSpan, 1.3 * math.pow(0.62, depth).toDouble());
-          assign(ch, cursor + kSpan / 2, cone, depth + 1);
-          cursor += kSpan;
+      void place(FolderNode n, Offset at, double awayAngle, bool isRoot) {
+        pos[n] = at;
+        final kids = _isExpanded(n) ? n.children : const <FolderNode>[];
+        if (kids.isEmpty) return;
+        final rr = ringR[n]!;
+        var totalSpan = 0.0;
+        for (final k in kids) {
+          totalSpan += 2 * subR[k]! + gap;
+        }
+        // дети корня — по всему кругу; остальные — дугой на внешней стороне
+        final arc = isRoot ? 2 * math.pi : math.pi * 1.5;
+        final start = isRoot ? -math.pi / 2 : awayAngle - arc / 2;
+        var acc = 0.0;
+        for (final k in kids) {
+          final span = 2 * subR[k]! + gap;
+          final a = start + (acc + span / 2) / totalSpan * arc;
+          acc += span;
+          final kpos = at + Offset(rr * math.cos(a), rr * math.sin(a));
+          place(k, kpos, a, false);
         }
       }
 
-      assign(widget.root, -math.pi / 2, 2 * math.pi, 0);
+      place(widget.root, Offset.zero, -math.pi / 2, true);
 
-      final rStep = nw * 1.5 + 78;
-      final cxy = maxDepth * rStep + nw / 2 + 30;
-      grid.forEach((n, gp) {
-        final a = angle[n] ?? -math.pi / 2;
-        final r = gp.depth * rStep;
-        pos[n] = Offset(cxy + r * math.cos(a), cxy + r * math.sin(a));
+      // сдвигаем всё в положительные координаты и считаем размер холста
+      var minX = 0.0, minY = 0.0, maxX = 0.0, maxY = 0.0;
+      pos.forEach((n, o) {
+        final r = subR[n]!;
+        if (o.dx - r < minX) minX = o.dx - r;
+        if (o.dy - r < minY) minY = o.dy - r;
+        if (o.dx + r > maxX) maxX = o.dx + r;
+        if (o.dy + r > maxY) maxY = o.dy + r;
       });
-      w = 2 * cxy;
-      h = 2 * cxy;
+      final shift = Offset(-minX + 40, -minY + 40);
+      for (final k in pos.keys.toList()) {
+        pos[k] = pos[k]! + shift;
+      }
+      w = maxX - minX + 80;
+      h = maxY - minY + 80;
     }
 
     final connByParent = <FolderNode, List<Offset>>{};
