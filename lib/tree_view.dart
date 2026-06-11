@@ -103,9 +103,10 @@ class _TreeViewState extends State<TreeView> {
     rec(widget.root, 0);
     final leafCount = math.max(1, leaf);
 
-    // размеры узла
-    final nw = _layout == TreeLayout.radial ? 132.0 : 168.0;
-    final nh = _layout == TreeLayout.radial ? 50.0 : 58.0;
+    // размеры узла: квадратная обложка сверху + подпись снизу
+    final radial = _layout == TreeLayout.radial;
+    final nw = radial ? 74.0 : 92.0;
+    final nh = nw + (radial ? 40.0 : 44.0);
 
     final pos = <FolderNode, Offset>{};
     double w, h;
@@ -124,7 +125,7 @@ class _TreeViewState extends State<TreeView> {
       w = nw + 52 + maxDepth * xGap;
       h = m + (leafCount - 1) * yGap + nh / 2 + 24;
     } else {
-      final rStep = nh + 70;
+      final rStep = nh + 30;
       final maxR = maxDepth * rStep;
       final cxy = maxR + nw / 2 + 30;
       grid.forEach((n, gp) {
@@ -136,8 +137,9 @@ class _TreeViewState extends State<TreeView> {
       h = 2 * cxy;
     }
 
-    final edgeOffsets =
-        edges.map((e) => [pos[e[0]]!, pos[e[1]]!]).toList(growable: false);
+    final treeEdges = edges
+        .map((e) => _Edge(pos[e[0]]!, pos[e[1]]!, grid[e[1]]!.depth))
+        .toList(growable: false);
 
     final rootPos = pos[widget.root] ?? Offset(w / 2, h / 2);
 
@@ -174,7 +176,12 @@ class _TreeViewState extends State<TreeView> {
                   children: [
                     Positioned.fill(
                       child: CustomPaint(
-                        painter: _BranchPainter(edgeOffsets, _layout, c.line),
+                        painter: _BranchPainter(
+                          treeEdges,
+                          _layout,
+                          maxDepth,
+                          c.muted.withValues(alpha: 0.4),
+                        ),
                       ),
                     ),
                     for (final entry in pos.entries)
@@ -190,6 +197,7 @@ class _TreeViewState extends State<TreeView> {
                           expanded: _expanded.contains(entry.key.path),
                           showToggle: _mode == TreeMode.progressive &&
                               entry.key.hasChildren,
+                          coverSide: nw,
                           onTap: () => _onTapNode(entry.key),
                           onToggle: () => _toggle(entry.key),
                           onMenu: () => _openMenu(entry.key),
@@ -335,37 +343,96 @@ class _GP {
   const _GP(this.x, this.depth);
 }
 
+class _Edge {
+  final Offset a; // центр родителя
+  final Offset b; // центр ребёнка
+  final int depth; // глубина ребёнка
+  const _Edge(this.a, this.b, this.depth);
+}
+
+/// Рисует ветви как сужающиеся «ленты»: толще у ствола, тоньше к листьям —
+/// поэтому дерево выглядит древовидным, а не как набор прямых линий.
 class _BranchPainter extends CustomPainter {
-  final List<List<Offset>> edges;
+  final List<_Edge> edges;
   final TreeLayout layout;
+  final int maxDepth;
   final Color color;
-  _BranchPainter(this.edges, this.layout, this.color);
+  _BranchPainter(this.edges, this.layout, this.maxDepth, this.color);
+
+  double _widthAt(int depth) {
+    final f = ((maxDepth + 1 - depth) / (maxDepth + 1)).clamp(0.0, 1.0);
+    return 2.5 + 9.0 * f;
+  }
+
+  Offset _cubic(Offset a, Offset c1, Offset c2, Offset b, double t) {
+    final u = 1 - t;
+    return a * (u * u * u) +
+        c1 * (3 * u * u * t) +
+        c2 * (3 * u * t * t) +
+        b * (t * t * t);
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = color
-      ..strokeWidth = 1.6
-      ..style = PaintingStyle.stroke;
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
     for (final e in edges) {
-      final a = e[0], b = e[1];
-      final path = Path()..moveTo(a.dx, a.dy);
+      final a = e.a, b = e.b;
+      Offset c1, c2;
       if (layout == TreeLayout.vertical) {
         final my = (a.dy + b.dy) / 2;
-        path.cubicTo(a.dx, my, b.dx, my, b.dx, b.dy);
+        c1 = Offset(a.dx, my);
+        c2 = Offset(b.dx, my);
       } else if (layout == TreeLayout.horizontal) {
         final mx = (a.dx + b.dx) / 2;
-        path.cubicTo(mx, a.dy, mx, b.dy, b.dx, b.dy);
+        c1 = Offset(mx, a.dy);
+        c2 = Offset(mx, b.dy);
       } else {
-        path.lineTo(b.dx, b.dy);
+        c1 = Offset.lerp(a, b, 0.34)!;
+        c2 = Offset.lerp(a, b, 0.66)!;
       }
+      final wStart = _widthAt(e.depth - 1);
+      final wEnd = _widthAt(e.depth);
+
+      const steps = 18;
+      final pts = <Offset>[];
+      for (var i = 0; i <= steps; i++) {
+        pts.add(_cubic(a, c1, c2, b, i / steps));
+      }
+      final left = <Offset>[];
+      final right = <Offset>[];
+      for (var i = 0; i <= steps; i++) {
+        final t = i / steps;
+        final prev = pts[i == 0 ? 0 : i - 1];
+        final next = pts[i == steps ? steps : i + 1];
+        var dir = next - prev;
+        final len = dir.distance;
+        if (len > 0) dir = dir / len;
+        final normal = Offset(-dir.dy, dir.dx);
+        final hw = (wStart + (wEnd - wStart) * t) / 2;
+        left.add(pts[i] + normal * hw);
+        right.add(pts[i] - normal * hw);
+      }
+      final path = Path()..moveTo(left.first.dx, left.first.dy);
+      for (var i = 1; i < left.length; i++) {
+        path.lineTo(left[i].dx, left[i].dy);
+      }
+      for (var i = right.length - 1; i >= 0; i--) {
+        path.lineTo(right[i].dx, right[i].dy);
+      }
+      path.close();
       canvas.drawPath(path, paint);
     }
   }
 
   @override
   bool shouldRepaint(_BranchPainter old) =>
-      old.edges != edges || old.layout != layout || old.color != color;
+      old.edges != edges ||
+      old.layout != layout ||
+      old.color != color ||
+      old.maxDepth != maxDepth;
 }
 
 class _NodeCard extends StatelessWidget {
@@ -374,6 +441,7 @@ class _NodeCard extends StatelessWidget {
   final bool isRoot;
   final bool expanded;
   final bool showToggle;
+  final double coverSide;
   final VoidCallback onTap;
   final VoidCallback onToggle;
   final VoidCallback onMenu;
@@ -383,6 +451,7 @@ class _NodeCard extends StatelessWidget {
     required this.isRoot,
     required this.expanded,
     required this.showToggle,
+    required this.coverSide,
     required this.onTap,
     required this.onToggle,
     required this.onMenu,
@@ -393,90 +462,121 @@ class _NodeCard extends StatelessWidget {
     final c = colors;
     final dpr = MediaQuery.of(context).devicePixelRatio;
     final cover = node.cover;
+    final small = coverSide < 80;
     return GestureDetector(
       onTap: onTap,
       onLongPress: onMenu,
       onSecondaryTap: onMenu,
-      child: Container(
-        decoration: BoxDecoration(
-          color: c.surface,
-          borderRadius: BorderRadius.circular(13),
-          border: Border.all(
-              color: isRoot ? c.accent : c.line, width: isRoot ? 2 : 1),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.all(6),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: SizedBox(
-                width: 42,
-                height: 42,
-                child: cover != null
-                    ? Image(
-                        image: cover.thumb((42 * dpr).round().clamp(64, 256)),
-                        fit: BoxFit.cover,
-                        filterQuality: FilterQuality.low,
-                        errorBuilder: (ctx, e, s) => Container(
-                            color: c.surface2,
-                            child: Icon(Icons.folder_rounded,
-                                color: c.muted, size: 18)),
-                      )
-                    : Container(
-                        color: c.surface2,
-                        child:
-                            Icon(Icons.folder_rounded, color: c.muted, size: 18),
-                      ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(node.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          color: c.text,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 2),
-                  Text(
-                      node.hasChildren
-                          ? '${node.totalCount} фото · ${node.children.length} папок'
-                          : '${node.directCount} фото',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: c.muted, fontSize: 11)),
-                ],
-              ),
-            ),
-            if (showToggle)
-              GestureDetector(
-                onTap: onToggle,
-                child: Container(
-                  margin: const EdgeInsets.only(left: 2),
-                  width: 22,
-                  height: 22,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // квадратная обложка
+          SizedBox(
+            width: coverSide,
+            height: coverSide,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Container(
                   decoration: BoxDecoration(
-                    color: c.accent,
-                    borderRadius: BorderRadius.circular(7),
+                    color: c.surface2,
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(
+                        color: isRoot ? c.accent : c.line,
+                        width: isRoot ? 2.5 : 1),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.10),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
                   ),
-                  child: Icon(expanded ? Icons.remove : Icons.add,
-                      color: Colors.white, size: 16),
+                  clipBehavior: Clip.antiAlias,
+                  child: cover != null
+                      ? Image(
+                          image: cover
+                              .thumb((coverSide * dpr).round().clamp(64, 512)),
+                          fit: BoxFit.cover,
+                          filterQuality: FilterQuality.low,
+                          errorBuilder: (ctx, e, s) =>
+                              Icon(Icons.folder_rounded, color: c.muted, size: 26),
+                        )
+                      : Icon(Icons.folder_rounded, color: c.muted, size: 26),
                 ),
+                // счётчик фото в углу
+                Positioned(
+                  left: 6,
+                  top: 6,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text('${node.totalCount}',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                ),
+                // кнопка раскрыть/свернуть ветви
+                if (showToggle)
+                  Positioned(
+                    right: 5,
+                    bottom: 5,
+                    child: GestureDetector(
+                      onTap: onToggle,
+                      child: Container(
+                        width: 25,
+                        height: 25,
+                        decoration: BoxDecoration(
+                          color: c.accent,
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.2),
+                              blurRadius: 4,
+                            ),
+                          ],
+                        ),
+                        child: Icon(expanded ? Icons.remove : Icons.add,
+                            color: Colors.white, size: 17),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 5),
+          // название под плиткой
+          SizedBox(
+            width: coverSide,
+            child: Text(
+              node.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  color: c.text,
+                  fontSize: small ? 11.5 : 12.5,
+                  fontWeight: FontWeight.w600),
+            ),
+          ),
+          if (!small && node.hasChildren)
+            SizedBox(
+              width: coverSide,
+              child: Text(
+                '${node.children.length} папок',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: c.muted, fontSize: 10.5),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
