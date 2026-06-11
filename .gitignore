@@ -24,3 +24,7 @@ web/
 
 # временная папка восстановления
 _recover/
+
+# генерируется flutter create
+.metadata
+/test/
