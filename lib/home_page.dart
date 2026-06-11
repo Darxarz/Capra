@@ -6,6 +6,7 @@ import 'model.dart';
 import 'library_service.dart';
 import 'viewer_page.dart';
 import 'update_service.dart';
+import 'favorites.dart';
 
 enum ViewMode { all, dates, albums }
 
@@ -25,6 +26,24 @@ class _HomePageState extends State<HomePage> {
   String? _folder;
   bool _loading = false;
   UpdateInfo? _update; // доступное обновление (null = нет)
+  String _query = ''; // строка поиска
+  bool _favOnly = false; // показывать только избранное
+
+  /// Фото с учётом поиска и фильтра «только избранное».
+  List<PhotoItem> get _visiblePhotos {
+    Iterable<PhotoItem> r = _photos;
+    if (_favOnly) {
+      final favs = Favorites.instance.paths;
+      r = r.where((p) => favs.contains(p.path));
+    }
+    if (_query.trim().isNotEmpty) {
+      final q = _query.trim().toLowerCase();
+      r = r.where((p) =>
+          p.fileName.toLowerCase().contains(q) ||
+          p.folderName.toLowerCase().contains(q));
+    }
+    return r.toList();
+  }
 
   @override
   void initState() {
@@ -112,7 +131,12 @@ class _HomePageState extends State<HomePage> {
       body: SafeArea(
         child: Row(
           children: [
-            _Rail(mode: _mode, onMode: (m) => setState(() => _mode = m)),
+            _Rail(
+              mode: _mode,
+              onMode: (m) => setState(() => _mode = m),
+              favOnly: _favOnly,
+              onFav: () => setState(() => _favOnly = !_favOnly),
+            ),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -120,6 +144,8 @@ class _HomePageState extends State<HomePage> {
                   _TopBar(
                     mode: _mode,
                     cell: _cell,
+                    query: _query,
+                    onSearch: (q) => setState(() => _query = q),
                     onMode: (m) => setState(() => _mode = m),
                     onCell: (v) => setState(() => _cell = v),
                     onPickFolder: _pickFolder,
@@ -128,11 +154,16 @@ class _HomePageState extends State<HomePage> {
                   ),
                   _CountBar(
                     mode: _mode,
-                    total: _photos.length,
+                    total: _visiblePhotos.length,
                     albums: _albums.length,
                     folder: _folder,
                   ),
-                  Expanded(child: _body(c)),
+                  Expanded(
+                    child: ValueListenableBuilder<Set<String>>(
+                      valueListenable: Favorites.instance.notifier,
+                      builder: (_, __, ___) => _body(c),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -153,13 +184,25 @@ class _HomePageState extends State<HomePage> {
       );
     }
     if (_photos.isEmpty) return _EmptyState(onPick: _pickFolder);
+
+    if (_mode == ViewMode.albums) {
+      final q = _query.trim().toLowerCase();
+      final albums = q.isEmpty
+          ? _albums
+          : _albums.where((a) => a.name.toLowerCase().contains(q)).toList();
+      if (albums.isEmpty) return _NoResults(favOnly: _favOnly);
+      return _AlbumsView(albums: albums, photos: _photos, cell: _cell);
+    }
+
+    final visible = _visiblePhotos;
+    if (visible.isEmpty) return _NoResults(favOnly: _favOnly);
     switch (_mode) {
       case ViewMode.all:
-        return _AllGrid(photos: _photos, cell: _cell);
+        return _AllGrid(photos: visible, cell: _cell);
       case ViewMode.dates:
-        return _DatesView(photos: _photos, cell: _cell);
+        return _DatesView(photos: visible, cell: _cell);
       case ViewMode.albums:
-        return _AlbumsView(albums: _albums, photos: _photos, cell: _cell);
+        return const SizedBox.shrink(); // обработано выше
     }
   }
 }
@@ -197,13 +240,20 @@ class _EmptyState extends StatelessWidget {
 class _Rail extends StatelessWidget {
   final ViewMode mode;
   final ValueChanged<ViewMode> onMode;
-  const _Rail({required this.mode, required this.onMode});
+  final bool favOnly;
+  final VoidCallback onFav;
+  const _Rail({
+    required this.mode,
+    required this.onMode,
+    required this.favOnly,
+    required this.onFav,
+  });
 
   @override
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
-    Widget item(IconData icon, ViewMode? m, {VoidCallback? onTap}) {
-      final on = m != null && m == mode;
+    Widget item(IconData icon, ViewMode? m, {VoidCallback? onTap, bool active = false}) {
+      final on = active || (m != null && m == mode);
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 3),
         child: Material(
@@ -244,7 +294,8 @@ class _Rail extends StatelessWidget {
           item(Icons.grid_view_rounded, ViewMode.all),
           item(Icons.calendar_today_rounded, ViewMode.dates),
           item(Icons.folder_rounded, ViewMode.albums),
-          item(Icons.favorite_border_rounded, null, onTap: () {}),
+          item(favOnly ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+              null, onTap: onFav, active: favOnly),
           const Spacer(),
           item(Icons.settings_outlined, null, onTap: () {}),
           const SizedBox(height: 10),
@@ -258,6 +309,8 @@ class _Rail extends StatelessWidget {
 class _TopBar extends StatelessWidget {
   final ViewMode mode;
   final double cell;
+  final String query;
+  final ValueChanged<String> onSearch;
   final ValueChanged<ViewMode> onMode;
   final ValueChanged<double> onCell;
   final VoidCallback onPickFolder;
@@ -266,6 +319,8 @@ class _TopBar extends StatelessWidget {
   const _TopBar({
     required this.mode,
     required this.cell,
+    required this.query,
+    required this.onSearch,
     required this.onMode,
     required this.onCell,
     required this.onPickFolder,
@@ -283,24 +338,7 @@ class _TopBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
-              decoration: BoxDecoration(
-                color: c.surface2,
-                borderRadius: BorderRadius.circular(13),
-                border: Border.all(color: c.line),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.search, size: 18, color: c.muted),
-                  const SizedBox(width: 8),
-                  Text('Поиск по библиотеке…',
-                      style: TextStyle(color: c.muted, fontSize: 14)),
-                ],
-              ),
-            ),
-          ),
+          Expanded(child: _SearchField(initial: query, onSearch: onSearch)),
           const SizedBox(width: 10),
           IconButton(
             onPressed: onPickFolder,
@@ -329,6 +367,99 @@ class _TopBar extends StatelessWidget {
           const _ThemeDots(),
         ],
       ),
+    );
+  }
+}
+
+// ───────────────────────── строка поиска ─────────────────────────
+class _SearchField extends StatefulWidget {
+  final String initial;
+  final ValueChanged<String> onSearch;
+  const _SearchField({required this.initial, required this.onSearch});
+
+  @override
+  State<_SearchField> createState() => _SearchFieldState();
+}
+
+class _SearchFieldState extends State<_SearchField> {
+  late final TextEditingController _ctl =
+      TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _ctl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AuroraTheme.of(context).colors;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 2),
+      decoration: BoxDecoration(
+        color: c.surface2,
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: c.line),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.search, size: 18, color: c.muted),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: _ctl,
+              onChanged: (v) {
+                widget.onSearch(v);
+                setState(() {}); // обновить видимость крестика
+              },
+              cursorColor: c.accent,
+              style: TextStyle(color: c.text, fontSize: 14),
+              decoration: InputDecoration(
+                isDense: true,
+                border: InputBorder.none,
+                hintText: 'Поиск по имени файла или папке…',
+                hintStyle: TextStyle(color: c.muted, fontSize: 14),
+              ),
+            ),
+          ),
+          if (_ctl.text.isNotEmpty)
+            GestureDetector(
+              onTap: () {
+                _ctl.clear();
+                widget.onSearch('');
+                setState(() {});
+              },
+              child: Icon(Icons.close, size: 16, color: c.muted),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────── экран «ничего не найдено» ───────────────
+class _NoResults extends StatelessWidget {
+  final bool favOnly;
+  const _NoResults({required this.favOnly});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AuroraTheme.of(context).colors;
+    return Center(
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Icon(favOnly ? Icons.favorite_border_rounded : Icons.search_off_rounded,
+            size: 56, color: c.muted),
+        const SizedBox(height: 14),
+        Text(favOnly ? 'В избранном пусто' : 'Ничего не найдено',
+            style: TextStyle(
+                fontSize: 16, fontWeight: FontWeight.w700, color: c.text)),
+        const SizedBox(height: 4),
+        Text(
+            favOnly
+                ? 'Отмечай фото сердечком — они появятся здесь.'
+                : 'Попробуй изменить запрос.',
+            style: TextStyle(color: c.muted, fontSize: 13)),
+      ]),
     );
   }
 }
@@ -585,6 +716,7 @@ class PhotoTile extends StatelessWidget {
     final cacheWidth = (cell * dpr).round().clamp(64, 512);
     return GestureDetector(
       onTap: onTap,
+      onLongPress: () => Favorites.instance.toggle(photo.path),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(7),
         child: Stack(
@@ -617,6 +749,23 @@ class PhotoTile extends StatelessWidget {
                       style: TextStyle(color: Colors.white, fontSize: 10)),
                 ),
               ),
+            ValueListenableBuilder<Set<String>>(
+              valueListenable: Favorites.instance.notifier,
+              builder: (ctx, favs, _) {
+                if (!favs.contains(photo.path)) return const SizedBox.shrink();
+                return Positioned(
+                  left: 5,
+                  top: 5,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: const BoxDecoration(
+                        color: Colors.black54, shape: BoxShape.circle),
+                    child: const Icon(Icons.favorite,
+                        color: Colors.white, size: 12),
+                  ),
+                );
+              },
+            ),
           ],
         ),
       ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'theme.dart';
 import 'model.dart';
+import 'favorites.dart';
 
 /// Открыть просмотрщик на конкретном фото.
 void openViewer(BuildContext context, List<PhotoItem> photos, int index) {
@@ -131,21 +132,29 @@ class _InfoPanel extends StatelessWidget {
           ]),
         );
 
-    Widget action(IconData icon, String label) => Expanded(
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 4),
-            padding: const EdgeInsets.symmetric(vertical: 11),
-            decoration: BoxDecoration(
-              color: c.surface2,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: c.line),
+    Widget action(IconData icon, String label,
+            {VoidCallback? onTap, bool active = false}) =>
+        Expanded(
+          child: GestureDetector(
+            onTap: onTap,
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              padding: const EdgeInsets.symmetric(vertical: 11),
+              decoration: BoxDecoration(
+                color: active ? c.accentSoft : c.surface2,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: active ? c.accent : c.line),
+              ),
+              child: Column(children: [
+                Icon(icon, size: 19, color: active ? c.accentInk : c.text),
+                const SizedBox(height: 4),
+                Text(label,
+                    style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: active ? c.accentInk : c.text)),
+              ]),
             ),
-            child: Column(children: [
-              Icon(icon, size: 19, color: c.text),
-              const SizedBox(height: 4),
-              Text(label,
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: c.text)),
-            ]),
           ),
         );
 
@@ -168,11 +177,22 @@ class _InfoPanel extends StatelessWidget {
               style: TextStyle(color: c.accentInk, fontSize: 12)),
         ),
         const SizedBox(height: 20),
-        Row(children: [
-          action(Icons.favorite_border, 'В избранное'),
-          action(Icons.folder_outlined, 'В альбом'),
-          action(Icons.ios_share, 'Поделиться'),
-        ]),
+        ValueListenableBuilder<Set<String>>(
+          valueListenable: Favorites.instance.notifier,
+          builder: (ctx, favs, _) {
+            final fav = favs.contains(photo.path);
+            return Row(children: [
+              action(
+                fav ? Icons.favorite : Icons.favorite_border,
+                fav ? 'В избранном' : 'В избранное',
+                onTap: () => Favorites.instance.toggle(photo.path),
+                active: fav,
+              ),
+              action(Icons.folder_outlined, 'В альбом'),
+              action(Icons.ios_share, 'Поделиться'),
+            ]);
+          },
+        ),
         const SizedBox(height: 22),
         Divider(color: c.line, height: 1),
         row('Размер', prettySize(photo.sizeBytes)),

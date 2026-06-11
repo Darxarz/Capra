@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'theme.dart';
 import 'home_page.dart';
+import 'favorites.dart';
 
-void main() => runApp(const AuroraApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Favorites.instance.load();
+  runApp(const AuroraApp());
+}
 
 class AuroraApp extends StatefulWidget {
   const AuroraApp({super.key});
