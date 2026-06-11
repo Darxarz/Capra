@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'theme.dart';
 import 'folder_tree.dart';
 
-enum TreeLayout { vertical, horizontal, radial }
+enum TreeLayout { vertical, horizontal, compact }
 
 enum TreeMode { all, progressive }
 
@@ -104,9 +104,9 @@ class _TreeViewState extends State<TreeView> {
     final leafCount = math.max(1, leaf);
 
     // размеры узла: квадратная обложка сверху + подпись снизу
-    final radial = _layout == TreeLayout.radial;
-    final nw = radial ? 74.0 : 92.0;
-    final nh = nw + (radial ? 40.0 : 44.0);
+    final compact = _layout == TreeLayout.compact;
+    final nw = compact ? 78.0 : 92.0;
+    final nh = nw + (compact ? 40.0 : 44.0);
 
     final pos = <FolderNode, Offset>{};
     double w, h;
@@ -125,71 +125,58 @@ class _TreeViewState extends State<TreeView> {
       w = nw + 52 + maxDepth * xGap;
       h = m + (leafCount - 1) * yGap + nh / 2 + 24;
     } else {
-      // радиальная «гроздь» (balloon-раскладка): каждое поддерево — компактный
-      // пузырь; плотные ветви собираются в кучки, как листья/виноград, без наложений
-      final half = nw / 2;
-      const gap = 16.0;
-      final subR = <FolderNode, double>{}; // радиус пузыря поддерева
-      final ringR = <FolderNode, double>{}; // на каком радиусе сидят дети
+      // компактная упаковка: каждое поддерево — плотный блок. Дети узла
+      // укладываются тесной сеткой прямо под ним, поэтому папки с кучей
+      // подпапок собираются в компактную кучку, а не разлетаются.
+      const padX = 14.0, padY = 18.0;
+      final sizeOf = <FolderNode, Size>{}; // размер блока поддерева
 
-      double computeR(FolderNode n) {
+      Size measure(FolderNode n) {
         final kids = _isExpanded(n) ? n.children : const <FolderNode>[];
-        if (kids.isEmpty) return subR[n] = half;
-        var maxKid = 0.0;
-        var circumference = 0.0;
+        if (kids.isEmpty) return sizeOf[n] = Size(nw, nh);
+        var cw = 0.0, ch = 0.0;
         for (final k in kids) {
-          final r = computeR(k);
-          if (r > maxKid) maxKid = r;
-          circumference += 2 * r + gap;
+          final s = measure(k);
+          if (s.width > cw) cw = s.width;
+          if (s.height > ch) ch = s.height;
         }
-        var rr = circumference / (2 * math.pi);
-        final minRR = half + maxKid + gap;
-        if (rr < minRR) rr = minRR;
-        ringR[n] = rr;
-        return subR[n] = rr + maxKid;
+        final cols = math.max(1, math.sqrt(kids.length).ceil());
+        final rows = (kids.length / cols).ceil();
+        final gridW = cols * cw + (cols - 1) * padX;
+        final gridH = rows * ch + (rows - 1) * padY;
+        return sizeOf[n] =
+            Size(math.max(gridW, nw), nh + padY + gridH);
       }
 
-      computeR(widget.root);
-
-      void place(FolderNode n, Offset at, double awayAngle, bool isRoot) {
-        pos[n] = at;
+      void layoutBlock(FolderNode n, Offset origin) {
+        final block = sizeOf[n]!;
+        // собственная плитка — по центру сверху блока
+        pos[n] = Offset(origin.dx + block.width / 2, origin.dy + nh / 2);
         final kids = _isExpanded(n) ? n.children : const <FolderNode>[];
         if (kids.isEmpty) return;
-        final rr = ringR[n]!;
-        var totalSpan = 0.0;
+        var cw = 0.0, ch = 0.0;
         for (final k in kids) {
-          totalSpan += 2 * subR[k]! + gap;
+          if (sizeOf[k]!.width > cw) cw = sizeOf[k]!.width;
+          if (sizeOf[k]!.height > ch) ch = sizeOf[k]!.height;
         }
-        // дети корня — по всему кругу; остальные — дугой на внешней стороне
-        final arc = isRoot ? 2 * math.pi : math.pi * 1.5;
-        final start = isRoot ? -math.pi / 2 : awayAngle - arc / 2;
-        var acc = 0.0;
-        for (final k in kids) {
-          final span = 2 * subR[k]! + gap;
-          final a = start + (acc + span / 2) / totalSpan * arc;
-          acc += span;
-          final kpos = at + Offset(rr * math.cos(a), rr * math.sin(a));
-          place(k, kpos, a, false);
+        final cols = math.max(1, math.sqrt(kids.length).ceil());
+        final gridW = cols * cw + (cols - 1) * padX;
+        final startX = origin.dx + (block.width - gridW) / 2;
+        final startY = origin.dy + nh + padY;
+        for (var i = 0; i < kids.length; i++) {
+          final r = i ~/ cols, c = i % cols;
+          final cellX = startX + c * (cw + padX);
+          final cellY = startY + r * (ch + padY);
+          final kb = sizeOf[kids[i]]!;
+          layoutBlock(kids[i],
+              Offset(cellX + (cw - kb.width) / 2, cellY + (ch - kb.height) / 2));
         }
       }
 
-      place(widget.root, Offset.zero, -math.pi / 2, true);
-
-      // сдвигаем всё в положительные координаты и считаем размер холста
-      var minX = 0.0, minY = 0.0, maxX = 0.0, maxY = 0.0;
-      pos.forEach((n, o) {
-        final r = subR[n]!;
-        if (o.dx - r < minX) minX = o.dx - r;
-        if (o.dy - r < minY) minY = o.dy - r;
-        if (o.dx + r > maxX) maxX = o.dx + r;
-        if (o.dy + r > maxY) maxY = o.dy + r;
-      });
-      final shift = Offset(-minX + 40, -minY + 40);
-      for (final k in pos.keys.toList()) {
-        pos[k] = pos[k]! + shift;
-      }
-      w = maxX - minX + 80;
-      h = maxY - minY + 80;
+      measure(widget.root);
+      layoutBlock(widget.root, const Offset(40, 40));
+      w = sizeOf[widget.root]!.width + 80;
+      h = sizeOf[widget.root]!.height + 80;
     }
 
     final connByParent = <FolderNode, List<Offset>>{};
@@ -213,10 +200,7 @@ class _TreeViewState extends State<TreeView> {
                 _tc.value = Matrix4.identity()
                   ..translateByDouble(
                     cns.maxWidth / 2 - rootPos.dx,
-                    (_layout == TreeLayout.radial
-                            ? cns.maxHeight / 2
-                            : cns.maxHeight * 0.18) -
-                        rootPos.dy,
+                    cns.maxHeight * 0.18 - rootPos.dy,
                     0,
                     1,
                   );
@@ -310,8 +294,9 @@ class _TreeViewState extends State<TreeView> {
             seg(Icons.lan_outlined, 'Горизонтальное',
                 _layout == TreeLayout.horizontal,
                 () => _setLayout(TreeLayout.horizontal)),
-            seg(Icons.hub_outlined, 'Радиальное', _layout == TreeLayout.radial,
-                () => _setLayout(TreeLayout.radial)),
+            seg(Icons.bubble_chart_outlined, 'Компактное',
+                _layout == TreeLayout.compact,
+                () => _setLayout(TreeLayout.compact)),
           ]),
           const SizedBox(width: 10),
           group([
