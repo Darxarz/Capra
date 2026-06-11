@@ -2,10 +2,16 @@ import 'package:flutter/material.dart';
 import 'theme.dart';
 import 'home_page.dart';
 import 'favorites.dart';
+import 'tag_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Favorites.instance.load();
+  try {
+    await TagService.instance.init();
+  } catch (_) {
+    // если база не открылась — приложение всё равно работает (без тегов)
+  }
   runApp(const AuroraApp());
 }
 

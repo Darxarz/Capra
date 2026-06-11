@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'theme.dart';
 import 'model.dart';
 import 'favorites.dart';
+import 'tag_service.dart';
 
 /// Открыть просмотрщик на конкретном фото.
 void openViewer(BuildContext context, List<PhotoItem> photos, int index) {
@@ -167,15 +168,7 @@ class _InfoPanel extends StatelessWidget {
         const SizedBox(height: 4),
         Text(prettyDate(photo.modified), style: TextStyle(fontSize: 13, color: c.muted)),
         const SizedBox(height: 18),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: c.accentSoft,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Text('Теги появятся после авто-тегирования (следующий шаг)',
-              style: TextStyle(color: c.accentInk, fontSize: 12)),
-        ),
+        _TagsSection(photo: photo, colors: c),
         const SizedBox(height: 20),
         ValueListenableBuilder<Set<String>>(
           valueListenable: Favorites.instance.notifier,
@@ -204,6 +197,138 @@ class _InfoPanel extends StatelessWidget {
         SelectableText(photo.path,
             style: TextStyle(color: c.text, fontSize: 12)),
       ]),
+    );
+  }
+}
+
+// ───────────────────────── теги фото ─────────────────────────
+class _TagsSection extends StatefulWidget {
+  final PhotoItem photo;
+  final AuroraColors colors;
+  const _TagsSection({required this.photo, required this.colors});
+
+  @override
+  State<_TagsSection> createState() => _TagsSectionState();
+}
+
+class _TagsSectionState extends State<_TagsSection> {
+  final _ctl = TextEditingController();
+  List<String> _tags = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(_TagsSection old) {
+    super.didUpdateWidget(old);
+    if (old.photo.path != widget.photo.path) _load();
+  }
+
+  @override
+  void dispose() {
+    _ctl.dispose();
+    super.dispose();
+  }
+
+  void _load() =>
+      setState(() => _tags = TagService.instance.tagsFor(widget.photo.path));
+
+  void _add() {
+    final t = _ctl.text.trim();
+    if (t.isEmpty) return;
+    TagService.instance.addTag(widget.photo.path, t);
+    _ctl.clear();
+    _load();
+  }
+
+  void _remove(String t) {
+    TagService.instance.removeTag(widget.photo.path, t);
+    _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Icon(Icons.sell_outlined, size: 16, color: c.muted),
+          const SizedBox(width: 6),
+          Text('Теги',
+              style: TextStyle(
+                  color: c.text, fontSize: 14, fontWeight: FontWeight.w700)),
+        ]),
+        const SizedBox(height: 10),
+        if (_tags.isEmpty)
+          Text('Пока нет тегов. Добавь вручную или запусти авто-тегирование.',
+              style: TextStyle(color: c.muted, fontSize: 12))
+        else
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final t in _tags)
+                Container(
+                  padding: const EdgeInsets.fromLTRB(10, 5, 6, 5),
+                  decoration: BoxDecoration(
+                    color: c.accentSoft,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text(t,
+                        style: TextStyle(color: c.accentInk, fontSize: 12.5)),
+                    const SizedBox(width: 4),
+                    GestureDetector(
+                      onTap: () => _remove(t),
+                      child: Icon(Icons.close, size: 14, color: c.accentInk),
+                    ),
+                  ]),
+                ),
+            ],
+          ),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+              decoration: BoxDecoration(
+                color: c.surface2,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: c.line),
+              ),
+              child: TextField(
+                controller: _ctl,
+                onSubmitted: (_) => _add(),
+                cursorColor: c.accent,
+                style: TextStyle(color: c.text, fontSize: 13),
+                decoration: InputDecoration(
+                  isDense: true,
+                  border: InputBorder.none,
+                  hintText: 'Добавить тег…',
+                  hintStyle: TextStyle(color: c.muted, fontSize: 13),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: _add,
+            child: Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: c.accent,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.add, color: Colors.white, size: 20),
+            ),
+          ),
+        ]),
+      ],
     );
   }
 }

@@ -8,6 +8,7 @@ import 'update_service.dart';
 import 'favorites.dart';
 import 'folder_tree.dart';
 import 'tree_view.dart';
+import 'tag_service.dart';
 
 enum ViewMode { all, dates, albums }
 
@@ -28,6 +29,7 @@ class _HomePageState extends State<HomePage> {
   bool _loading = false;
   UpdateInfo? _update; // доступное обновление (null = нет)
   String _query = ''; // строка поиска
+  Set<String> _tagMatchPaths = const {}; // пути, чьи теги совпали с запросом
   bool _favOnly = false; // показывать только избранное
   bool _folderTree = false; // в разделе папок: древо вместо сетки
   FolderNode? _treeCache; // построенное древо папок (кэш)
@@ -43,7 +45,8 @@ class _HomePageState extends State<HomePage> {
       final q = _query.trim().toLowerCase();
       r = r.where((p) =>
           p.fileName.toLowerCase().contains(q) ||
-          p.folderName.toLowerCase().contains(q));
+          p.folderName.toLowerCase().contains(q) ||
+          _tagMatchPaths.contains(p.path));
     }
     return r.toList();
   }
@@ -176,7 +179,12 @@ class _HomePageState extends State<HomePage> {
                     mode: _mode,
                     cell: _cell,
                     query: _query,
-                    onSearch: (q) => setState(() => _query = q),
+                    onSearch: (q) => setState(() {
+                      _query = q;
+                      _tagMatchPaths = q.trim().isEmpty
+                          ? const {}
+                          : TagService.instance.pathsMatchingTag(q);
+                    }),
                     onMode: (m) => setState(() => _mode = m),
                     onCell: (v) => setState(() => _cell = v),
                     onPickFolder: _pickFolder,
