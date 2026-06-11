@@ -125,20 +125,56 @@ class _TreeViewState extends State<TreeView> {
       w = nw + 52 + maxDepth * xGap;
       h = m + (leafCount - 1) * yGap + nh / 2 + 24;
     } else {
-      final rStep = nh + 30;
-      final maxR = maxDepth * rStep;
-      final cxy = maxR + nw / 2 + 30;
+      // радиальная раскладка: каждое поддерево растёт наружу от своей ветви,
+      // дети раскрываются узким веером вокруг направления роста (а не по кругу)
+      final leaves = <FolderNode, int>{};
+      int countLeaves(FolderNode n) {
+        final k = _isExpanded(n) ? n.children : const <FolderNode>[];
+        if (k.isEmpty) return leaves[n] = 1;
+        var s = 0;
+        for (final ch in k) {
+          s += countLeaves(ch);
+        }
+        return leaves[n] = s;
+      }
+
+      countLeaves(widget.root);
+
+      final angle = <FolderNode, double>{};
+      void assign(FolderNode n, double center, double span, int depth) {
+        angle[n] = center;
+        final k = _isExpanded(n) ? n.children : const <FolderNode>[];
+        if (k.isEmpty) return;
+        final total = k.fold<int>(0, (s, ch) => s + leaves[ch]!);
+        var cursor = center - span / 2;
+        for (final ch in k) {
+          final kSpan = span * (leaves[ch]! / total);
+          // веер детей ограничиваем «конусом», сужающимся с глубиной — рост наружу
+          final cone = math.min(kSpan, 1.3 * math.pow(0.62, depth).toDouble());
+          assign(ch, cursor + kSpan / 2, cone, depth + 1);
+          cursor += kSpan;
+        }
+      }
+
+      assign(widget.root, -math.pi / 2, 2 * math.pi, 0);
+
+      final rStep = nw * 1.5 + 78;
+      final cxy = maxDepth * rStep + nw / 2 + 30;
       grid.forEach((n, gp) {
-        final ang = (gp.x / leafCount) * 2 * math.pi - math.pi / 2;
+        final a = angle[n] ?? -math.pi / 2;
         final r = gp.depth * rStep;
-        pos[n] = Offset(cxy + r * math.cos(ang), cxy + r * math.sin(ang));
+        pos[n] = Offset(cxy + r * math.cos(a), cxy + r * math.sin(a));
       });
       w = 2 * cxy;
       h = 2 * cxy;
     }
 
-    final treeEdges = edges
-        .map((e) => _Edge(pos[e[0]]!, pos[e[1]]!, grid[e[1]]!.depth))
+    final connByParent = <FolderNode, List<Offset>>{};
+    for (final e in edges) {
+      connByParent.putIfAbsent(e[0], () => []).add(pos[e[1]]!);
+    }
+    final conns = connByParent.entries
+        .map((en) => _Conn(pos[en.key]!, en.value))
         .toList(growable: false);
 
     final rootPos = pos[widget.root] ?? Offset(w / 2, h / 2);
@@ -177,10 +213,9 @@ class _TreeViewState extends State<TreeView> {
                     Positioned.fill(
                       child: CustomPaint(
                         painter: _BranchPainter(
-                          treeEdges,
+                          conns,
                           _layout,
-                          maxDepth,
-                          c.muted.withValues(alpha: 0.4),
+                          c.muted.withValues(alpha: 0.55),
                         ),
                       ),
                     ),
@@ -343,96 +378,67 @@ class _GP {
   const _GP(this.x, this.depth);
 }
 
-class _Edge {
-  final Offset a; // центр родителя
-  final Offset b; // центр ребёнка
-  final int depth; // глубина ребёнка
-  const _Edge(this.a, this.b, this.depth);
+class _Conn {
+  final Offset parent; // центр родителя
+  final List<Offset> children; // центры детей (все на одной глубине)
+  const _Conn(this.parent, this.children);
 }
 
-/// Рисует ветви как сужающиеся «ленты»: толще у ствола, тоньше к листьям —
-/// поэтому дерево выглядит древовидным, а не как набор прямых линий.
+/// Рисует ветви тонкими линиями с прямыми углами (как генеалогическое древо):
+/// от родителя вниз к «шине», по ней — к каждому ребёнку под углом 90°.
+/// В радиальном режиме — прямые лучи наружу.
 class _BranchPainter extends CustomPainter {
-  final List<_Edge> edges;
+  final List<_Conn> conns;
   final TreeLayout layout;
-  final int maxDepth;
   final Color color;
-  _BranchPainter(this.edges, this.layout, this.maxDepth, this.color);
-
-  double _widthAt(int depth) {
-    final f = ((maxDepth + 1 - depth) / (maxDepth + 1)).clamp(0.0, 1.0);
-    return 2.5 + 9.0 * f;
-  }
-
-  Offset _cubic(Offset a, Offset c1, Offset c2, Offset b, double t) {
-    final u = 1 - t;
-    return a * (u * u * u) +
-        c1 * (3 * u * u * t) +
-        c2 * (3 * u * t * t) +
-        b * (t * t * t);
-  }
+  _BranchPainter(this.conns, this.layout, this.color);
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = color
-      ..style = PaintingStyle.fill
+      ..strokeWidth = 1.8
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.miter
+      ..strokeCap = StrokeCap.round
       ..isAntiAlias = true;
-    for (final e in edges) {
-      final a = e.a, b = e.b;
-      Offset c1, c2;
-      if (layout == TreeLayout.vertical) {
-        final my = (a.dy + b.dy) / 2;
-        c1 = Offset(a.dx, my);
-        c2 = Offset(b.dx, my);
-      } else if (layout == TreeLayout.horizontal) {
-        final mx = (a.dx + b.dx) / 2;
-        c1 = Offset(mx, a.dy);
-        c2 = Offset(mx, b.dy);
-      } else {
-        c1 = Offset.lerp(a, b, 0.34)!;
-        c2 = Offset.lerp(a, b, 0.66)!;
-      }
-      final wStart = _widthAt(e.depth - 1);
-      final wEnd = _widthAt(e.depth);
 
-      const steps = 18;
-      final pts = <Offset>[];
-      for (var i = 0; i <= steps; i++) {
-        pts.add(_cubic(a, c1, c2, b, i / steps));
+    for (final conn in conns) {
+      final p = conn.parent;
+      final kids = conn.children;
+      if (kids.isEmpty) continue;
+
+      if (layout == TreeLayout.vertical) {
+        final busY = (p.dy + kids.first.dy) / 2;
+        for (final k in kids) {
+          final path = Path()
+            ..moveTo(p.dx, p.dy)
+            ..lineTo(p.dx, busY)
+            ..lineTo(k.dx, busY)
+            ..lineTo(k.dx, k.dy);
+          canvas.drawPath(path, paint);
+        }
+      } else if (layout == TreeLayout.horizontal) {
+        final busX = (p.dx + kids.first.dx) / 2;
+        for (final k in kids) {
+          final path = Path()
+            ..moveTo(p.dx, p.dy)
+            ..lineTo(busX, p.dy)
+            ..lineTo(busX, k.dy)
+            ..lineTo(k.dx, k.dy);
+          canvas.drawPath(path, paint);
+        }
+      } else {
+        for (final k in kids) {
+          canvas.drawLine(p, k, paint);
+        }
       }
-      final left = <Offset>[];
-      final right = <Offset>[];
-      for (var i = 0; i <= steps; i++) {
-        final t = i / steps;
-        final prev = pts[i == 0 ? 0 : i - 1];
-        final next = pts[i == steps ? steps : i + 1];
-        var dir = next - prev;
-        final len = dir.distance;
-        if (len > 0) dir = dir / len;
-        final normal = Offset(-dir.dy, dir.dx);
-        final hw = (wStart + (wEnd - wStart) * t) / 2;
-        left.add(pts[i] + normal * hw);
-        right.add(pts[i] - normal * hw);
-      }
-      final path = Path()..moveTo(left.first.dx, left.first.dy);
-      for (var i = 1; i < left.length; i++) {
-        path.lineTo(left[i].dx, left[i].dy);
-      }
-      for (var i = right.length - 1; i >= 0; i--) {
-        path.lineTo(right[i].dx, right[i].dy);
-      }
-      path.close();
-      canvas.drawPath(path, paint);
     }
   }
 
   @override
   bool shouldRepaint(_BranchPainter old) =>
-      old.edges != edges ||
-      old.layout != layout ||
-      old.color != color ||
-      old.maxDepth != maxDepth;
+      old.conns != conns || old.layout != layout || old.color != color;
 }
 
 class _NodeCard extends StatelessWidget {
