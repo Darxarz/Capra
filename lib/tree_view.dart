@@ -131,21 +131,38 @@ class _TreeViewState extends State<TreeView> {
       const padX = 14.0, padY = 18.0;
       final sizeOf = <FolderNode, Size>{}; // размер блока поддерева
 
+      // целевая ширина строки для упаковки детей (≈ квадратный блок)
+      double targetWidth(List<FolderNode> kids) {
+        var maxW = 0.0, area = 0.0;
+        for (final k in kids) {
+          final s = sizeOf[k]!;
+          if (s.width > maxW) maxW = s.width;
+          area += s.width * s.height;
+        }
+        return math.max(maxW, math.sqrt(area) * 1.3);
+      }
+
       Size measure(FolderNode n) {
         final kids = _isExpanded(n) ? n.children : const <FolderNode>[];
         if (kids.isEmpty) return sizeOf[n] = Size(nw, nh);
-        var cw = 0.0, ch = 0.0;
         for (final k in kids) {
-          final s = measure(k);
-          if (s.width > cw) cw = s.width;
-          if (s.height > ch) ch = s.height;
+          measure(k);
         }
-        final cols = math.max(1, math.sqrt(kids.length).ceil());
-        final rows = (kids.length / cols).ceil();
-        final gridW = cols * cw + (cols - 1) * padX;
-        final gridH = rows * ch + (rows - 1) * padY;
-        return sizeOf[n] =
-            Size(math.max(gridW, nw), nh + padY + gridH);
+        // упаковка «полками»: каждый блок берёт свою ширину, перенос по targetW
+        final targetW = targetWidth(kids);
+        var x = 0.0, y = 0.0, rowH = 0.0, usedW = 0.0;
+        for (final k in kids) {
+          final s = sizeOf[k]!;
+          if (x > 0 && x + s.width > targetW + 0.01) {
+            x = 0;
+            y += rowH + padY;
+            rowH = 0;
+          }
+          x += s.width + padX;
+          if (x - padX > usedW) usedW = x - padX;
+          if (s.height > rowH) rowH = s.height;
+        }
+        return sizeOf[n] = Size(math.max(usedW, nw), nh + padY + y + rowH);
       }
 
       void layoutBlock(FolderNode n, Offset origin) {
@@ -154,22 +171,36 @@ class _TreeViewState extends State<TreeView> {
         pos[n] = Offset(origin.dx + block.width / 2, origin.dy + nh / 2);
         final kids = _isExpanded(n) ? n.children : const <FolderNode>[];
         if (kids.isEmpty) return;
-        var cw = 0.0, ch = 0.0;
+        final targetW = targetWidth(kids);
+        // прогон для ширины сетки (центрирование)
+        var x = 0.0, y = 0.0, rowH = 0.0, usedW = 0.0;
         for (final k in kids) {
-          if (sizeOf[k]!.width > cw) cw = sizeOf[k]!.width;
-          if (sizeOf[k]!.height > ch) ch = sizeOf[k]!.height;
+          final s = sizeOf[k]!;
+          if (x > 0 && x + s.width > targetW + 0.01) {
+            x = 0;
+            y += rowH + padY;
+            rowH = 0;
+          }
+          x += s.width + padX;
+          if (x - padX > usedW) usedW = x - padX;
+          if (s.height > rowH) rowH = s.height;
         }
-        final cols = math.max(1, math.sqrt(kids.length).ceil());
-        final gridW = cols * cw + (cols - 1) * padX;
-        final startX = origin.dx + (block.width - gridW) / 2;
+        final startX = origin.dx + (block.width - usedW) / 2;
         final startY = origin.dy + nh + padY;
-        for (var i = 0; i < kids.length; i++) {
-          final r = i ~/ cols, c = i % cols;
-          final cellX = startX + c * (cw + padX);
-          final cellY = startY + r * (ch + padY);
-          final kb = sizeOf[kids[i]]!;
-          layoutBlock(kids[i],
-              Offset(cellX + (cw - kb.width) / 2, cellY + (ch - kb.height) / 2));
+        // расстановка детей теми же полками
+        x = 0;
+        y = 0;
+        rowH = 0;
+        for (final k in kids) {
+          final s = sizeOf[k]!;
+          if (x > 0 && x + s.width > targetW + 0.01) {
+            x = 0;
+            y += rowH + padY;
+            rowH = 0;
+          }
+          layoutBlock(k, Offset(startX + x, startY + y));
+          x += s.width + padX;
+          if (s.height > rowH) rowH = s.height;
         }
       }
 
