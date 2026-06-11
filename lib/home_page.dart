@@ -1,4 +1,3 @@
-import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'theme.dart';
@@ -7,6 +6,8 @@ import 'library_service.dart';
 import 'viewer_page.dart';
 import 'update_service.dart';
 import 'favorites.dart';
+import 'folder_tree.dart';
+import 'tree_view.dart';
 
 enum ViewMode { all, dates, albums }
 
@@ -28,6 +29,8 @@ class _HomePageState extends State<HomePage> {
   UpdateInfo? _update; // доступное обновление (null = нет)
   String _query = ''; // строка поиска
   bool _favOnly = false; // показывать только избранное
+  bool _folderTree = false; // в разделе папок: древо вместо сетки
+  FolderNode? _treeCache; // построенное древо папок (кэш)
 
   /// Фото с учётом поиска и фильтра «только избранное».
   List<PhotoItem> get _visiblePhotos {
@@ -43,6 +46,33 @@ class _HomePageState extends State<HomePage> {
           p.folderName.toLowerCase().contains(q));
     }
     return r.toList();
+  }
+
+  FolderNode _folderTreeNode() =>
+      _treeCache ??= buildFolderTree(_photos, _folder ?? '');
+
+  Widget _albumsGrid() {
+    final q = _query.trim().toLowerCase();
+    final albums = q.isEmpty
+        ? _albums
+        : _albums.where((a) => a.name.toLowerCase().contains(q)).toList();
+    if (albums.isEmpty) return const _NoResults(favOnly: false);
+    return _AlbumsView(albums: albums, photos: _photos, cell: _cell);
+  }
+
+  void _openTreeFolder(FolderNode node) {
+    final photos =
+        node.directPhotos.isNotEmpty ? node.directPhotos : collectPhotos(node);
+    if (photos.isEmpty) return;
+    final album = AlbumItem(
+      name: node.name,
+      folderPath: node.path,
+      count: photos.length,
+      cover: node.cover,
+    );
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => _FolderPage(album: album, photos: photos, cell: _cell),
+    ));
   }
 
   @override
@@ -119,6 +149,7 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _photos = photos;
       _albums = LibraryService.albums(photos);
+      _treeCache = null; // папки изменились — пересоберём древо при показе
       _loading = false;
     });
   }
@@ -186,12 +217,22 @@ class _HomePageState extends State<HomePage> {
     if (_photos.isEmpty) return _EmptyState(onPick: _pickFolder);
 
     if (_mode == ViewMode.albums) {
-      final q = _query.trim().toLowerCase();
-      final albums = q.isEmpty
-          ? _albums
-          : _albums.where((a) => a.name.toLowerCase().contains(q)).toList();
-      if (albums.isEmpty) return _NoResults(favOnly: _favOnly);
-      return _AlbumsView(albums: albums, photos: _photos, cell: _cell);
+      return Column(
+        children: [
+          _FolderViewToggle(
+            tree: _folderTree,
+            onChanged: (v) => setState(() => _folderTree = v),
+          ),
+          Expanded(
+            child: _folderTree
+                ? TreeView(
+                    root: _folderTreeNode(),
+                    onOpenFolder: _openTreeFolder,
+                  )
+                : _albumsGrid(),
+          ),
+        ],
+      );
     }
 
     final visible = _visiblePhotos;
@@ -459,6 +500,59 @@ class _NoResults extends StatelessWidget {
                 ? 'Отмечай фото сердечком — они появятся здесь.'
                 : 'Попробуй изменить запрос.',
             style: TextStyle(color: c.muted, fontSize: 13)),
+      ]),
+    );
+  }
+}
+
+// ───────────── переключатель «Сетка / Дерево» в разделе папок ─────────────
+class _FolderViewToggle extends StatelessWidget {
+  final bool tree;
+  final ValueChanged<bool> onChanged;
+  const _FolderViewToggle({required this.tree, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AuroraTheme.of(context).colors;
+    Widget btn(String label, IconData icon, bool on, VoidCallback onTap) {
+      return GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: on ? c.surface : Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 15, color: on ? c.accentInk : c.muted),
+            const SizedBox(width: 6),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: on ? c.text : c.muted)),
+          ]),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
+      child: Row(children: [
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: c.surface2,
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: c.line),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            btn('Сетка', Icons.grid_view_rounded, !tree, () => onChanged(false)),
+            btn('Древо', Icons.account_tree_outlined, tree,
+                () => onChanged(true)),
+          ]),
+        ),
       ]),
     );
   }
@@ -807,7 +901,7 @@ class _DatesView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
-    final groups = LinkedHashMap<String, List<PhotoItem>>();
+    final groups = <String, List<PhotoItem>>{};
     for (final p in photos) {
       groups.putIfAbsent(dateGroupOf(p.modified), () => []).add(p);
     }
