@@ -53,7 +53,7 @@ jobs:
           $m = 'android/app/src/main/AndroidManifest.xml'
           $mc = Get-Content $m -Raw
           if ($mc -notmatch 'MANAGE_EXTERNAL_STORAGE') {
-            $perms = "    <uses-permission android:name=`"android.permission.MANAGE_EXTERNAL_STORAGE`"/>`n    <uses-permission android:name=`"android.permission.READ_EXTERNAL_STORAGE`"/>`n    <uses-permission android:name=`"android.permission.READ_MEDIA_IMAGES`"/>`n    "
+            $perms = "    <uses-permission android:name=`"android.permission.INTERNET`"/>`n    <uses-permission android:name=`"android.permission.MANAGE_EXTERNAL_STORAGE`"/>`n    <uses-permission android:name=`"android.permission.READ_EXTERNAL_STORAGE`"/>`n    <uses-permission android:name=`"android.permission.READ_MEDIA_IMAGES`"/>`n    "
             $mc = $mc -replace '(<manifest[^>]*>\s*)', "`$1$perms"
           }
           if ($mc -notmatch 'requestLegacyExternalStorage') {
@@ -94,7 +94,8 @@ jobs:
                   $c = Get-Content $f -Raw
                   $n = $c -replace 'compileSdkVersion\s+(flutter\.compileSdkVersion|\d+)', 'compileSdkVersion 36' `
                           -replace 'compileSdk\s+(flutter\.compileSdkVersion|\d+)', 'compileSdk 36' `
-                          -replace 'compileSdk\s*=\s*(flutter\.compileSdkVersion|\d+)', 'compileSdk = 36'
+                          -replace 'compileSdk\s*=\s*(flutter\.compileSdkVersion|\d+)', 'compileSdk = 36' `
+                          -replace 'onnxruntime-android:[0-9.]+', 'onnxruntime-android:1.20.0'
                   if ($n -ne $c) { Set-Content $f $n; Write-Host "patched $($_.Name)" }
                 }
               }
