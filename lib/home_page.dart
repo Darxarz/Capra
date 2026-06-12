@@ -33,6 +33,7 @@ class _HomePageState extends State<HomePage> {
   Set<String> _tagMatchPaths = const {}; // пути, чьи теги совпали с запросом
   Set<String> _filterTags = {}; // активный фильтр по тегам (И)
   Set<String> _filterPaths = const {}; // пути, подходящие под фильтр тегов
+  bool _tagsPanelOpen = false; // открыта боковая панель тегов
   bool _favOnly = false; // показывать только избранное
   bool _folderTree = false; // в разделе папок: древо вместо сетки
   FolderNode? _treeCache; // построенное древо папок (кэш)
@@ -93,11 +94,10 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  Future<void> _openTags() async {
-    final result = await Navigator.of(context).push<Set<String>>(
-      MaterialPageRoute(builder: (_) => TagsPage(initialSelected: _filterTags)),
-    );
-    if (result != null) _setFilterTags(result);
+  void _toggleFilterTag(String t) {
+    final next = {..._filterTags};
+    if (!next.add(t)) next.remove(t);
+    _setFilterTags(next);
   }
 
   @override
@@ -192,8 +192,16 @@ class _HomePageState extends State<HomePage> {
               onMode: (m) => setState(() => _mode = m),
               favOnly: _favOnly,
               onFav: () => setState(() => _favOnly = !_favOnly),
-              onTags: _openTags,
+              onTags: () => setState(() => _tagsPanelOpen = !_tagsPanelOpen),
+              tagsOpen: _tagsPanelOpen,
             ),
+            if (_tagsPanelOpen)
+              TagsPanel(
+                selected: _filterTags,
+                onToggle: _toggleFilterTag,
+                onClear: () => _setFilterTags({}),
+                onClose: () => setState(() => _tagsPanelOpen = false),
+              ),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -226,7 +234,7 @@ class _HomePageState extends State<HomePage> {
                       onRemove: (t) =>
                           _setFilterTags({..._filterTags}..remove(t)),
                       onClear: () => _setFilterTags({}),
-                      onEdit: _openTags,
+                      onEdit: () => setState(() => _tagsPanelOpen = true),
                     ),
                   Expanded(
                     child: ValueListenableBuilder<Set<String>>(
@@ -323,12 +331,14 @@ class _Rail extends StatelessWidget {
   final bool favOnly;
   final VoidCallback onFav;
   final VoidCallback onTags;
+  final bool tagsOpen;
   const _Rail({
     required this.mode,
     required this.onMode,
     required this.favOnly,
     required this.onFav,
     required this.onTags,
+    required this.tagsOpen,
   });
 
   @override
@@ -378,7 +388,7 @@ class _Rail extends StatelessWidget {
           item(Icons.folder_rounded, ViewMode.albums),
           item(favOnly ? Icons.favorite_rounded : Icons.favorite_border_rounded,
               null, onTap: onFav, active: favOnly),
-          item(Icons.sell_outlined, null, onTap: onTags),
+          item(Icons.sell_outlined, null, onTap: onTags, active: tagsOpen),
           const Spacer(),
           item(Icons.settings_outlined, null, onTap: () {}),
           const SizedBox(height: 10),
