@@ -40,16 +40,31 @@ jobs:
       - name: Поправить android-конфиг
         shell: pwsh
         run: |
-          $g = if (Test-Path 'android/app/build.gradle.kts') { 'android/app/build.gradle.kts' } else { 'android/app/build.gradle' }
-          $c = Get-Content $g -Raw
-          $c = $c -replace 'compileSdk\s*=\s*flutter\.compileSdkVersion', 'compileSdk = 36'
+          # приложение: minSdk 24 (требует onnxruntime), compileSdk 36
+          $app = if (Test-Path 'android/app/build.gradle.kts') { 'android/app/build.gradle.kts' } else { 'android/app/build.gradle' }
+          $c = Get-Content $app -Raw
           $c = $c -replace 'minSdk\s*=\s*flutter\.minSdkVersion', 'minSdk = 24'
-          $c = $c -replace 'compileSdkVersion\s+flutter\.compileSdkVersion', 'compileSdkVersion 36'
           $c = $c -replace 'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 24'
-          Set-Content $g $c
+          $c = $c -replace 'compileSdk\s*=\s*flutter\.compileSdkVersion', 'compileSdk = 36'
+          Set-Content $app $c
+          # все модули (плагины тоже) — compileSdk 36, иначе плагины под 35
+          $root = if (Test-Path 'android/build.gradle.kts') { 'android/build.gradle.kts' } else { 'android/build.gradle' }
+          $lines = @(
+            '',
+            'subprojects {',
+            '    afterEvaluate {',
+            '        val androidExt = extensions.findByName("android")',
+            '        if (androidExt != null) {',
+            '            try {',
+            '                androidExt.javaClass.getMethod("compileSdkVersion", Int::class.javaPrimitiveType).invoke(androidExt, 36)',
+            '            } catch (e: Exception) {}',
+            '        }',
+            '    }',
+            '}'
+          )
+          Add-Content $root $lines
           Add-Content android/gradle.properties "`nkotlin.incremental=false"
-          Write-Host "compileSdk -> 36, minSdk -> 24 ($g)"
-          Get-Content $g | Select-String -Pattern 'compileSdk|minSdk'
+          Write-Host "app minSdk24/compileSdk36 + subprojects compileSdk36 ($root)"
 
       - name: Зависимости
         run: flutter pub get
