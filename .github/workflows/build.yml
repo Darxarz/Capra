@@ -34,6 +34,20 @@ jobs:
       - name: Сгенерировать платформенные файлы (windows + android)
         run: flutter create --project-name aurora_gallery --platforms=windows,android .
 
+      # правим android-конфиг: minSdk 24 (требует onnxruntime) и отключаем
+      # инкрементальную компиляцию Kotlin (в CI pub-кэш на C:, проект на D: —
+      # кросс-дисковый кэш ломает сборку)
+      - name: Поправить android-конфиг
+        shell: pwsh
+        run: |
+          $g = if (Test-Path 'android/app/build.gradle.kts') { 'android/app/build.gradle.kts' } else { 'android/app/build.gradle' }
+          (Get-Content $g) `
+            -replace 'minSdk\s*=\s*flutter\.minSdkVersion', 'minSdk = 24' `
+            -replace 'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 24' |
+            Set-Content $g
+          Add-Content android/gradle.properties "`nkotlin.incremental=false"
+          Write-Host "minSdk -> 24, kotlin.incremental=false ($g)"
+
       - name: Зависимости
         run: flutter pub get
 
