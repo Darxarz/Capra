@@ -157,7 +157,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _pickFolder() async {
-    final path = await FilePicker.platform.getDirectoryPath(
+    final path = await FilePicker.getDirectoryPath(
       dialogTitle: 'Выбери папку с фотографиями',
     );
     if (path == null) return;
