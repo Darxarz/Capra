@@ -28,3 +28,6 @@ _recover/
 # генерируется flutter create
 .metadata
 /test/
+
+# проверочный кэш моделей
+_verify/
