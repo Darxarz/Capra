@@ -51,8 +51,8 @@ jobs:
           $root = if (Test-Path 'android/build.gradle.kts') { 'android/build.gradle.kts' } else { 'android/build.gradle' }
           $lines = @(
             '',
-            'subprojects {',
-            '    afterEvaluate {',
+            'gradle.projectsEvaluated {',
+            '    subprojects {',
             '        val androidExt = extensions.findByName("android")',
             '        if (androidExt != null) {',
             '            try {',
