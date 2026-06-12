@@ -49,7 +49,18 @@ jobs:
           Set-Content $app $c
           # кросс-дисковый pub-кэш (C:) vs проект (D:) ломает kotlin incremental
           Add-Content android/gradle.properties "`nkotlin.incremental=false"
-          Write-Host "app minSdk 24 / compileSdk 36"
+          # доступ ко всем файлам (галерея читает папки через dart:io)
+          $m = 'android/app/src/main/AndroidManifest.xml'
+          $mc = Get-Content $m -Raw
+          if ($mc -notmatch 'MANAGE_EXTERNAL_STORAGE') {
+            $perms = "    <uses-permission android:name=`"android.permission.MANAGE_EXTERNAL_STORAGE`"/>`n    <uses-permission android:name=`"android.permission.READ_EXTERNAL_STORAGE`"/>`n    <uses-permission android:name=`"android.permission.READ_MEDIA_IMAGES`"/>`n    "
+            $mc = $mc -replace '(<manifest[^>]*>\s*)', "`$1$perms"
+          }
+          if ($mc -notmatch 'requestLegacyExternalStorage') {
+            $mc = $mc -replace '(<application)', '$1 android:requestLegacyExternalStorage="true"'
+          }
+          Set-Content $m $mc
+          Write-Host "app minSdk 24 / compileSdk 36 / разрешения файлов"
 
       - name: Зависимости
         run: flutter pub get

@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'theme.dart';
+import 'folder_browser.dart';
 import 'model.dart';
 import 'library_service.dart';
 import 'viewer_page.dart';
@@ -157,9 +160,31 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _pickFolder() async {
-    final path = await FilePicker.platform.getDirectoryPath(
-      dialogTitle: 'Выбери папку с фотографиями',
-    );
+    String? path;
+    if (Platform.isAndroid) {
+      // на Android системный диалог отдаёт URI, а dart:io читает файлы только
+      // с доступом ко всем файлам — запрашиваем его и выбираем папку сами
+      var st = await Permission.manageExternalStorage.status;
+      if (!st.isGranted) st = await Permission.manageExternalStorage.request();
+      if (!st.isGranted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'Нужен доступ ко всем файлам — включи его в настройках приложения.'),
+          ));
+        }
+        return;
+      }
+      if (!mounted) return;
+      path = await Navigator.of(context).push<String>(MaterialPageRoute(
+        builder: (_) =>
+            const FolderBrowserPage(initialPath: '/storage/emulated/0'),
+      ));
+    } else {
+      path = await FilePicker.platform.getDirectoryPath(
+        dialogTitle: 'Выбери папку с фотографиями',
+      );
+    }
     if (path == null) return;
     await LibraryService.saveFolder(path);
     await _scan(path);
