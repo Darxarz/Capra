@@ -11,6 +11,8 @@ class BatchTagger extends ChangeNotifier {
   static final BatchTagger instance = BatchTagger._();
 
   bool running = false;
+  bool downloading = false;
+  double downloadProgress = 0;
   bool _stop = false;
   int total = 0;
   int done = 0;
@@ -24,17 +26,38 @@ class BatchTagger extends ChangeNotifier {
   Future<void> start(List<PhotoItem> photos) async {
     if (running) return;
     error = null;
-    if (!await Tagger.instance.isDownloaded()) {
-      error = 'Сначала скачай модель: отметь одно фото кнопкой «Тегировать».';
-      notifyListeners();
-      return;
-    }
     running = true;
     _stop = false;
     done = 0;
     tagged = 0;
     total = 0;
     notifyListeners();
+
+    // модель скачивается прямо здесь, если её ещё нет (~380 МБ, один раз)
+    if (!await Tagger.instance.isDownloaded()) {
+      downloading = true;
+      downloadProgress = 0;
+      notifyListeners();
+      try {
+        var last = -1;
+        await Tagger.instance.download(onProgress: (pr) {
+          downloadProgress = pr;
+          final pct = (pr * 100).round();
+          if (pct != last) {
+            last = pct;
+            notifyListeners();
+          }
+        });
+      } catch (e) {
+        downloading = false;
+        running = false;
+        error = 'Не удалось скачать модель: $e';
+        notifyListeners();
+        return;
+      }
+      downloading = false;
+      notifyListeners();
+    }
 
     try {
       await Tagger.instance.load();

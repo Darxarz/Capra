@@ -69,6 +69,26 @@ class _TagsPanelState extends State<TagsPanel> {
 
   Widget _batchBar(AuroraColors c) {
     final b = BatchTagger.instance;
+    if (b.downloading) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text('Скачивание модели… ${(b.downloadProgress * 100).round()}%',
+              style: TextStyle(
+                  color: c.text, fontSize: 12.5, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 7),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: b.downloadProgress,
+              color: c.accent,
+              backgroundColor: c.surface2,
+              minHeight: 6,
+            ),
+          ),
+        ]),
+      );
+    }
     if (b.running) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
