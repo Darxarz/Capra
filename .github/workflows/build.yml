@@ -1,4 +1,4 @@
-name: Build Windows app
+name: Build Capra (Windows + Android)
 
 # Запускается при каждом изменении в репозитории и вручную (кнопка Run workflow)
 on:
@@ -11,11 +11,17 @@ permissions:
   contents: write
 
 jobs:
-  build-windows:
+  build:
     runs-on: windows-latest
     steps:
       - name: Получить код
         uses: actions/checkout@v5
+
+      - name: Установить JDK 17 (для Android)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
       - name: Установить Flutter
         uses: subosito/flutter-action@v2
@@ -25,20 +31,18 @@ jobs:
       - name: Включить поддержку Windows
         run: flutter config --enable-windows-desktop
 
-      - name: Сгенерировать платформенные файлы (windows/)
-        run: flutter create --project-name aurora_gallery --platforms=windows .
+      - name: Сгенерировать платформенные файлы (windows + android)
+        run: flutter create --project-name aurora_gallery --platforms=windows,android .
 
       - name: Зависимости
         run: flutter pub get
 
-      # номер сборки (${{ github.run_number }}) вшивается в приложение —
-      # по нему оно понимает, что вышла версия новее
+      # ───────────────── Windows ─────────────────
       - name: Собрать приложение под Windows
         run: flutter build windows --release --dart-define=BUILD_NUMBER=${{ github.run_number }}
 
       # пакет onnxruntime бандлит старый ONNX Runtime (1.15.1) — подменяем его
       # на свежий официальный, чтобы грузилась модель тегирования v3 (opset 4).
-      # C-API движка обратно совместим, поэтому обвязка не ломается.
       - name: Обновить onnxruntime.dll до свежего (для модели v3)
         shell: pwsh
         run: |
@@ -48,23 +52,34 @@ jobs:
           Copy-Item "ort/onnxruntime-win-x64-$ver/lib/onnxruntime.dll" "build/windows/x64/runner/Release/onnxruntime.dll" -Force
           Write-Host "onnxruntime.dll заменён на $ver"
 
-      - name: Упаковать в zip
+      - name: Упаковать Windows в zip
         shell: pwsh
         run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath Capra-windows.zip -Force
 
-      - name: Выложить готовое приложение как артефакт
+      # ───────────────── Android ─────────────────
+      - name: Собрать APK под Android
+        run: flutter build apk --release --dart-define=BUILD_NUMBER=${{ github.run_number }}
+
+      - name: Переименовать APK
+        shell: pwsh
+        run: Copy-Item build/app/outputs/flutter-apk/app-release.apk Capra.apk -Force
+
+      # ───────────────── артефакты и релиз ─────────────────
+      - name: Выложить артефакты
         uses: actions/upload-artifact@v5
         with:
-          name: aurora-gallery-windows
-          path: build/windows/x64/runner/Release
+          name: capra-builds
+          path: |
+            Capra-windows.zip
+            Capra.apk
 
-      # создаём релиз с готовым zip — отсюда приложение скачивает обновления
+      # создаём релиз с zip (Windows) и apk (Android)
       - name: Создать релиз с новой версией
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: >
-          gh release create "build-${{ github.run_number }}" Capra-windows.zip
+          gh release create "build-${{ github.run_number }}" Capra-windows.zip Capra.apk
           --repo ${{ github.repository }}
           --title "Сборка ${{ github.run_number }}"
           --notes "Автоматическая сборка из коммита ${{ github.sha }}"
