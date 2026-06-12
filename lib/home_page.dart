@@ -10,6 +10,7 @@ import 'folder_tree.dart';
 import 'tree_view.dart';
 import 'tag_service.dart';
 import 'tags_page.dart';
+import 'batch_tagger.dart';
 
 enum ViewMode { all, dates, albums }
 
@@ -201,6 +202,7 @@ class _HomePageState extends State<HomePage> {
                 onToggle: _toggleFilterTag,
                 onClear: () => _setFilterTags({}),
                 onClose: () => setState(() => _tagsPanelOpen = false),
+                onStartBatch: () => BatchTagger.instance.start(_photos),
               ),
             Expanded(
               child: Column(

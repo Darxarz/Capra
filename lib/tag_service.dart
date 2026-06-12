@@ -89,6 +89,14 @@ class TagService {
     ];
   }
 
+  /// Все пути, у которых уже есть хоть один тег (для пропуска при пакетном).
+  Set<String> taggedPaths() {
+    final db = _db;
+    if (db == null) return const {};
+    final rows = db.select('SELECT DISTINCT path FROM tags');
+    return {for (final r in rows) r['path'] as String};
+  }
+
   /// Пути фото, у которых есть ВСЕ указанные теги (фильтр И).
   Set<String> pathsWithAllTags(Iterable<String> tags) {
     final db = _db;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'theme.dart';
 import 'tag_service.dart';
+import 'batch_tagger.dart';
 
 /// Боковая панель тегов: поиск, сортировка, группировка по категориям.
 /// Тап по тегу мгновенно включает/выключает его в фильтре (живая фильтрация).
@@ -9,12 +10,14 @@ class TagsPanel extends StatefulWidget {
   final ValueChanged<String> onToggle;
   final VoidCallback onClear;
   final VoidCallback onClose;
+  final VoidCallback onStartBatch;
   const TagsPanel({
     super.key,
     required this.selected,
     required this.onToggle,
     required this.onClear,
     required this.onClose,
+    required this.onStartBatch,
   });
 
   @override
@@ -33,10 +36,12 @@ class _TagsPanelState extends State<TagsPanel> {
   void initState() {
     super.initState();
     _load();
+    BatchTagger.instance.addListener(_onBatch);
   }
 
   @override
   void dispose() {
+    BatchTagger.instance.removeListener(_onBatch);
     _ctl.dispose();
     super.dispose();
   }
@@ -44,12 +49,107 @@ class _TagsPanelState extends State<TagsPanel> {
   void _load() =>
       setState(() => _all = TagService.instance.tagList(byCount: _byCount));
 
+  // во время пакетного тегирования обновляем список тегов (не каждый кадр —
+  // запрос GROUP BY тяжелеет с ростом базы) и всегда — индикатор прогресса
+  void _onBatch() {
+    if (!mounted) return;
+    final b = BatchTagger.instance;
+    if (!b.running || b.done % 30 == 0) {
+      _all = TagService.instance.tagList(byCount: _byCount);
+    }
+    setState(() {});
+  }
+
   String _catLabel(String c) => switch (c) {
         'rating' => 'Рейтинг',
         'character' => 'Персонажи',
         'manual' => 'Вручную',
         _ => 'Общие',
       };
+
+  Widget _batchBar(AuroraColors c) {
+    final b = BatchTagger.instance;
+    if (b.running) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            Expanded(
+              child: Text('Тегирую: ${b.done} / ${b.total}',
+                  style: TextStyle(
+                      color: c.text,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600)),
+            ),
+            GestureDetector(
+              onTap: () {
+                b.stop();
+                setState(() {});
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+                decoration: BoxDecoration(
+                  color: c.surface2,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: c.line),
+                ),
+                child: Text('Стоп',
+                    style: TextStyle(color: c.text, fontSize: 12)),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 7),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: b.total == 0 ? null : b.progress,
+              color: c.accent,
+              backgroundColor: c.surface2,
+              minHeight: 6,
+            ),
+          ),
+        ]),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        GestureDetector(
+          onTap: widget.onStartBatch,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: c.accent,
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.auto_awesome, size: 16, color: Colors.white),
+                  SizedBox(width: 8),
+                  Text('Тегировать всё',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600)),
+                ]),
+          ),
+        ),
+        if (b.error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(b.error!,
+                style: TextStyle(color: c.muted, fontSize: 11.5)),
+          ),
+        if (b.error == null && b.done > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text('Готово: отмечено ${b.tagged} из ${b.done}',
+                style: TextStyle(color: c.muted, fontSize: 11.5)),
+          ),
+      ]),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -130,6 +230,7 @@ class _TagsPanelState extends State<TagsPanel> {
               ]),
             ),
           ),
+          _batchBar(c),
           if (widget.selected.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 0, 12, 6),
