@@ -3,6 +3,7 @@ import 'theme.dart';
 import 'model.dart';
 import 'favorites.dart';
 import 'tag_service.dart';
+import 'tagger_service.dart';
 
 /// Открыть просмотрщик на конкретном фото.
 void openViewer(BuildContext context, List<PhotoItem> photos, int index) {
@@ -214,11 +215,80 @@ class _TagsSection extends StatefulWidget {
 class _TagsSectionState extends State<_TagsSection> {
   final _ctl = TextEditingController();
   List<String> _tags = const [];
+  bool _busy = false;
+  String _busyText = '';
+  double? _busyProgress;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  void _snack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  Future<void> _autoTag() async {
+    if (_busy) return;
+    final tagger = Tagger.instance;
+    if (!await tagger.isDownloaded()) {
+      if (!mounted) return;
+      final c = widget.colors;
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: c.surface,
+          title: Text('Скачать ИИ-модель?', style: TextStyle(color: c.text)),
+          content: Text(
+            'Для авто-тегирования нужна модель WD (danbooru/аниме/арт), '
+            '~380 МБ. Скачивается один раз, дальше работает офлайн.',
+            style: TextStyle(color: c.muted),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text('Отмена', style: TextStyle(color: c.muted))),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: c.accent),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Скачать'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+      setState(() {
+        _busy = true;
+        _busyText = 'Скачивание модели…';
+        _busyProgress = 0;
+      });
+      try {
+        await tagger.download(onProgress: (pr) {
+          if (mounted) setState(() => _busyProgress = pr);
+        });
+      } catch (e) {
+        if (mounted) setState(() => _busy = false);
+        _snack('Не удалось скачать модель: $e');
+        return;
+      }
+    }
+    setState(() {
+      _busy = true;
+      _busyText = 'Распознаю…';
+      _busyProgress = null;
+    });
+    try {
+      final n = await tagger.tagAndStore(widget.photo.path);
+      _snack('Добавлено тегов: $n');
+    } catch (e) {
+      _snack('Ошибка тегирования: $e');
+    }
+    if (mounted) {
+      setState(() => _busy = false);
+      _load();
+    }
   }
 
   @override
@@ -261,7 +331,49 @@ class _TagsSectionState extends State<_TagsSection> {
           Text('Теги',
               style: TextStyle(
                   color: c.text, fontSize: 14, fontWeight: FontWeight.w700)),
+          const Spacer(),
+          if (!_busy)
+            GestureDetector(
+              onTap: _autoTag,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                decoration: BoxDecoration(
+                  color: c.accent,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.auto_awesome, size: 15, color: Colors.white),
+                  SizedBox(width: 6),
+                  Text('Тегировать',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600)),
+                ]),
+              ),
+            ),
         ]),
+        if (_busy) ...[
+          const SizedBox(height: 10),
+          Row(children: [
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2, color: c.accent),
+            ),
+            const SizedBox(width: 8),
+            Text(
+                _busyProgress != null
+                    ? '$_busyText ${((_busyProgress ?? 0) * 100).round()}%'
+                    : _busyText,
+                style: TextStyle(color: c.muted, fontSize: 12)),
+          ]),
+          if (_busyProgress != null) ...[
+            const SizedBox(height: 6),
+            LinearProgressIndicator(
+                value: _busyProgress, color: c.accent, backgroundColor: c.surface2),
+          ],
+        ],
         const SizedBox(height: 10),
         if (_tags.isEmpty)
           Text('Пока нет тегов. Добавь вручную или запусти авто-тегирование.',
