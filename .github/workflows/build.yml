@@ -62,6 +62,19 @@ jobs:
           Set-Content $m $mc
           Write-Host "app minSdk 24 / compileSdk 36 / разрешения файлов"
 
+      # новый MSVC на раннере делает ошибкой устаревшие <experimental/coroutine>
+      # в permission_handler_windows — глушим рекомендованным define
+      - name: Поправить windows-конфиг
+        shell: pwsh
+        run: |
+          $f = 'windows/CMakeLists.txt'
+          $c = Get-Content $f -Raw
+          if ($c -notmatch '_SILENCE_EXPERIMENTAL_COROUTINE') {
+            $c = $c -replace '(project\([^\)]*\))', "`$1`r`nadd_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)"
+            Set-Content $f $c
+            Write-Host "windows: coroutine deprecation suppressed"
+          }
+
       - name: Зависимости
         run: flutter pub get
 
