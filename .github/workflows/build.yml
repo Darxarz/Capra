@@ -41,12 +41,15 @@ jobs:
         shell: pwsh
         run: |
           $g = if (Test-Path 'android/app/build.gradle.kts') { 'android/app/build.gradle.kts' } else { 'android/app/build.gradle' }
-          (Get-Content $g) `
-            -replace 'minSdk\s*=\s*flutter\.minSdkVersion', 'minSdk = 24' `
-            -replace 'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 24' |
-            Set-Content $g
+          $c = Get-Content $g -Raw
+          $c = $c -replace 'compileSdk\s*=\s*flutter\.compileSdkVersion', 'compileSdk = 35'
+          $c = $c -replace 'minSdk\s*=\s*flutter\.minSdkVersion', 'minSdk = 24'
+          $c = $c -replace 'compileSdkVersion\s+flutter\.compileSdkVersion', 'compileSdkVersion 35'
+          $c = $c -replace 'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 24'
+          Set-Content $g $c
           Add-Content android/gradle.properties "`nkotlin.incremental=false"
-          Write-Host "minSdk -> 24, kotlin.incremental=false ($g)"
+          Write-Host "compileSdk -> 35, minSdk -> 24 ($g)"
+          Get-Content $g | Select-String -Pattern 'compileSdk|minSdk'
 
       - name: Зависимости
         run: flutter pub get
