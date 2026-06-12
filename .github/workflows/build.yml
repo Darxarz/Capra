@@ -37,7 +37,7 @@ jobs:
       # правим android-конфиг: minSdk 24 (требует onnxruntime) и отключаем
       # инкрементальную компиляцию Kotlin (в CI pub-кэш на C:, проект на D: —
       # кросс-дисковый кэш ломает сборку)
-      - name: Поправить android-конфиг
+      - name: Поправить android-конфиг приложения
         shell: pwsh
         run: |
           # приложение: minSdk 24 (требует onnxruntime), compileSdk 36
@@ -47,29 +47,35 @@ jobs:
           $c = $c -replace 'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 24'
           $c = $c -replace 'compileSdk\s*=\s*flutter\.compileSdkVersion', 'compileSdk = 36'
           Set-Content $app $c
-          # все модули (плагины тоже) — compileSdk 36, иначе плагины под 35
-          $root = if (Test-Path 'android/build.gradle.kts') { 'android/build.gradle.kts' } else { 'android/build.gradle' }
-          $lines = @(
-            '',
-            'gradle.projectsEvaluated {',
-            '    subprojects {',
-            '        val ext = extensions.findByName("android")',
-            '        if (ext != null) {',
-            '            try {',
-            '                ext.javaClass.getMethod("setCompileSdk", java.lang.Integer::class.java).invoke(ext, 36)',
-            '            } catch (e: Throwable) {',
-            '                try { ext.javaClass.getMethod("compileSdkVersion", Int::class.javaPrimitiveType).invoke(ext, 36) } catch (e2: Throwable) {}',
-            '            }',
-            '        }',
-            '    }',
-            '}'
-          )
-          Add-Content $root $lines
+          # кросс-дисковый pub-кэш (C:) vs проект (D:) ломает kotlin incremental
           Add-Content android/gradle.properties "`nkotlin.incremental=false"
-          Write-Host "app minSdk24/compileSdk36 + subprojects compileSdk36 ($root)"
+          Write-Host "app minSdk 24 / compileSdk 36"
 
       - name: Зависимости
         run: flutter pub get
+
+      # часть плагинов (особенно старый onnxruntime) собирается под низкий
+      # compileSdk и конфликтует с новыми (flutter_plugin_android_lifecycle хочет 36).
+      # Поднимаем compileSdk до 36 прямо в build.gradle плагинов в pub-кэше.
+      - name: Поднять compileSdk у плагинов (Android)
+        shell: pwsh
+        run: |
+          $roots = @($env:PUB_CACHE, "$env:LOCALAPPDATA\Pub\Cache", "$env:APPDATA\Pub\Cache") |
+            Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+          foreach ($root in $roots) {
+            Get-ChildItem "$root\hosted\pub.dev" -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+              foreach ($name in @('android\build.gradle', 'android\build.gradle.kts')) {
+                $f = Join-Path $_.FullName $name
+                if (Test-Path $f) {
+                  $c = Get-Content $f -Raw
+                  $n = $c -replace 'compileSdkVersion\s+(flutter\.compileSdkVersion|\d+)', 'compileSdkVersion 36' `
+                          -replace 'compileSdk\s+(flutter\.compileSdkVersion|\d+)', 'compileSdk 36' `
+                          -replace 'compileSdk\s*=\s*(flutter\.compileSdkVersion|\d+)', 'compileSdk = 36'
+                  if ($n -ne $c) { Set-Content $f $n; Write-Host "patched $($_.Name)" }
+                }
+              }
+            }
+          }
 
       # ───────────────── Windows ─────────────────
       - name: Собрать приложение под Windows
