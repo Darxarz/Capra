@@ -88,4 +88,42 @@ class TagService {
       for (final r in rows) (tag: r['tag'] as String, count: r['n'] as int)
     ];
   }
+
+  /// Пути фото, у которых есть ВСЕ указанные теги (фильтр И).
+  Set<String> pathsWithAllTags(Iterable<String> tags) {
+    final db = _db;
+    final list = tags.toList();
+    if (db == null || list.isEmpty) return const {};
+    final ph = List.filled(list.length, '?').join(',');
+    final rows = db.select(
+      'SELECT path FROM tags WHERE tag IN ($ph) '
+      'GROUP BY path HAVING COUNT(DISTINCT tag) = ?',
+      [...list, list.length],
+    );
+    return {for (final r in rows) r['path'] as String};
+  }
+
+  /// Все теги с количеством и категорией (для обзора/группировки/сортировки).
+  /// [byCount] — сортировать по количеству, иначе по алфавиту.
+  List<({String tag, int count, String category})> tagList({
+    bool byCount = true,
+    int limit = 4000,
+  }) {
+    final db = _db;
+    if (db == null) return const [];
+    final order = byCount ? 'n DESC, tag ASC' : 'tag ASC';
+    final rows = db.select(
+      'SELECT tag, COUNT(*) AS n, MAX(category) AS cat FROM tags '
+      'GROUP BY tag ORDER BY $order LIMIT ?',
+      [limit],
+    );
+    return [
+      for (final r in rows)
+        (
+          tag: r['tag'] as String,
+          count: r['n'] as int,
+          category: (r['cat'] as String?) ?? 'general',
+        )
+    ];
+  }
 }

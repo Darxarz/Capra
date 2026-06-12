@@ -9,6 +9,7 @@ import 'favorites.dart';
 import 'folder_tree.dart';
 import 'tree_view.dart';
 import 'tag_service.dart';
+import 'tags_page.dart';
 
 enum ViewMode { all, dates, albums }
 
@@ -30,6 +31,8 @@ class _HomePageState extends State<HomePage> {
   UpdateInfo? _update; // доступное обновление (null = нет)
   String _query = ''; // строка поиска
   Set<String> _tagMatchPaths = const {}; // пути, чьи теги совпали с запросом
+  Set<String> _filterTags = {}; // активный фильтр по тегам (И)
+  Set<String> _filterPaths = const {}; // пути, подходящие под фильтр тегов
   bool _favOnly = false; // показывать только избранное
   bool _folderTree = false; // в разделе папок: древо вместо сетки
   FolderNode? _treeCache; // построенное древо папок (кэш)
@@ -40,6 +43,9 @@ class _HomePageState extends State<HomePage> {
     if (_favOnly) {
       final favs = Favorites.instance.paths;
       r = r.where((p) => favs.contains(p.path));
+    }
+    if (_filterTags.isNotEmpty) {
+      r = r.where((p) => _filterPaths.contains(p.path));
     }
     if (_query.trim().isNotEmpty) {
       final q = _query.trim().toLowerCase();
@@ -76,6 +82,22 @@ class _HomePageState extends State<HomePage> {
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => _FolderPage(album: album, photos: photos, cell: _cell),
     ));
+  }
+
+  void _setFilterTags(Set<String> tags) {
+    setState(() {
+      _filterTags = tags;
+      _filterPaths = tags.isEmpty
+          ? const {}
+          : TagService.instance.pathsWithAllTags(tags);
+    });
+  }
+
+  Future<void> _openTags() async {
+    final result = await Navigator.of(context).push<Set<String>>(
+      MaterialPageRoute(builder: (_) => TagsPage(initialSelected: _filterTags)),
+    );
+    if (result != null) _setFilterTags(result);
   }
 
   @override
@@ -170,6 +192,7 @@ class _HomePageState extends State<HomePage> {
               onMode: (m) => setState(() => _mode = m),
               favOnly: _favOnly,
               onFav: () => setState(() => _favOnly = !_favOnly),
+              onTags: _openTags,
             ),
             Expanded(
               child: Column(
@@ -197,6 +220,14 @@ class _HomePageState extends State<HomePage> {
                     albums: _albums.length,
                     folder: _folder,
                   ),
+                  if (_filterTags.isNotEmpty)
+                    _TagFilterBar(
+                      tags: _filterTags,
+                      onRemove: (t) =>
+                          _setFilterTags({..._filterTags}..remove(t)),
+                      onClear: () => _setFilterTags({}),
+                      onEdit: _openTags,
+                    ),
                   Expanded(
                     child: ValueListenableBuilder<Set<String>>(
                       valueListenable: Favorites.instance.notifier,
@@ -291,11 +322,13 @@ class _Rail extends StatelessWidget {
   final ValueChanged<ViewMode> onMode;
   final bool favOnly;
   final VoidCallback onFav;
+  final VoidCallback onTags;
   const _Rail({
     required this.mode,
     required this.onMode,
     required this.favOnly,
     required this.onFav,
+    required this.onTags,
   });
 
   @override
@@ -345,6 +378,7 @@ class _Rail extends StatelessWidget {
           item(Icons.folder_rounded, ViewMode.albums),
           item(favOnly ? Icons.favorite_rounded : Icons.favorite_border_rounded,
               null, onTap: onFav, active: favOnly),
+          item(Icons.sell_outlined, null, onTap: onTags),
           const Spacer(),
           item(Icons.settings_outlined, null, onTap: () {}),
           const SizedBox(height: 10),
@@ -560,6 +594,64 @@ class _FolderViewToggle extends StatelessWidget {
             btn('Древо', Icons.account_tree_outlined, tree,
                 () => onChanged(true)),
           ]),
+        ),
+      ]),
+    );
+  }
+}
+
+// ───────────── панель активного фильтра по тегам ─────────────
+class _TagFilterBar extends StatelessWidget {
+  final Set<String> tags;
+  final ValueChanged<String> onRemove;
+  final VoidCallback onClear;
+  final VoidCallback onEdit;
+  const _TagFilterBar({
+    required this.tags,
+    required this.onRemove,
+    required this.onClear,
+    required this.onEdit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AuroraTheme.of(context).colors;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+      child: Row(children: [
+        Icon(Icons.filter_alt_outlined, size: 16, color: c.accent),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Wrap(spacing: 6, runSpacing: 6, children: [
+            for (final t in tags)
+              GestureDetector(
+                onTap: () => onRemove(t),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(10, 5, 6, 5),
+                  decoration: BoxDecoration(
+                    color: c.accent,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text(t,
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 12.5)),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.close, size: 13, color: Colors.white),
+                  ]),
+                ),
+              ),
+          ]),
+        ),
+        const SizedBox(width: 8),
+        GestureDetector(
+          onTap: onEdit,
+          child: Icon(Icons.edit_outlined, size: 18, color: c.muted),
+        ),
+        const SizedBox(width: 12),
+        GestureDetector(
+          onTap: onClear,
+          child: Text('Сброс', style: TextStyle(color: c.muted, fontSize: 12.5)),
         ),
       ]),
     );
