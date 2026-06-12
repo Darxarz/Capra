@@ -36,6 +36,18 @@ jobs:
       - name: Собрать приложение под Windows
         run: flutter build windows --release --dart-define=BUILD_NUMBER=${{ github.run_number }}
 
+      # пакет onnxruntime бандлит старый ONNX Runtime (1.15.1) — подменяем его
+      # на свежий официальный, чтобы грузилась модель тегирования v3 (opset 4).
+      # C-API движка обратно совместим, поэтому обвязка не ломается.
+      - name: Обновить onnxruntime.dll до свежего (для модели v3)
+        shell: pwsh
+        run: |
+          $ver = '1.20.1'
+          Invoke-WebRequest "https://github.com/microsoft/onnxruntime/releases/download/v$ver/onnxruntime-win-x64-$ver.zip" -OutFile ort.zip
+          Expand-Archive ort.zip -DestinationPath ort -Force
+          Copy-Item "ort/onnxruntime-win-x64-$ver/lib/onnxruntime.dll" "build/windows/x64/runner/Release/onnxruntime.dll" -Force
+          Write-Host "onnxruntime.dll заменён на $ver"
+
       - name: Упаковать в zip
         shell: pwsh
         run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath Capra-windows.zip -Force

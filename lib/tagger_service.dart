@@ -14,15 +14,15 @@ class Tagger {
   Tagger._();
   static final Tagger instance = Tagger._();
 
-  // wd-v1-4-moat-tagger-v2 (SmilingWolf): danbooru/аниме/арт-теги, вход 448×448.
-  // Версия v2 (не v3): совместима с ONNX Runtime 1.15.1, который бандлит пакет
-  // (v3 требует более новый runtime — opset 4 — и не грузится).
+  // wd-vit-tagger-v3 (SmilingWolf): danbooru/аниме/арт-теги, 10861 тег, вход
+  // 448×448. Требует ONNX Runtime ≥1.16 — в сборке onnxruntime.dll подменяется
+  // на свежий официальный (см. workflow), поэтому v3 грузится.
   static const _modelUrl =
-      'https://huggingface.co/SmilingWolf/wd-v1-4-moat-tagger-v2/resolve/main/model.onnx';
+      'https://huggingface.co/SmilingWolf/wd-vit-tagger-v3/resolve/main/model.onnx';
   static const _csvUrl =
-      'https://huggingface.co/SmilingWolf/wd-v1-4-moat-tagger-v2/resolve/main/selected_tags.csv';
+      'https://huggingface.co/SmilingWolf/wd-vit-tagger-v3/resolve/main/selected_tags.csv';
   static const _inputSize = 448;
-  static const source = 'wd-v2';
+  static const source = 'wd-v3';
 
   OrtSession? _session;
   String _inputName = 'input';
@@ -38,19 +38,20 @@ class Tagger {
     return d;
   }
 
+  // имена файлов как в build-17 — чтобы переиспользовать уже скачанную модель
   Future<File> _modelFile() async =>
-      File(p.join((await _modelsDir()).path, 'wd-moat-v2.onnx'));
+      File(p.join((await _modelsDir()).path, 'wd-vit-v3.onnx'));
   Future<File> _csvFile() async =>
-      File(p.join((await _modelsDir()).path, 'wd-moat-v2-tags.csv'));
+      File(p.join((await _modelsDir()).path, 'wd-vit-v3-tags.csv'));
 
   Future<bool> isDownloaded() async =>
       (await _modelFile()).existsSync() && (await _csvFile()).existsSync();
 
   /// Скачать модель и словарь тегов (с прогрессом 0..1).
   Future<void> download({void Function(double)? onProgress}) async {
-    // убрать устаревшую несовместимую модель v3, если осталась (~380 МБ)
+    // убрать промежуточную v2-модель, если кто-то успел её скачать
     final dir = (await _modelsDir()).path;
-    for (final name in ['wd-vit-v3.onnx', 'wd-vit-v3-tags.csv']) {
+    for (final name in ['wd-moat-v2.onnx', 'wd-moat-v2-tags.csv']) {
       final old = File(p.join(dir, name));
       if (old.existsSync()) {
         try {
