@@ -32,7 +32,7 @@ jobs:
         run: flutter config --enable-windows-desktop
 
       - name: Сгенерировать платформенные файлы (windows + android)
-        run: flutter create --project-name aurora_gallery --platforms=windows,android .
+        run: flutter create --project-name goat --platforms=windows,android .
 
       # правим android-конфиг: minSdk 24 (требует onnxruntime) и отключаем
       # инкрементальную компиляцию Kotlin (в CI pub-кэш на C:, проект на D: —
@@ -69,8 +69,8 @@ jobs:
 
       # новый MSVC на раннере делает ошибкой устаревшие <experimental/coroutine>
       # в permission_handler_windows — глушим рекомендованным define;
-      # заодно ставим видимое название окна = GOAT (внутреннее имя проекта
-      # оставляем aurora_gallery, чтобы не сломать существующее автообновление)
+      # заодно ставим видимое название окна = GOAT (exe собирается под
+      # именем goat.exe — это имя проекта в flutter create выше).
       - name: Поправить windows-конфиг
         shell: pwsh
         run: |
@@ -81,18 +81,18 @@ jobs:
             Set-Content $f $c
             Write-Host "windows: coroutine deprecation suppressed"
           }
-          # заголовок окна и видимое название приложения = GOAT
+          # заголовок окна = GOAT (по умолчанию был бы 'goat')
           $mp = 'windows/runner/main.cpp'
           if (Test-Path $mp) {
             $mc = Get-Content $mp -Raw
-            $mc = $mc -replace 'L"aurora_gallery"', 'L"GOAT"'
+            $mc = $mc -replace 'L"goat"', 'L"GOAT"'
             Set-Content $mp $mc
           }
+          # ProductName/FileDescription = GOAT (по умолчанию 'goat')
           $rc = 'windows/runner/Runner.rc'
           if (Test-Path $rc) {
             $rcc = Get-Content $rc -Raw
-            $rcc = $rcc -replace '"aurora_gallery"', '"GOAT"'
-            $rcc = $rcc -replace '"aurora\\\\_gallery"', '"GOAT"'
+            $rcc = $rcc -replace '"goat"', '"GOAT"'
             Set-Content $rc $rcc
           }
           Write-Host "windows: window title = GOAT"

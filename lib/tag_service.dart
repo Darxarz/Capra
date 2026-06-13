@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -16,7 +17,14 @@ class TagService {
   Future<void> init() async {
     if (_db != null) return;
     final dir = await getApplicationSupportDirectory();
-    final dbPath = p.join(dir.path, 'capra_tags.db');
+    final dbPath = p.join(dir.path, 'goat_tags.db');
+    // одноразовая миграция со старого имени БД (Capra → GOAT)
+    final oldDb = File(p.join(dir.path, 'capra_tags.db'));
+    if (!File(dbPath).existsSync() && oldDb.existsSync()) {
+      try {
+        oldDb.renameSync(dbPath);
+      } catch (_) {/* если переезд не удался — стартуем с пустой БД */}
+    }
     final db = sqlite3.open(dbPath);
     db.execute('''
       CREATE TABLE IF NOT EXISTS tags(
