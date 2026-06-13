@@ -14,6 +14,7 @@ import 'tree_view.dart';
 import 'tag_service.dart';
 import 'tags_page.dart';
 import 'batch_tagger.dart';
+import 'dedup_page.dart';
 
 enum ViewMode { all, dates, albums }
 
@@ -216,6 +217,13 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  void _openDedup() {
+    if (_photos.isEmpty) return;
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => DupPage(photos: _photos, onLibraryChanged: _rescan),
+    ));
+  }
+
   void _manageFolders() {
     final c = AuroraTheme.of(context).colors;
     showModalBottomSheet<void>(
@@ -298,6 +306,7 @@ class _HomePageState extends State<HomePage> {
               onFav: () => setState(() => _favOnly = !_favOnly),
               onTags: () => setState(() => _tagsPanelOpen = !_tagsPanelOpen),
               tagsOpen: _tagsPanelOpen,
+              onDedup: _openDedup,
             ),
             if (_tagsPanelOpen)
               TagsPanel(
@@ -441,6 +450,7 @@ class _Rail extends StatelessWidget {
   final VoidCallback onFav;
   final VoidCallback onTags;
   final bool tagsOpen;
+  final VoidCallback onDedup;
   const _Rail({
     required this.mode,
     required this.onMode,
@@ -448,6 +458,7 @@ class _Rail extends StatelessWidget {
     required this.onFav,
     required this.onTags,
     required this.tagsOpen,
+    required this.onDedup,
   });
 
   @override
@@ -498,6 +509,7 @@ class _Rail extends StatelessWidget {
           item(favOnly ? Icons.favorite_rounded : Icons.favorite_border_rounded,
               null, onTap: onFav, active: favOnly),
           item(Icons.sell_outlined, null, onTap: onTags, active: tagsOpen),
+          item(Icons.content_copy_outlined, null, onTap: onDedup),
           const Spacer(),
           item(Icons.settings_outlined, null, onTap: () {}),
           const SizedBox(height: 10),

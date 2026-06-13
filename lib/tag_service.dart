@@ -29,7 +29,82 @@ class TagService {
     ''');
     db.execute('CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag);');
     db.execute('CREATE INDEX IF NOT EXISTS idx_tags_path ON tags(path);');
+    // сигнатуры файлов: точный хеш (дубли/перепривязка тегов), перцептивный
+    // хеш (похожие), размеры и состояние целостности. Кэш по mtime+size.
+    db.execute('''
+      CREATE TABLE IF NOT EXISTS file_sig(
+        path TEXT PRIMARY KEY,
+        size INTEGER,
+        mtime INTEGER,
+        sha TEXT,
+        phash INTEGER,
+        width INTEGER,
+        height INTEGER,
+        status INTEGER
+      );
+    ''');
+    db.execute('CREATE INDEX IF NOT EXISTS idx_sig_sha ON file_sig(sha);');
     _db = db;
+  }
+
+  // ───────────────────────── сигнатуры файлов ─────────────────────────
+
+  /// Кэшированная сигнатура, если она актуальна (совпадают size и mtime).
+  ({String? sha, int? phash, int width, int height, int status})? sigFor(
+      String path, int size, int mtime) {
+    final db = _db;
+    if (db == null) return null;
+    final rows = db.select(
+      'SELECT sha, phash, width, height, status FROM file_sig '
+      'WHERE path = ? AND size = ? AND mtime = ?',
+      [path, size, mtime],
+    );
+    if (rows.isEmpty) return null;
+    final r = rows.first;
+    return (
+      sha: r['sha'] as String?,
+      phash: r['phash'] as int?,
+      width: (r['width'] as int?) ?? 0,
+      height: (r['height'] as int?) ?? 0,
+      status: (r['status'] as int?) ?? 0,
+    );
+  }
+
+  void storeSig(String path, int size, int mtime,
+      {String? sha, int? phash, int width = 0, int height = 0, int status = 0}) {
+    _db?.execute(
+      'INSERT OR REPLACE INTO file_sig'
+      '(path, size, mtime, sha, phash, width, height, status) '
+      'VALUES(?,?,?,?,?,?,?,?)',
+      [path, size, mtime, sha, phash, width, height, status],
+    );
+  }
+
+  /// Пути с заданным точным хешем (для перепривязки тегов после переноса).
+  List<String> pathsWithSha(String sha) {
+    final db = _db;
+    if (db == null) return const [];
+    final rows = db.select('SELECT path FROM file_sig WHERE sha = ?', [sha]);
+    return [for (final r in rows) r['path'] as String];
+  }
+
+  /// Перенести теги (и сигнатуру) со старого пути на новый — для перепривязки
+  /// после переименования/перемещения файла. Возвращает число перенесённых тегов.
+  int movePath(String from, String to) {
+    final db = _db;
+    if (db == null || from == to) return 0;
+    final n = tagsFor(from).length;
+    db.execute('UPDATE OR IGNORE tags SET path = ? WHERE path = ?', [to, from]);
+    db.execute('DELETE FROM tags WHERE path = ?', [from]);
+    db.execute(
+        'UPDATE OR REPLACE file_sig SET path = ? WHERE path = ?', [to, from]);
+    return n;
+  }
+
+  /// Удалить все записи о файле (теги + сигнатуру) — при удалении файла.
+  void forgetPath(String path) {
+    _db?.execute('DELETE FROM tags WHERE path = ?', [path]);
+    _db?.execute('DELETE FROM file_sig WHERE path = ?', [path]);
   }
 
   /// Теги конкретного файла (по убыванию уверенности, потом по алфавиту).
