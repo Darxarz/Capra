@@ -4,6 +4,7 @@ import 'model.dart';
 import 'favorites.dart';
 import 'tag_service.dart';
 import 'tagger_service.dart';
+import 'metadata_service.dart';
 
 /// Открыть просмотрщик на конкретном фото.
 void openViewer(BuildContext context, List<PhotoItem> photos, int index) {
@@ -197,8 +198,160 @@ class _InfoPanel extends StatelessWidget {
         const SizedBox(height: 4),
         SelectableText(photo.path,
             style: TextStyle(color: c.text, fontSize: 12)),
+        const SizedBox(height: 18),
+        _MetaSection(photo: photo, colors: c),
       ]),
     );
+  }
+}
+
+// ───────────────────────── метаданные (EXIF / AI) ─────────────────────────
+class _MetaSection extends StatefulWidget {
+  final PhotoItem photo;
+  final AuroraColors colors;
+  const _MetaSection({required this.photo, required this.colors});
+
+  @override
+  State<_MetaSection> createState() => _MetaSectionState();
+}
+
+class _MetaSectionState extends State<_MetaSection> {
+  PhotoMeta? _meta;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(_MetaSection old) {
+    super.didUpdateWidget(old);
+    if (old.photo.path != widget.photo.path) _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final m = await readMetadata(widget.photo.path);
+    if (mounted) {
+      setState(() {
+        _meta = m;
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.colors;
+    if (_loading) {
+      return Row(children: [
+        SizedBox(
+            width: 13,
+            height: 13,
+            child: CircularProgressIndicator(strokeWidth: 2, color: c.muted)),
+        const SizedBox(width: 8),
+        Text('Читаю метаданные…',
+            style: TextStyle(color: c.muted, fontSize: 12)),
+      ]);
+    }
+    final m = _meta;
+    if (m == null || !m.hasAnything) {
+      return Text('Метаданные не найдены.',
+          style: TextStyle(color: c.muted, fontSize: 12));
+    }
+
+    Widget kv(String k, String v) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(k, style: TextStyle(color: c.muted, fontSize: 12.5)),
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Text(v,
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                          color: c.text,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600)),
+                ),
+              ]),
+        );
+
+    Widget promptBox(String label, String value, Color bg) => Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(top: 8),
+          padding: const EdgeInsets.fromLTRB(11, 9, 11, 10),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: c.line),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label,
+                style: TextStyle(
+                    color: c.muted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3)),
+            const SizedBox(height: 4),
+            SelectableText(value,
+                style: TextStyle(color: c.text, fontSize: 12.5, height: 1.35)),
+          ]),
+        );
+
+    final children = <Widget>[
+      Row(children: [
+        Icon(m.isAi ? Icons.auto_awesome : Icons.info_outline,
+            size: 16, color: c.accent),
+        const SizedBox(width: 6),
+        Text(m.isAi ? 'Параметры генерации' : 'Метаданные',
+            style: TextStyle(
+                color: c.text, fontSize: 14, fontWeight: FontWeight.w700)),
+        if (m.aiTool != null) ...[
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: c.accentSoft,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(m.aiTool!,
+                style: TextStyle(
+                    color: c.accentInk,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ]),
+    ];
+
+    if (m.width != null && m.height != null) {
+      children.add(kv('Разрешение', '${m.width}×${m.height}'));
+    }
+    if (m.prompt != null && m.prompt!.isNotEmpty) {
+      children.add(promptBox('PROMPT', m.prompt!, c.surface2));
+    }
+    if (m.negative != null && m.negative!.isNotEmpty) {
+      children.add(promptBox('NEGATIVE', m.negative!, c.surface2));
+    }
+    if (m.aiParams.isNotEmpty) {
+      children.add(const SizedBox(height: 4));
+      for (final e in m.aiParams) {
+        children.add(kv(e.key, e.value));
+      }
+    }
+    if (m.exif.isNotEmpty) {
+      if (m.isAi) children.add(const SizedBox(height: 4));
+      for (final e in m.exif) {
+        children.add(kv(e.key, e.value));
+      }
+    }
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: children);
   }
 }
 
