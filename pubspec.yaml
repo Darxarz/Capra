@@ -27,6 +27,23 @@ dev_dependencies:
   flutter_lints: ^4.0.0
   flutter_test:
     sdk: flutter
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
+
+# Иконка приложения для Android и Windows. Генерация:
+#   dart run flutter_launcher_icons
+# В CI это запускается автоматически после flutter create.
+# Адаптивные иконки специально НЕ включаем: на части лаунчеров обрезались
+# бы рога/уши козла (они у краёв), а легаси-PNG показывают изображение
+# целиком на любом устройстве.
+flutter_launcher_icons:
+  android: true
+  windows:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+    icon_size: 256
+  image_path: "assets/icon/app_icon.png"
+  min_sdk_android: 24
+  remove_alpha_ios: true
