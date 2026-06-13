@@ -14,6 +14,7 @@ class PhotoItem {
   final String folderName; // имя папки
   final DateTime modified;
   final int sizeBytes;
+  final String? assetId; // id в MediaStore (Android) — для удаления через систему
 
   const PhotoItem({
     required this.path,
@@ -22,6 +23,7 @@ class PhotoItem {
     required this.folderName,
     required this.modified,
     required this.sizeBytes,
+    this.assetId,
   });
 
   String get fileName {

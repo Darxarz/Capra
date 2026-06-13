@@ -49,18 +49,21 @@ jobs:
           Set-Content $app $c
           # кросс-дисковый pub-кэш (C:) vs проект (D:) ломает kotlin incremental
           Add-Content android/gradle.properties "`nkotlin.incremental=false"
-          # доступ ко всем файлам (галерея читает папки через dart:io)
+          # доступ к фото устройства через MediaStore (как обычные галереи):
+          # READ_MEDIA_IMAGES (Android 13+), READ_MEDIA_VISUAL_USER_SELECTED
+          # (частичный доступ, Android 14), READ_EXTERNAL_STORAGE (до Android 12).
           $m = 'android/app/src/main/AndroidManifest.xml'
           $mc = Get-Content $m -Raw
-          if ($mc -notmatch 'MANAGE_EXTERNAL_STORAGE') {
-            $perms = "    <uses-permission android:name=`"android.permission.INTERNET`"/>`n    <uses-permission android:name=`"android.permission.MANAGE_EXTERNAL_STORAGE`"/>`n    <uses-permission android:name=`"android.permission.READ_EXTERNAL_STORAGE`"/>`n    <uses-permission android:name=`"android.permission.READ_MEDIA_IMAGES`"/>`n    "
+          if ($mc -notmatch 'READ_MEDIA_IMAGES') {
+            $perms = "    <uses-permission android:name=`"android.permission.INTERNET`"/>`n    <uses-permission android:name=`"android.permission.READ_MEDIA_IMAGES`"/>`n    <uses-permission android:name=`"android.permission.READ_MEDIA_VISUAL_USER_SELECTED`"/>`n    <uses-permission android:name=`"android.permission.READ_EXTERNAL_STORAGE`" android:maxSdkVersion=`"32`"/>`n    "
             $mc = $mc -replace '(<manifest[^>]*>\s*)', "`$1$perms"
           }
+          # raw-путь к медиа на Android 10 (dart:io читает файлы по пути)
           if ($mc -notmatch 'requestLegacyExternalStorage') {
             $mc = $mc -replace '(<application)', '$1 android:requestLegacyExternalStorage="true"'
           }
           Set-Content $m $mc
-          Write-Host "app minSdk 24 / compileSdk 36 / разрешения файлов"
+          Write-Host "app minSdk 24 / compileSdk 36 / доступ к фото (MediaStore)"
 
       # новый MSVC на раннере делает ошибкой устаревшие <experimental/coroutine>
       # в permission_handler_windows — глушим рекомендованным define

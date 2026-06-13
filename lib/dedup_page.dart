@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:photo_manager/photo_manager.dart';
 import 'theme.dart';
 import 'model.dart';
 import 'integrity_service.dart';
@@ -68,18 +69,54 @@ class _DupPageState extends State<DupPage> {
     return s;
   }
 
+  /// Удаление: на Android — в системную корзину через MediaStore (scoped
+  /// storage не даёт удалять медиа по пути); иначе — в корзину Capra.
+  Future<int> _performDelete(List<String> paths) async {
+    if (Platform.isAndroid) {
+      final ids = <String>[];
+      final noId = <String>[];
+      for (final path in paths) {
+        final id = _scanner.assetIdFor(path);
+        if (id != null) {
+          ids.add(id);
+        } else {
+          noId.add(path);
+        }
+      }
+      var moved = 0;
+      if (ids.isNotEmpty) {
+        final entities = <AssetEntity>[];
+        for (final id in ids) {
+          final e = await AssetEntity.fromId(id);
+          if (e != null) entities.add(e);
+        }
+        if (entities.isNotEmpty) {
+          final res = await PhotoManager.editor.android.moveToTrash(entities);
+          moved += res.length;
+        }
+      }
+      if (noId.isNotEmpty) moved += await TrashService.instance.trash(noId);
+      return moved;
+    }
+    return TrashService.instance.trash(paths);
+  }
+
   Future<void> _trashSelected() async {
     if (_selected.isEmpty) return;
     final c = AuroraTheme.of(context).colors;
     final n = _selected.length;
+    final desc = Platform.isAndroid
+        ? 'Файлы уйдут в системную корзину — их можно вернуть из «Недавно удалённых». '
+            'Освободится ${prettySize(_selectedBytes)}.'
+        : 'Файлы переедут в корзину Capra — их можно вернуть. '
+            'Освободится ${prettySize(_selectedBytes)}.';
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: c.surface,
-        title: Text('В корзину $n файлов?', style: TextStyle(color: c.text)),
+        title: Text('Удалить $n файлов?', style: TextStyle(color: c.text)),
         content: Text(
-          'Файлы переедут в корзину Capra — их можно вернуть. '
-          'Освободится ${prettySize(_selectedBytes)}.',
+          desc,
           style: TextStyle(color: c.muted),
         ),
         actions: [
@@ -96,7 +133,7 @@ class _DupPageState extends State<DupPage> {
       ),
     );
     if (ok != true) return;
-    final moved = await TrashService.instance.trash(_selected.toList());
+    final moved = await _performDelete(_selected.toList());
     // убрать перемещённые из результата
     final r = _scanner.result;
     if (r != null) {
@@ -152,28 +189,30 @@ class _DupPageState extends State<DupPage> {
               style: TextStyle(
                   fontSize: 18, fontWeight: FontWeight.w800, color: c.text)),
           const Spacer(),
-          GestureDetector(
-            onTap: () async {
-              await Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => TrashPage(onChanged: widget.onLibraryChanged),
-              ));
-              if (mounted) setState(() {});
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: c.surface,
-                borderRadius: BorderRadius.circular(11),
-                border: Border.all(color: c.line),
+          if (!Platform.isAndroid)
+            GestureDetector(
+              onTap: () async {
+                await Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => TrashPage(onChanged: widget.onLibraryChanged),
+                ));
+                if (mounted) setState(() {});
+              },
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: c.surface,
+                  borderRadius: BorderRadius.circular(11),
+                  border: Border.all(color: c.line),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.delete_outline, size: 17, color: c.text),
+                  const SizedBox(width: 6),
+                  Text('Корзина ${TrashService.instance.count}',
+                      style: TextStyle(color: c.text, fontSize: 13)),
+                ]),
               ),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.delete_outline, size: 17, color: c.text),
-                const SizedBox(width: 6),
-                Text('Корзина ${TrashService.instance.count}',
-                    style: TextStyle(color: c.text, fontSize: 13)),
-              ]),
             ),
-          ),
         ]),
       );
 

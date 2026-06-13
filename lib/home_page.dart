@@ -3,9 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
-import 'package:permission_handler/permission_handler.dart';
+import 'package:photo_manager/photo_manager.dart';
 import 'theme.dart';
-import 'folder_browser.dart';
 import 'model.dart';
 import 'library_service.dart';
 import 'viewer_page.dart';
@@ -45,6 +44,8 @@ class _HomePageState extends State<HomePage> {
   bool _folderTree = false; // в разделе папок: древо вместо сетки
   FolderNode? _treeCache; // построенное древо папок (кэш)
   int _tagsRev = 0; // счётчик для пересоздания панели тегов после импорта
+  bool _mediaGranted = false; // на Android: есть доступ к фото устройства
+  bool get _useDeviceMedia => Platform.isAndroid || Platform.isIOS;
 
   /// Фото с учётом поиска и фильтра «только избранное».
   List<PhotoItem> get _visiblePhotos {
@@ -160,40 +161,55 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _restore() async {
     final f = await LibraryService.folders();
-    if (f.isEmpty) return;
-    setState(() => _folders = f);
-    await _rescan();
+    _folders = f;
+    // на Android/iOS — сразу доступ к фото устройства (как обычные галереи)
+    if (_useDeviceMedia) {
+      _mediaGranted = await LibraryService.requestMediaAccess();
+    } else if (_folders.isEmpty) {
+      // на ПК по умолчанию открываем системную папку «Изображения»
+      final pics = _defaultPicturesDir();
+      if (pics != null) {
+        _folders = [pics];
+        await LibraryService.setFolders(_folders);
+      }
+    }
+    if (mounted) setState(() {});
+    if (_mediaGranted || _folders.isNotEmpty) await _rescan();
   }
 
-  /// Выбрать новую папку (Android — обозреватель, Windows — системный диалог).
-  Future<String?> _chooseFolder() async {
-    if (Platform.isAndroid) {
-      // на Android системный диалог отдаёт URI, а dart:io читает файлы только
-      // с доступом ко всем файлам — запрашиваем его и выбираем папку сами
-      var st = await Permission.manageExternalStorage.status;
-      if (!st.isGranted) st = await Permission.manageExternalStorage.request();
-      if (!st.isGranted) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text(
-                'Нужен доступ ко всем файлам — включи его в настройках приложения.'),
-          ));
-        }
-        return null;
-      }
-      if (!mounted) return null;
-      // стартуем с /storage, чтобы были видны и внутренняя память, и SD-карта
-      return Navigator.of(context).push<String>(MaterialPageRoute(
-        builder: (_) => const FolderBrowserPage(initialPath: '/storage'),
+  String? _defaultPicturesDir() {
+    final home =
+        Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'];
+    if (home == null) return null;
+    final dir = p.join(home, 'Pictures');
+    return Directory(dir).existsSync() ? dir : null;
+  }
+
+  /// Запросить доступ к фото (Android). На отказ — подсказка открыть настройки.
+  Future<void> _askMediaAccess() async {
+    final granted = await LibraryService.requestMediaAccess();
+    if (!mounted) return;
+    setState(() => _mediaGranted = granted);
+    if (granted) {
+      await _rescan();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Доступ к фото не выдан. Открыть настройки?'),
+        action: SnackBarAction(
+            label: 'Настройки', onPressed: PhotoManager.openSetting),
       ));
     }
-    return FilePicker.platform.getDirectoryPath(
-      dialogTitle: 'Выбери папку с фотографиями',
-    );
   }
 
   Future<void> _addFolder() async {
-    final path = await _chooseFolder();
+    // на Android папки не выбираем — все фото берём из MediaStore
+    if (_useDeviceMedia) {
+      await _askMediaAccess();
+      return;
+    }
+    final path = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Выбери папку с фотографиями',
+    );
     if (path == null || _folders.contains(path)) return;
     final next = [..._folders, path];
     await LibraryService.setFolders(next);
@@ -210,7 +226,23 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _rescan() async {
     setState(() => _loading = true);
-    final photos = await LibraryService.scanAll(_folders);
+    final photos = <PhotoItem>[];
+    final seen = <String>{};
+    void addAll(List<PhotoItem> list) {
+      for (final ph in list) {
+        if (seen.add(ph.path)) photos.add(ph);
+      }
+    }
+
+    if (_useDeviceMedia && _mediaGranted) {
+      try {
+        addAll(await LibraryService.scanDeviceMedia());
+      } catch (_) {}
+    }
+    if (_folders.isNotEmpty) {
+      addAll(await LibraryService.scanAll(_folders));
+    }
+    photos.sort((a, b) => b.modified.compareTo(a.modified));
     if (!mounted) return;
     // перепривязать теги к переименованным/перемещённым файлам (по хешу)
     try {
@@ -341,6 +373,67 @@ class _HomePageState extends State<HomePage> {
 
   void _manageFolders() {
     final c = AuroraTheme.of(context).colors;
+    // на Android папки не выбираются — показываем управление доступом к фото
+    if (_useDeviceMedia) {
+      showModalBottomSheet<void>(
+        context: context,
+        backgroundColor: c.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+        ),
+        builder: (ctx) => SafeArea(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Row(children: [
+                Icon(Icons.photo_library_outlined, color: c.accent, size: 20),
+                const SizedBox(width: 10),
+                Text('Доступ к фото',
+                    style: TextStyle(
+                        color: c.text,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700)),
+              ]),
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+              child: Text(
+                  _mediaGranted
+                      ? 'Capra показывает все фото устройства автоматически.'
+                      : 'Дай доступ к фото — Capra покажет все изображения.',
+                  style: TextStyle(color: c.muted, fontSize: 13)),
+            ),
+            ListTile(
+              leading: Icon(Icons.photo_size_select_actual_outlined,
+                  color: c.text),
+              title: Text(_mediaGranted ? 'Выбрать, какие фото видны' : 'Дать доступ',
+                  style: TextStyle(color: c.text)),
+              onTap: () async {
+                Navigator.pop(ctx);
+                if (_mediaGranted) {
+                  await PhotoManager.presentLimited();
+                  await _rescan();
+                } else {
+                  await _askMediaAccess();
+                }
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.settings_outlined, color: c.text),
+              title: Text('Открыть настройки приложения',
+                  style: TextStyle(color: c.text)),
+              onTap: () {
+                Navigator.pop(ctx);
+                PhotoManager.openSetting();
+              },
+            ),
+            const SizedBox(height: 10),
+          ]),
+        ),
+      );
+      return;
+    }
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: c.surface,
@@ -457,11 +550,13 @@ class _HomePageState extends State<HomePage> {
                     mode: _mode,
                     total: _visiblePhotos.length,
                     albums: _albums.length,
-                    folder: _folders.isEmpty
-                        ? null
-                        : (_folders.length == 1
+                    folder: _folders.isNotEmpty
+                        ? (_folders.length == 1
                             ? _folders.first
-                            : '${_folders.length} папок'),
+                            : '${_folders.length} папок')
+                        : (_useDeviceMedia && _mediaGranted
+                            ? 'все фото устройства'
+                            : null),
                   ),
                   if (_filterTags.isNotEmpty)
                     _TagFilterBar(
@@ -496,7 +591,13 @@ class _HomePageState extends State<HomePage> {
         ]),
       );
     }
-    if (_photos.isEmpty) return _EmptyState(onPick: _addFolder);
+    if (_photos.isEmpty) {
+      return _EmptyState(
+        onPick: _addFolder,
+        deviceMedia: _useDeviceMedia,
+        granted: _mediaGranted,
+      );
+    }
 
     if (_mode == ViewMode.albums) {
       return Column(
@@ -533,27 +634,46 @@ class _HomePageState extends State<HomePage> {
 // ───────────────────────── пустой экран ─────────────────────────
 class _EmptyState extends StatelessWidget {
   final VoidCallback onPick;
-  const _EmptyState({required this.onPick});
+  final bool deviceMedia;
+  final bool granted;
+  const _EmptyState({
+    required this.onPick,
+    required this.deviceMedia,
+    required this.granted,
+  });
 
   @override
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
+    // на Android без доступа — предлагаем дать доступ к фото
+    final needAccess = deviceMedia && !granted;
+    final subtitle = deviceMedia
+        ? (granted
+            ? 'Фото на устройстве не найдены.'
+            : 'Дай доступ к фото — Capra покажет все изображения устройства.')
+        : 'Выбери папку с фотографиями — Capra покажет их здесь.';
     return Center(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.photo_library_outlined, size: 64, color: c.muted),
         const SizedBox(height: 16),
-        Text('Здесь пока пусто',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: c.text)),
+        Text(needAccess ? 'Нужен доступ к фото' : 'Здесь пока пусто',
+            style: TextStyle(
+                fontSize: 18, fontWeight: FontWeight.w700, color: c.text)),
         const SizedBox(height: 6),
-        Text('Выбери папку с фотографиями — Aurora покажет их здесь.',
-            style: TextStyle(color: c.muted)),
-        const SizedBox(height: 18),
-        FilledButton.icon(
-          onPressed: onPick,
-          style: FilledButton.styleFrom(backgroundColor: c.accent),
-          icon: const Icon(Icons.folder_open),
-          label: const Text('Выбрать папку'),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Text(subtitle,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: c.muted)),
         ),
+        const SizedBox(height: 18),
+        if (!(deviceMedia && granted))
+          FilledButton.icon(
+            onPressed: onPick,
+            style: FilledButton.styleFrom(backgroundColor: c.accent),
+            icon: Icon(deviceMedia ? Icons.photo_library : Icons.folder_open),
+            label: Text(deviceMedia ? 'Дать доступ к фото' : 'Выбрать папку'),
+          ),
       ]),
     );
   }

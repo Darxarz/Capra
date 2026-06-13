@@ -82,6 +82,10 @@ class DupScanner extends ChangeNotifier {
   String? error;
   DupResult? result;
 
+  /// path → id в MediaStore (Android) — для удаления через систему.
+  final Map<String, String?> idByPath = {};
+  String? assetIdFor(String path) => idByPath[path];
+
   static const _chunk = 48; // файлов на изолят-вызов
   static const _hammingThreshold = 6; // близость перцептивных хешей
 
@@ -96,6 +100,10 @@ class DupScanner extends ChangeNotifier {
     result = null;
     done = 0;
     total = photos.length;
+    idByPath.clear();
+    for (final p in photos) {
+      idByPath[p.path] = p.assetId;
+    }
     notifyListeners();
 
     try {

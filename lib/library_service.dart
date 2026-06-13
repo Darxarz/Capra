@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:photo_manager/photo_manager.dart';
 import 'model.dart';
 
 /// Сканирование папок и работа с библиотекой.
@@ -14,6 +15,73 @@ class LibraryService {
   /// Сканирует несколько корней и объединяет (без дублей), в фоне.
   static Future<List<PhotoItem>> scanAll(List<String> roots) =>
       compute(_scanFolders, roots);
+
+  /// Запросить доступ к фото на устройстве (Android/iOS). Возвращает true,
+  /// если доступ есть (полный или частичный).
+  static Future<bool> requestMediaAccess() async {
+    final ps = await PhotoManager.requestPermissionExtend();
+    return ps.isAuth || ps.hasAccess;
+  }
+
+  /// Все изображения устройства через MediaStore (как в обычных галереях):
+  /// без выбора папок и без доступа ко всем файлам. Внутренняя память + SD.
+  static Future<List<PhotoItem>> scanDeviceMedia() async {
+    final albums = await PhotoManager.getAssetPathList(
+      onlyAll: true,
+      type: RequestType.image,
+    );
+    if (albums.isEmpty) return const [];
+    final all = albums.first;
+    final count = await all.assetCountAsync;
+    if (count == 0) return const [];
+
+    // 1) перечисляем ассеты постранично, восстанавливаем путь из relativePath+title
+    const page = 1000;
+    final candidates = <String, AssetEntity>{}; // путь → ассет
+    final unresolved = <AssetEntity>[];
+    for (var pg = 0; pg * page < count; pg++) {
+      final assets = await all.getAssetListPaged(page: pg, size: page);
+      for (final a in assets) {
+        final path = _reconstructPath(a);
+        if (path != null) {
+          candidates[path] = a;
+        } else {
+          unresolved.add(a);
+        }
+      }
+    }
+
+    // 2) stat путей в изоляте (существование/размер/дата) — UI не виснет
+    final stats = await compute(_statPaths, candidates.keys.toList());
+    final out = <PhotoItem>[];
+    for (final s in stats) {
+      final path = s[0] as String;
+      final exists = s[1] as bool;
+      if (exists) {
+        out.add(_makePhoto(path, s[2] as int, s[3] as int,
+            assetId: candidates[path]?.id));
+      } else {
+        final a = candidates[path];
+        if (a != null) unresolved.add(a);
+      }
+    }
+
+    // 3) то, что не удалось восстановить путём (например, SD) — через originFile
+    for (final a in unresolved) {
+      try {
+        final f = await a.originFile;
+        if (f != null && f.existsSync()) {
+          final st = f.statSync();
+          out.add(_makePhoto(
+              f.path, st.size, st.modified.millisecondsSinceEpoch,
+              assetId: a.id));
+        }
+      } catch (_) {}
+    }
+
+    out.sort((a, b) => b.modified.compareTo(a.modified));
+    return out;
+  }
 
   /// Список папок библиотеки (с миграцией со старого одиночного ключа).
   static Future<List<String>> folders() async {
@@ -55,6 +123,53 @@ class LibraryService {
     return list;
   }
 
+}
+
+/// Собрать абсолютный путь к ассету из relativePath + title (внутренняя память).
+/// null — если данных не хватает (тогда путь добываем через originFile).
+String? _reconstructPath(AssetEntity a) {
+  final title = a.title;
+  final rel = a.relativePath;
+  if (title == null || title.isEmpty || rel == null) return null;
+  final r = rel.endsWith('/') ? rel : '$rel/';
+  return '/storage/emulated/0/$r$title';
+}
+
+PhotoItem _makePhoto(String path, int size, int mtimeMs, {String? assetId}) {
+  const sep = '/';
+  final cut = path.lastIndexOf(sep);
+  final folderPath = cut >= 0 ? path.substring(0, cut) : path;
+  final segs =
+      folderPath.split(sep).where((s) => s.isNotEmpty).toList();
+  final lower = path.toLowerCase();
+  return PhotoItem(
+    path: path,
+    isGif: lower.endsWith('.gif'),
+    folderPath: folderPath,
+    folderName: segs.isNotEmpty ? segs.last : folderPath,
+    modified: DateTime.fromMillisecondsSinceEpoch(mtimeMs),
+    sizeBytes: size,
+    assetId: assetId,
+  );
+}
+
+/// stat списка путей в изоляте: [path, exists, size, mtimeMs].
+List<List<dynamic>> _statPaths(List<String> paths) {
+  final out = <List<dynamic>>[];
+  for (final path in paths) {
+    try {
+      final f = File(path);
+      if (f.existsSync()) {
+        final st = f.statSync();
+        out.add([path, true, st.size, st.modified.millisecondsSinceEpoch]);
+      } else {
+        out.add([path, false, 0, 0]);
+      }
+    } catch (_) {
+      out.add([path, false, 0, 0]);
+    }
+  }
+  return out;
 }
 
 /// Сканирует список корней в одном изоляте, объединяя без дублей по пути.

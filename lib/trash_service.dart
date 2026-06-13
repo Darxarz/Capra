@@ -159,12 +159,22 @@ class TrashService {
   }
 
   /// Перенос с запасным вариантом копия+удаление (для разных дисков/разделов).
+  /// Если оригинал не удаляется (например, Android scoped storage без права
+  /// записи к медиа), убираем копию и пробрасываем ошибку — чтобы не плодить
+  /// дубликаты (копия в корзине + оригинал на месте).
   Future<void> _move(File src, String dest) async {
     try {
       await src.rename(dest);
     } on FileSystemException {
       await src.copy(dest);
-      await src.delete();
+      try {
+        await src.delete();
+      } catch (e) {
+        try {
+          await File(dest).delete();
+        } catch (_) {}
+        rethrow;
+      }
     }
   }
 }
