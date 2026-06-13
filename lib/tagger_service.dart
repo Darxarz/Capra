@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:math' as math;
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
@@ -129,7 +130,9 @@ class Tagger {
     double characterThreshold = 0.75,
   }) async {
     await load();
-    final input = preprocessBytes(await File(path).readAsBytes());
+    final bytes = await File(path).readAsBytes();
+    _storeSha(path, bytes);
+    final input = preprocessBytes(bytes);
     if (input == null) return const [];
     final tensor = OrtValueTensor.createTensorWithDataList(
         input, [1, _kInputSize, _kInputSize, 3]);
@@ -157,6 +160,7 @@ class Tagger {
   }) async {
     await load();
     final bytes = await File(path).readAsBytes();
+    _storeSha(path, bytes);
     final input = await compute(preprocessBytes, bytes);
     if (input == null) return const [];
     final tensor = OrtValueTensor.createTensorWithDataList(
@@ -190,6 +194,16 @@ class Tagger {
     final tags = await inferAsync(path, generalThreshold: generalThreshold);
     _store(path, tags);
     return tags.length;
+  }
+
+  // сохранить точный хеш файла при тегировании — чтобы теги можно было
+  // перепривязать, если файл потом переименуют/переместят
+  void _storeSha(String path, Uint8List bytes) {
+    try {
+      final sha = sha256.convert(bytes).toString();
+      final mtime = File(path).lastModifiedSync().millisecondsSinceEpoch;
+      TagService.instance.storeShaOnly(path, bytes.length, mtime, sha);
+    } catch (_) {}
   }
 
   void _store(

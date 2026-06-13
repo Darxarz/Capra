@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -80,6 +81,16 @@ class TagService {
     );
   }
 
+  /// Записать только точный хеш (не затирая perceptual-хеш/размеры, если есть).
+  void storeShaOnly(String path, int size, int mtime, String sha) {
+    _db?.execute(
+      'INSERT INTO file_sig(path, size, mtime, sha) VALUES(?,?,?,?) '
+      'ON CONFLICT(path) DO UPDATE SET sha=excluded.sha, '
+      'size=excluded.size, mtime=excluded.mtime',
+      [path, size, mtime, sha],
+    );
+  }
+
   /// Пути с заданным точным хешем (для перепривязки тегов после переноса).
   List<String> pathsWithSha(String sha) {
     final db = _db;
@@ -105,6 +116,104 @@ class TagService {
   void forgetPath(String path) {
     _db?.execute('DELETE FROM tags WHERE path = ?', [path]);
     _db?.execute('DELETE FROM file_sig WHERE path = ?', [path]);
+  }
+
+  /// Точный хеш файла из кэша (без проверки актуальности) — для перепривязки.
+  String? shaForPath(String path) {
+    final db = _db;
+    if (db == null) return null;
+    final rows =
+        db.select('SELECT sha FROM file_sig WHERE path = ? LIMIT 1', [path]);
+    return rows.isEmpty ? null : rows.first['sha'] as String?;
+  }
+
+  /// Перепривязать теги после переименования/перемещения файлов: для каждого
+  /// помеченного пути, которого больше нет среди текущих файлов, ищем файл с
+  /// тем же содержимым (по SHA) и переносим теги на него. Возвращает число
+  /// перепривязанных файлов.
+  int relink(Set<String> currentPaths) {
+    final db = _db;
+    if (db == null) return 0;
+    var moved = 0;
+    final tagged = taggedPaths();
+    for (final old in tagged) {
+      if (currentPaths.contains(old)) continue; // файл на месте
+      final sha = shaForPath(old);
+      if (sha == null) continue;
+      // среди файлов с тем же содержимым ищем существующий и ещё не помеченный
+      String? target;
+      for (final cand in pathsWithSha(sha)) {
+        if (cand == old) continue;
+        if (!currentPaths.contains(cand)) continue;
+        target = cand;
+        if (tagsFor(cand).isEmpty) break; // предпочитаем без тегов
+      }
+      if (target != null) {
+        movePath(old, target);
+        moved++;
+      }
+    }
+    return moved;
+  }
+
+  /// Экспорт всех тегов в JSON (бэкап/перенос между устройствами).
+  String exportJson() {
+    final db = _db;
+    if (db == null) return '{"version":1,"tags":[]}';
+    final rows = db.select(
+        'SELECT path, tag, category, source, confidence FROM tags');
+    final list = [
+      for (final r in rows)
+        {
+          'path': r['path'],
+          'tag': r['tag'],
+          'category': r['category'],
+          'source': r['source'],
+          'confidence': r['confidence'],
+        }
+    ];
+    return jsonEncode({
+      'version': 1,
+      'exported': DateTime.now().toIso8601String(),
+      'tags': list,
+    });
+  }
+
+  /// Импорт тегов из JSON (слияние; существующие перезаписываются).
+  /// Возвращает число импортированных тегов.
+  int importJson(String json) {
+    final db = _db;
+    if (db == null) return 0;
+    final data = jsonDecode(json);
+    final list = (data is Map ? data['tags'] : data) as List?;
+    if (list == null) return 0;
+    var n = 0;
+    db.execute('BEGIN');
+    try {
+      for (final e in list) {
+        if (e is! Map) continue;
+        final path = e['path'] as String?;
+        final tag = e['tag'] as String?;
+        if (path == null || tag == null) continue;
+        db.execute(
+          'INSERT OR REPLACE INTO tags(path, tag, category, source, confidence) '
+          'VALUES(?,?,?,?,?)',
+          [
+            path,
+            tag,
+            e['category'] ?? 'manual',
+            e['source'] ?? 'import',
+            (e['confidence'] as num?)?.toDouble() ?? 1.0,
+          ],
+        );
+        n++;
+      }
+      db.execute('COMMIT');
+    } catch (_) {
+      db.execute('ROLLBACK');
+      return 0;
+    }
+    return n;
   }
 
   /// Теги конкретного файла (по убыванию уверенности, потом по алфавиту).
