@@ -70,7 +70,7 @@ class _DupPageState extends State<DupPage> {
   }
 
   /// Удаление: на Android — в системную корзину через MediaStore (scoped
-  /// storage не даёт удалять медиа по пути); иначе — в корзину Capra.
+  /// storage не даёт удалять медиа по пути); иначе — в корзину GOAT.
   Future<int> _performDelete(List<String> paths) async {
     if (Platform.isAndroid) {
       final ids = <String>[];
@@ -108,7 +108,7 @@ class _DupPageState extends State<DupPage> {
     final desc = Platform.isAndroid
         ? 'Файлы уйдут в системную корзину — их можно вернуть из «Недавно удалённых». '
             'Освободится ${prettySize(_selectedBytes)}.'
-        : 'Файлы переедут в корзину Capra — их можно вернуть. '
+        : 'Файлы переедут в корзину GOAT — их можно вернуть. '
             'Освободится ${prettySize(_selectedBytes)}.';
     final ok = await showDialog<bool>(
       context: context,

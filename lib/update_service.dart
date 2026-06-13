@@ -34,7 +34,7 @@ class UpdateService {
           .get(
             Uri.parse('https://api.github.com/repos/$kRepo/releases/latest'),
             headers: const {
-              'User-Agent': 'Capra-Updater',
+              'User-Agent': 'GOAT-Updater',
               'Accept': 'application/vnd.github+json',
             },
           )
@@ -79,7 +79,7 @@ class UpdateService {
     final exe = Platform.resolvedExecutable; // полный путь к .exe
     final installDir = p.dirname(exe);
 
-    final tmp = Directory.systemTemp.createTempSync('capra_update_');
+    final tmp = Directory.systemTemp.createTempSync('goat_update_');
     final zipPath = p.join(tmp.path, 'update.zip');
     final extractDir = p.join(tmp.path, 'files');
 
@@ -87,7 +87,7 @@ class UpdateService {
     final client = http.Client();
     try {
       final req = http.Request('GET', Uri.parse(info.downloadUrl))
-        ..headers['User-Agent'] = 'Capra-Updater';
+        ..headers['User-Agent'] = 'GOAT-Updater';
       final resp = await client.send(req);
       if (resp.statusCode != 200) {
         throw HttpException('Не удалось скачать (код ${resp.statusCode})');

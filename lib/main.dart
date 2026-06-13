@@ -3,42 +3,85 @@ import 'theme.dart';
 import 'home_page.dart';
 import 'favorites.dart';
 import 'tag_service.dart';
+import 'settings_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Favorites.instance.load();
+  await SettingsService.instance.load();
   try {
     await TagService.instance.init();
   } catch (_) {
     // если база не открылась — приложение всё равно работает (без тегов)
   }
-  runApp(const AuroraApp());
+  runApp(const GoatApp());
 }
 
-class AuroraApp extends StatefulWidget {
-  const AuroraApp({super.key});
+/// Корневой виджет. Перестраивается, когда меняются настройки
+/// (тема, режим яркости и пр.) или когда система переключает светлый/тёмный.
+class GoatApp extends StatefulWidget {
+  const GoatApp({super.key});
 
   @override
-  State<AuroraApp> createState() => _AuroraAppState();
+  State<GoatApp> createState() => _GoatAppState();
 }
 
-class _AuroraAppState extends State<AuroraApp> {
-  String _themeId = 'sand';
+class _GoatAppState extends State<GoatApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    SettingsService.instance.addListener(_onSettings);
+  }
 
-  AuroraColors get _colors =>
-      kThemes.firstWhere((t) => t.id == _themeId, orElse: () => kThemes.first);
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    SettingsService.instance.removeListener(_onSettings);
+    super.dispose();
+  }
 
-  void _setTheme(String id) => setState(() => _themeId = id);
+  void _onSettings() => setState(() {});
+
+  /// Системная яркость поменялась — пересобрать тему, если выбран режим «как в системе».
+  @override
+  void didChangePlatformBrightness() {
+    if (SettingsService.instance.themeMode == ThemeModeChoice.system) {
+      setState(() {});
+    }
+  }
+
+  Brightness _effectiveBrightness() {
+    final mode = SettingsService.instance.themeMode;
+    switch (mode) {
+      case ThemeModeChoice.light:
+        return Brightness.light;
+      case ThemeModeChoice.dark:
+        return Brightness.dark;
+      case ThemeModeChoice.system:
+        return WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    }
+  }
+
+  AuroraColors _resolveColors() {
+    final s = SettingsService.instance;
+    final brightness = _effectiveBrightness();
+    final base = resolveBase(
+        brightness == Brightness.light ? s.lightBaseId : s.darkBaseId,
+        brightness);
+    final accent = resolveAccent(s.accentId);
+    return composeColors(base, accent);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final colors = _resolveColors();
     return AuroraTheme(
-      colors: _colors,
-      setTheme: _setTheme,
+      colors: colors,
       child: MaterialApp(
-        title: 'Aurora',
+        title: 'GOAT',
         debugShowCheckedModeBanner: false,
-        theme: _colors.toThemeData(),
+        theme: colors.toThemeData(),
         home: const HomePage(),
       ),
     );

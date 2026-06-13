@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:photo_manager/photo_manager.dart';
 import 'theme.dart';
@@ -16,6 +15,8 @@ import 'tag_service.dart';
 import 'tags_page.dart';
 import 'batch_tagger.dart';
 import 'dedup_page.dart';
+import 'settings_service.dart';
+import 'settings_page.dart';
 
 enum ViewMode { all, dates, albums }
 
@@ -27,8 +28,8 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  ViewMode _mode = ViewMode.all;
-  double _cell = 120; // плотность сетки: ширина плитки в логических пикселях
+  late ViewMode _mode = _modeFromSettings();
+  // плотность сетки берётся из настроек (SettingsService.cellSize)
 
   List<PhotoItem> _photos = [];
   List<AlbumItem> _albums = [];
@@ -76,7 +77,7 @@ class _HomePageState extends State<HomePage> {
         ? _albums
         : _albums.where((a) => a.name.toLowerCase().contains(q)).toList();
     if (albums.isEmpty) return const _NoResults(favOnly: false);
-    return _AlbumsView(albums: albums, photos: _photos, cell: _cell);
+    return _AlbumsView(albums: albums, photos: _photos, cell: SettingsService.instance.cellSize);
   }
 
   void _openTreeFolder(FolderNode node) {
@@ -90,7 +91,7 @@ class _HomePageState extends State<HomePage> {
       cover: node.cover,
     );
     Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => _FolderPage(album: album, photos: photos, cell: _cell),
+      builder: (_) => _FolderPage(album: album, photos: photos, cell: SettingsService.instance.cellSize),
     ));
   }
 
@@ -112,8 +113,28 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    SettingsService.instance.addListener(_onSettings);
     _restore();
     _checkUpdates();
+  }
+
+  @override
+  void dispose() {
+    SettingsService.instance.removeListener(_onSettings);
+    super.dispose();
+  }
+
+  void _onSettings() => setState(() {});
+
+  ViewMode _modeFromSettings() {
+    switch (SettingsService.instance.startSection) {
+      case StartSection.dates:
+        return ViewMode.dates;
+      case StartSection.albums:
+        return ViewMode.albums;
+      case StartSection.all:
+        return ViewMode.all;
+    }
   }
 
   Future<void> _checkUpdates() async {
@@ -130,7 +151,7 @@ class _HomePageState extends State<HomePage> {
         final c = AuroraTheme.of(ctx).colors;
         return AlertDialog(
           backgroundColor: c.surface,
-          title: Text('Обновить Capra?', style: TextStyle(color: c.text)),
+          title: Text('Обновить GOAT?', style: TextStyle(color: c.text)),
           content: Text(
             'Доступна сборка №${u.build}. Приложение скачает её, '
             'заменит файлы и перезапустится.',
@@ -256,112 +277,19 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  // ───────────────────────── теги: бэкап/перенос ─────────────────────────
-  Future<void> _exportTags() async {
-    final messenger = ScaffoldMessenger.of(context);
-    final json = TagService.instance.exportJson();
-    final name =
-        'capra-tags-${DateTime.now().toIso8601String().substring(0, 10)}.json';
-    try {
-      String? dest;
-      if (!Platform.isAndroid) {
-        dest = await FilePicker.platform.saveFile(
-          dialogTitle: 'Сохранить теги',
-          fileName: name,
-        );
-      }
-      dest ??= p.join((await getApplicationDocumentsDirectory()).path, name);
-      await File(dest).writeAsString(json);
-      messenger.showSnackBar(SnackBar(content: Text('Теги сохранены: $dest')));
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Не удалось сохранить: $e')));
-    }
-  }
-
-  Future<void> _importTags() async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      final res = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-      );
-      final path = res?.files.single.path;
-      if (path == null) return;
-      final n = TagService.instance.importJson(await File(path).readAsString());
-      if (!mounted) return;
-      setState(() => _tagsRev++); // пересоздать панель тегов
-      messenger.showSnackBar(SnackBar(content: Text('Импортировано тегов: $n')));
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Не удалось импортировать: $e')));
-    }
-  }
-
-  void _relinkNow() {
-    final messenger = ScaffoldMessenger.of(context);
-    final n = TagService.instance.relink({for (final p in _photos) p.path});
-    messenger.showSnackBar(
-        SnackBar(content: Text('Перепривязано файлов: $n')));
-  }
+  int _relinkNow() =>
+      TagService.instance.relink({for (final ph in _photos) ph.path});
 
   void _openSettings() {
-    final c = AuroraTheme.of(context).colors;
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: c.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => SettingsPage(
+        onTagsImported: () {
+          if (!mounted) return;
+          setState(() => _tagsRev++);
+        },
+        onRelinkRequested: _relinkNow,
       ),
-      builder: (ctx) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-            child: Row(children: [
-              Icon(Icons.settings_outlined, color: c.accent, size: 20),
-              const SizedBox(width: 10),
-              Text('Настройки',
-                  style: TextStyle(
-                      color: c.text,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700)),
-            ]),
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: Icon(Icons.upload_file_outlined, color: c.text),
-            title: Text('Экспорт тегов', style: TextStyle(color: c.text)),
-            subtitle: Text('Сохранить базу тегов в файл (бэкап/перенос)',
-                style: TextStyle(color: c.muted, fontSize: 12)),
-            onTap: () {
-              Navigator.pop(ctx);
-              _exportTags();
-            },
-          ),
-          ListTile(
-            leading: Icon(Icons.download_outlined, color: c.text),
-            title: Text('Импорт тегов', style: TextStyle(color: c.text)),
-            subtitle: Text('Загрузить теги из файла',
-                style: TextStyle(color: c.muted, fontSize: 12)),
-            onTap: () {
-              Navigator.pop(ctx);
-              _importTags();
-            },
-          ),
-          ListTile(
-            leading: Icon(Icons.link_outlined, color: c.text),
-            title: Text('Перепривязать теги',
-                style: TextStyle(color: c.text)),
-            subtitle: Text(
-                'Вернуть теги переименованным/перемещённым файлам по содержимому',
-                style: TextStyle(color: c.muted, fontSize: 12)),
-            onTap: () {
-              Navigator.pop(ctx);
-              _relinkNow();
-            },
-          ),
-          const SizedBox(height: 10),
-        ]),
-      ),
-    );
+    ));
   }
 
   void _openDedup() {
@@ -400,8 +328,8 @@ class _HomePageState extends State<HomePage> {
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
               child: Text(
                   _mediaGranted
-                      ? 'Capra показывает все фото устройства автоматически.'
-                      : 'Дай доступ к фото — Capra покажет все изображения.',
+                      ? 'GOAT показывает все фото устройства автоматически.'
+                      : 'Дай доступ к фото — GOAT покажет все изображения.',
                   style: TextStyle(color: c.muted, fontSize: 13)),
             ),
             ListTile(
@@ -532,7 +460,7 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   _TopBar(
                     mode: _mode,
-                    cell: _cell,
+                    cell: SettingsService.instance.cellSize,
                     query: _query,
                     onSearch: (q) => setState(() {
                       _query = q;
@@ -541,7 +469,7 @@ class _HomePageState extends State<HomePage> {
                           : TagService.instance.pathsMatchingTag(q);
                     }),
                     onMode: (m) => setState(() => _mode = m),
-                    onCell: (v) => setState(() => _cell = v),
+                    onCell: SettingsService.instance.setCellSize,
                     onPickFolder: _manageFolders,
                     update: _update,
                     onUpdate: _startUpdate,
@@ -622,9 +550,9 @@ class _HomePageState extends State<HomePage> {
     if (visible.isEmpty) return _NoResults(favOnly: _favOnly);
     switch (_mode) {
       case ViewMode.all:
-        return _AllGrid(photos: visible, cell: _cell);
+        return _AllGrid(photos: visible, cell: SettingsService.instance.cellSize);
       case ViewMode.dates:
-        return _DatesView(photos: visible, cell: _cell);
+        return _DatesView(photos: visible, cell: SettingsService.instance.cellSize);
       case ViewMode.albums:
         return const SizedBox.shrink(); // обработано выше
     }
@@ -650,8 +578,8 @@ class _EmptyState extends StatelessWidget {
     final subtitle = deviceMedia
         ? (granted
             ? 'Фото на устройстве не найдены.'
-            : 'Дай доступ к фото — Capra покажет все изображения устройства.')
-        : 'Выбери папку с фотографиями — Capra покажет их здесь.';
+            : 'Дай доступ к фото — GOAT покажет все изображения устройства.')
+        : 'Выбери папку с фотографиями — GOAT покажет их здесь.';
     return Center(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.photo_library_outlined, size: 64, color: c.muted),
@@ -816,8 +744,6 @@ class _TopBar extends StatelessWidget {
             const SizedBox(width: 6),
             _UpdateButton(buildNo: update!.build, onTap: onUpdate),
           ],
-          const SizedBox(width: 4),
-          const _ThemeDots(),
         ],
       ),
     );
@@ -930,7 +856,9 @@ class _FolderViewToggle extends StatelessWidget {
       return GestureDetector(
         onTap: onTap,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
+          duration: SettingsService.instance.reduceMotion
+              ? Duration.zero
+              : const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
             color: on ? c.surface : Colors.transparent,
@@ -1155,7 +1083,9 @@ class _Tabs extends StatelessWidget {
       return GestureDetector(
         onTap: () => onMode(m),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
+          duration: SettingsService.instance.reduceMotion
+              ? Duration.zero
+              : const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
           decoration: BoxDecoration(
             color: on ? c.surface : Colors.transparent,
@@ -1183,37 +1113,6 @@ class _Tabs extends StatelessWidget {
         tab('По датам', ViewMode.dates),
         tab('Альбомы', ViewMode.albums),
       ]),
-    );
-  }
-}
-
-class _ThemeDots extends StatelessWidget {
-  const _ThemeDots();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = AuroraTheme.of(context);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (final t in kThemes)
-          GestureDetector(
-            onTap: () => theme.setTheme(t.id),
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              width: 22,
-              height: 22,
-              decoration: BoxDecoration(
-                color: t.accent,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: t.id == theme.colors.id ? theme.colors.text : Colors.transparent,
-                  width: 2,
-                ),
-              ),
-            ),
-          ),
-      ],
     );
   }
 }
@@ -1276,20 +1175,21 @@ class PhotoTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
+    final s = SettingsService.instance;
     final dpr = MediaQuery.of(context).devicePixelRatio;
     final cacheWidth = (cell * dpr).round().clamp(64, 512);
     return GestureDetector(
       onTap: onTap,
       onLongPress: () => Favorites.instance.toggle(photo.path),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: BorderRadius.circular(s.gridRadius),
         child: Stack(
           fit: StackFit.expand,
           children: [
             Container(color: c.surface2),
             Image(
               image: photo.thumb(cacheWidth),
-              fit: BoxFit.cover,
+              fit: s.squareThumbs ? BoxFit.cover : BoxFit.contain,
               gaplessPlayback: true,
               filterQuality: FilterQuality.low,
               frameBuilder: (ctx, child, frame, wasSync) {
@@ -1299,7 +1199,7 @@ class PhotoTile extends StatelessWidget {
               errorBuilder: (ctx, e, s) =>
                   Icon(Icons.broken_image_outlined, color: c.muted, size: 18),
             ),
-            if (photo.isGif)
+            if (photo.isGif && s.showGifBadge)
               Positioned(
                 right: 5,
                 bottom: 5,
@@ -1313,23 +1213,24 @@ class PhotoTile extends StatelessWidget {
                       style: TextStyle(color: Colors.white, fontSize: 10)),
                 ),
               ),
-            ValueListenableBuilder<Set<String>>(
-              valueListenable: Favorites.instance.notifier,
-              builder: (ctx, favs, _) {
-                if (!favs.contains(photo.path)) return const SizedBox.shrink();
-                return Positioned(
-                  left: 5,
-                  top: 5,
-                  child: Container(
-                    padding: const EdgeInsets.all(3),
-                    decoration: const BoxDecoration(
-                        color: Colors.black54, shape: BoxShape.circle),
-                    child: const Icon(Icons.favorite,
-                        color: Colors.white, size: 12),
-                  ),
-                );
-              },
-            ),
+            if (s.showFavBadge)
+              ValueListenableBuilder<Set<String>>(
+                valueListenable: Favorites.instance.notifier,
+                builder: (ctx, favs, _) {
+                  if (!favs.contains(photo.path)) return const SizedBox.shrink();
+                  return Positioned(
+                    left: 5,
+                    top: 5,
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: const BoxDecoration(
+                          color: Colors.black54, shape: BoxShape.circle),
+                      child: const Icon(Icons.favorite,
+                          color: Colors.white, size: 12),
+                    ),
+                  );
+                },
+              ),
           ],
         ),
       ),

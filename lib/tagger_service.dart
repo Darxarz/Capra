@@ -64,7 +64,7 @@ class Tagger {
     final cf = await _csvFile();
     if (!cf.existsSync()) {
       final r = await http
-          .get(Uri.parse(_csvUrl), headers: {'User-Agent': 'Capra'});
+          .get(Uri.parse(_csvUrl), headers: {'User-Agent': 'GOAT'});
       if (r.statusCode != 200) {
         throw HttpException('Словарь тегов: код ${r.statusCode}');
       }
@@ -75,7 +75,7 @@ class Tagger {
       final client = http.Client();
       try {
         final req = http.Request('GET', Uri.parse(_modelUrl))
-          ..headers['User-Agent'] = 'Capra';
+          ..headers['User-Agent'] = 'GOAT';
         final resp = await client.send(req);
         if (resp.statusCode != 200) {
           throw HttpException('Модель: код ${resp.statusCode}');

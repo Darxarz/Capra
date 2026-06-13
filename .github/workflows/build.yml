@@ -1,4 +1,4 @@
-name: Build Capra (Windows + Android)
+name: Build GOAT (Windows + Android)
 
 # Запускается при каждом изменении в репозитории и вручную (кнопка Run workflow)
 on:
@@ -62,11 +62,15 @@ jobs:
           if ($mc -notmatch 'requestLegacyExternalStorage') {
             $mc = $mc -replace '(<application)', '$1 android:requestLegacyExternalStorage="true"'
           }
+          # имя приложения на устройстве — GOAT (вместо служебного aurora_gallery)
+          $mc = $mc -replace 'android:label="[^"]+"', 'android:label="GOAT"'
           Set-Content $m $mc
-          Write-Host "app minSdk 24 / compileSdk 36 / доступ к фото (MediaStore)"
+          Write-Host "app minSdk 24 / compileSdk 36 / доступ к фото (MediaStore) / label=GOAT"
 
       # новый MSVC на раннере делает ошибкой устаревшие <experimental/coroutine>
-      # в permission_handler_windows — глушим рекомендованным define
+      # в permission_handler_windows — глушим рекомендованным define;
+      # заодно ставим видимое название окна = GOAT (внутреннее имя проекта
+      # оставляем aurora_gallery, чтобы не сломать существующее автообновление)
       - name: Поправить windows-конфиг
         shell: pwsh
         run: |
@@ -77,6 +81,21 @@ jobs:
             Set-Content $f $c
             Write-Host "windows: coroutine deprecation suppressed"
           }
+          # заголовок окна и видимое название приложения = GOAT
+          $mp = 'windows/runner/main.cpp'
+          if (Test-Path $mp) {
+            $mc = Get-Content $mp -Raw
+            $mc = $mc -replace 'L"aurora_gallery"', 'L"GOAT"'
+            Set-Content $mp $mc
+          }
+          $rc = 'windows/runner/Runner.rc'
+          if (Test-Path $rc) {
+            $rcc = Get-Content $rc -Raw
+            $rcc = $rcc -replace '"aurora_gallery"', '"GOAT"'
+            $rcc = $rcc -replace '"aurora\\\\_gallery"', '"GOAT"'
+            Set-Content $rc $rcc
+          }
+          Write-Host "windows: window title = GOAT"
 
       - name: Зависимости
         run: flutter pub get
@@ -122,7 +141,7 @@ jobs:
 
       - name: Упаковать Windows в zip
         shell: pwsh
-        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath Capra-windows.zip -Force
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath GOAT-windows.zip -Force
 
       # ───────────────── Android ─────────────────
       - name: Собрать APK под Android
@@ -130,16 +149,16 @@ jobs:
 
       - name: Переименовать APK
         shell: pwsh
-        run: Copy-Item build/app/outputs/flutter-apk/app-release.apk Capra.apk -Force
+        run: Copy-Item build/app/outputs/flutter-apk/app-release.apk GOAT.apk -Force
 
       # ───────────────── артефакты и релиз ─────────────────
       - name: Выложить артефакты
         uses: actions/upload-artifact@v5
         with:
-          name: capra-builds
+          name: goat-builds
           path: |
-            Capra-windows.zip
-            Capra.apk
+            GOAT-windows.zip
+            GOAT.apk
 
       # создаём релиз с zip (Windows) и apk (Android)
       - name: Создать релиз с новой версией
@@ -147,7 +166,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: >
-          gh release create "build-${{ github.run_number }}" Capra-windows.zip Capra.apk
+          gh release create "build-${{ github.run_number }}" GOAT-windows.zip GOAT.apk
           --repo ${{ github.repository }}
           --title "Сборка ${{ github.run_number }}"
           --notes "Автоматическая сборка из коммита ${{ github.sha }}"
