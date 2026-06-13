@@ -4,11 +4,13 @@ import 'home_page.dart';
 import 'favorites.dart';
 import 'tag_service.dart';
 import 'settings_service.dart';
+import 'lan_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Favorites.instance.load();
   await SettingsService.instance.load();
+  await LanStore.instance.load();
   try {
     await TagService.instance.init();
   } catch (_) {

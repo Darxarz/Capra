@@ -7,59 +7,50 @@ import 'model.dart';
 class LanConnection {
   final String base; // "http://192.168.1.5:8787"
   final String token;
+  final String hostId;
   final String hostName;
   final int total;
   const LanConnection({
     required this.base,
     required this.token,
+    required this.hostId,
     required this.hostName,
     required this.total,
   });
 }
 
 /// Ошибка подключения с понятным пользователю текстом.
+/// [needRepair] = true, если хост отверг токен и нужно заново ввести PIN.
 class LanError implements Exception {
   final String message;
-  LanError(this.message);
+  final bool needRepair;
+  LanError(this.message, {this.needRepair = false});
   @override
   String toString() => message;
 }
 
 /// Клиент локальной сети: подключается к устройству-хосту и тянет его галерею.
 class LanClient {
-  /// Подключиться по адресу [ip]:[port] с PIN-кодом. Возвращает соединение
-  /// с токеном сессии. Бросает [LanError] с человекочитаемым текстом.
-  static Future<LanConnection> connect({
+  /// ПЕРВОЕ сопряжение по адресу [ip]:[port] и PIN. Передаёт хосту свой
+  /// [clientId] и [clientName], получает ПОСТОЯННЫЙ токен. Дальше используется
+  /// [connectWithToken] — PIN больше не нужен.
+  static Future<LanConnection> pair({
     required String ip,
     required int port,
     required String pin,
+    required String clientId,
+    required String clientName,
   }) async {
     final base = 'http://$ip:$port';
+    final ping = await _ping(base);
 
-    // 1) проверка связи — это вообще GOAT?
-    Map<String, dynamic> ping;
     try {
-      final r = await http
-          .get(Uri.parse('$base/ping'))
-          .timeout(const Duration(seconds: 6));
-      if (r.statusCode != 200) {
-        throw LanError('Устройство ответило ошибкой (${r.statusCode}).');
-      }
-      ping = jsonDecode(r.body) as Map<String, dynamic>;
-      if (ping['app'] != 'GOAT') {
-        throw LanError('По этому адресу не GOAT.');
-      }
-    } on LanError {
-      rethrow;
-    } catch (_) {
-      throw LanError('Не удалось связаться. Проверь адрес и одну ли вы Wi-Fi сеть.');
-    }
-
-    // 2) сопряжение по PIN
-    try {
-      final r = await http
-          .get(Uri.parse('$base/pair?pin=$pin'))
-          .timeout(const Duration(seconds: 6));
+      final url = Uri.parse('$base/pair').replace(queryParameters: {
+        'pin': pin,
+        'client': clientId,
+        'name': clientName,
+      });
+      final r = await http.get(url).timeout(const Duration(seconds: 6));
       if (r.statusCode == 429) {
         throw LanError('Слишком много попыток. Подожди полминуты и снова.');
       }
@@ -73,6 +64,7 @@ class LanClient {
       return LanConnection(
         base: base,
         token: data['token'] as String,
+        hostId: (data['hostId'] ?? ping['hostId'] ?? '') as String,
         hostName: (data['name'] ?? ping['name'] ?? 'Устройство') as String,
         total: (ping['count'] ?? 0) as int,
       );
@@ -80,6 +72,63 @@ class LanClient {
       rethrow;
     } catch (_) {
       throw LanError('Сбой при сопряжении. Попробуй ещё раз.');
+    }
+  }
+
+  /// Повторное подключение к уже запомненному хосту по постоянному токену
+  /// (без PIN). Бросает [LanError]; код различает «нет связи» и «токен
+  /// отвергнут» по полю [LanError.needRepair].
+  static Future<LanConnection> connectWithToken({
+    required String ip,
+    required int port,
+    required String token,
+  }) async {
+    final base = 'http://$ip:$port';
+    try {
+      final r = await http
+          .get(Uri.parse('$base/auth?token=$token'))
+          .timeout(const Duration(seconds: 6));
+      if (r.statusCode == 401) {
+        throw LanError('Устройство больше не помнит этот ключ — нужен PIN заново.',
+            needRepair: true);
+      }
+      if (r.statusCode != 200) {
+        throw LanError('Устройство ответило ошибкой (${r.statusCode}).');
+      }
+      final data = jsonDecode(r.body) as Map<String, dynamic>;
+      return LanConnection(
+        base: base,
+        token: token,
+        hostId: (data['hostId'] ?? '') as String,
+        hostName: (data['name'] ?? 'Устройство') as String,
+        total: (data['count'] ?? 0) as int,
+      );
+    } on LanError {
+      rethrow;
+    } catch (_) {
+      throw LanError('Не удалось связаться. Устройство включило раздачу? '
+          'Одна ли у вас Wi-Fi сеть?');
+    }
+  }
+
+  /// Проверка связи + что это GOAT.
+  static Future<Map<String, dynamic>> _ping(String base) async {
+    try {
+      final r = await http
+          .get(Uri.parse('$base/ping'))
+          .timeout(const Duration(seconds: 6));
+      if (r.statusCode != 200) {
+        throw LanError('Устройство ответило ошибкой (${r.statusCode}).');
+      }
+      final ping = jsonDecode(r.body) as Map<String, dynamic>;
+      if (ping['app'] != 'GOAT') {
+        throw LanError('По этому адресу не GOAT.');
+      }
+      return ping;
+    } on LanError {
+      rethrow;
+    } catch (_) {
+      throw LanError('Не удалось связаться. Проверь адрес и одну ли вы Wi-Fi сеть.');
     }
   }
 

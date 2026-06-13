@@ -1,9 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'theme.dart';
 import 'model.dart';
 import 'lan_service.dart';
 import 'lan_client.dart';
+import 'lan_store.dart';
 import 'viewer_page.dart';
 import 'settings_service.dart';
 
@@ -224,6 +226,8 @@ class _HostViewState extends State<_HostView> {
                     style: TextStyle(color: c.muted, fontSize: 12.5)),
               ])),
             ],
+            const SizedBox(height: 16),
+            _TrustedList(c: c),
           ],
         );
       },
@@ -233,6 +237,54 @@ class _HostViewState extends State<_HostView> {
   String _spacedPin(String pin) {
     if (pin.length == 6) return '${pin.substring(0, 3)} ${pin.substring(3)}';
     return pin;
+  }
+}
+
+/// Список устройств, которым этот хост уже доверяет (входят без PIN).
+class _TrustedList extends StatelessWidget {
+  final AuroraColors c;
+  const _TrustedList({required this.c});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: LanStore.instance,
+      builder: (ctx, _) {
+        final list = LanStore.instance.trusted;
+        if (list.isEmpty) return const SizedBox.shrink();
+        return _Card(c: c, child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Доверенные устройства',
+              style: TextStyle(color: c.muted, fontSize: 12.5,
+                  fontWeight: FontWeight.w600)),
+          const SizedBox(height: 2),
+          Text('Эти устройства подключаются без PIN',
+              style: TextStyle(color: c.muted, fontSize: 11.5)),
+          const SizedBox(height: 6),
+          for (final t in list)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(children: [
+                Icon(Icons.devices_rounded, size: 18, color: c.accent),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(t.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: c.text, fontSize: 14,
+                          fontWeight: FontWeight.w600)),
+                ),
+                TextButton(
+                  onPressed: () => LanStore.instance.forgetTrusted(t.token),
+                  child: Text('Забыть',
+                      style: TextStyle(color: c.muted, fontSize: 12.5)),
+                ),
+              ]),
+            ),
+        ]));
+      },
+    );
   }
 }
 
@@ -278,7 +330,9 @@ class _ClientViewState extends State<_ClientView> {
   final _ipCtl = TextEditingController();
   final _pinCtl = TextEditingController();
   bool _busy = false;
+  bool _addOpen = false; // раскрыта ли форма добавления нового устройства
   String? _error;
+  String? _busyHostId; // какой запомненный хост сейчас подключается
 
   @override
   void dispose() {
@@ -287,11 +341,32 @@ class _ClientViewState extends State<_ClientView> {
     super.dispose();
   }
 
-  Future<void> _connect() async {
+  String _clientName() {
+    try {
+      return Platform.localHostname;
+    } catch (_) {
+      return Platform.isAndroid ? 'Android' : 'Устройство';
+    }
+  }
+
+  /// Открыть галерею хоста: тянем список и переходим на экран просмотра.
+  Future<void> _openGallery(LanConnection conn) async {
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
+    final photos = await LanClient.fetchAll(conn);
+    if (!mounted) return;
+    navigator.push(MaterialPageRoute(
+      builder: (_) =>
+          _RemoteGalleryPage(hostName: conn.hostName, photos: photos),
+    ));
+    messenger.showSnackBar(SnackBar(
+        content: Text('Подключено к ${conn.hostName}: ${photos.length} фото')));
+  }
+
+  /// ПЕРВОЕ сопряжение нового устройства (адрес + PIN).
+  Future<void> _pairNew() async {
     var ip = _ipCtl.text.trim();
-    var port = LanService.instance.port; // по умолчанию 8787
+    var port = LanService.instance.port;
     if (ip.contains(':')) {
       final parts = ip.split(':');
       ip = parts[0];
@@ -307,15 +382,25 @@ class _ClientViewState extends State<_ClientView> {
       _error = null;
     });
     try {
-      final conn = await LanClient.connect(ip: ip, port: port, pin: pin);
-      final photos = await LanClient.fetchAll(conn);
-      if (!mounted) return;
-      navigator.push(MaterialPageRoute(
-        builder: (_) => _RemoteGalleryPage(
-            hostName: conn.hostName, photos: photos),
+      final conn = await LanClient.pair(
+        ip: ip,
+        port: port,
+        pin: pin,
+        clientId: LanStore.instance.clientId,
+        clientName: _clientName(),
+      );
+      // запоминаем устройство — больше PIN не понадобится
+      LanStore.instance.rememberHost(KnownHost(
+        hostId: conn.hostId,
+        name: conn.hostName,
+        ip: ip,
+        port: port,
+        token: conn.token,
       ));
-      messenger.showSnackBar(SnackBar(
-          content: Text('Подключено к ${conn.hostName}: ${photos.length} фото')));
+      _pinCtl.clear();
+      _ipCtl.clear();
+      if (mounted) setState(() => _addOpen = false);
+      await _openGallery(conn);
     } on LanError catch (e) {
       setState(() => _error = e.message);
     } catch (e) {
@@ -325,72 +410,263 @@ class _ClientViewState extends State<_ClientView> {
     }
   }
 
+  /// Повторное подключение к запомненному устройству — по токену, без PIN.
+  Future<void> _connectKnown(KnownHost host) async {
+    setState(() {
+      _busyHostId = host.hostId;
+      _error = null;
+    });
+    try {
+      final conn = await LanClient.connectWithToken(
+          ip: host.ip, port: host.port, token: host.token);
+      await _openGallery(conn);
+    } on LanError catch (e) {
+      if (!mounted) return;
+      if (e.needRepair) {
+        // хост забыл нас — предложим заново ввести PIN
+        setState(() {
+          _addOpen = true;
+          _ipCtl.text = '${host.ip}:${host.port}';
+          _error = e.message;
+        });
+      } else {
+        // скорее всего сменился IP или раздача выключена — дать сменить адрес
+        _askNewAddress(host);
+      }
+    } finally {
+      if (mounted) setState(() => _busyHostId = null);
+    }
+  }
+
+  /// Запросить новый адрес запомненного устройства (IP сменился), затем
+  /// повторить вход по сохранённому токену.
+  Future<void> _askNewAddress(KnownHost host) async {
+    final c = AuroraTheme.of(context).colors;
+    final ctl = TextEditingController(text: '${host.ip}:${host.port}');
+    final newAddr = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: c.surface,
+        title: Text('Не дозвонился до «${host.name}»',
+            style: TextStyle(color: c.text, fontSize: 17)),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('Возможно, сменился адрес устройства. Уточни IP:порт '
+              '(включена ли раздача на нём?).',
+              style: TextStyle(color: c.muted, fontSize: 13)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: ctl,
+            cursorColor: c.accent,
+            style: TextStyle(color: c.text),
+            decoration: const InputDecoration(hintText: '192.168.1.5:8787'),
+          ),
+        ]),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Отмена', style: TextStyle(color: c.muted)),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: c.accent),
+            onPressed: () => Navigator.pop(ctx, ctl.text.trim()),
+            child: const Text('Подключиться'),
+          ),
+        ],
+      ),
+    );
+    if (newAddr == null || newAddr.isEmpty) return;
+    var ip = newAddr;
+    var port = host.port;
+    if (newAddr.contains(':')) {
+      final parts = newAddr.split(':');
+      ip = parts[0];
+      port = int.tryParse(parts[1]) ?? host.port;
+    }
+    LanStore.instance.updateHostAddress(host.hostId, ip, port);
+    final updated = LanStore.instance.hostById(host.hostId);
+    if (updated != null) await _connectKnown(updated);
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-      children: [
-        _Card(c: c, child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Адрес устройства',
-              style: TextStyle(color: c.muted, fontSize: 12.5,
-                  fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          _Field(
-            controller: _ipCtl,
-            hint: 'например 192.168.1.5',
-            icon: Icons.lan_outlined,
-            keyboard: TextInputType.text,
-            c: c,
-          ),
-          const SizedBox(height: 16),
-          Text('PIN',
-              style: TextStyle(color: c.muted, fontSize: 12.5,
-                  fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          _Field(
-            controller: _pinCtl,
-            hint: '6 цифр',
-            icon: Icons.password_rounded,
-            keyboard: TextInputType.number,
-            maxLen: 6,
-            c: c,
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            Row(children: [
-              Icon(Icons.error_outline_rounded, size: 17, color: c.accent),
-              const SizedBox(width: 8),
-              Expanded(child: Text(_error!,
-                  style: TextStyle(color: c.accent, fontSize: 13))),
-            ]),
-          ],
-          const SizedBox(height: 18),
-          FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: c.accent,
-              minimumSize: const Size.fromHeight(48),
+    return AnimatedBuilder(
+      animation: LanStore.instance,
+      builder: (ctx, _) {
+        final hosts = LanStore.instance.hosts;
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+          children: [
+            // ── запомненные устройства ──
+            if (hosts.isNotEmpty) ...[
+              _Card(c: c, child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Мои устройства',
+                    style: TextStyle(color: c.muted, fontSize: 12.5,
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text('Подключение в один тап, без PIN',
+                    style: TextStyle(color: c.muted, fontSize: 11.5)),
+                const SizedBox(height: 6),
+                for (final h in hosts)
+                  _KnownRow(
+                    host: h,
+                    busy: _busyHostId == h.hostId,
+                    c: c,
+                    onTap: () => _connectKnown(h),
+                    onForget: () => LanStore.instance.forgetHost(h.hostId),
+                  ),
+              ])),
+              const SizedBox(height: 14),
+            ],
+
+            // ── добавить новое устройство ──
+            if (!_addOpen)
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: c.accent,
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                onPressed: () => setState(() => _addOpen = true),
+                icon: const Icon(Icons.add),
+                label: Text(hosts.isEmpty
+                    ? 'Подключиться к устройству'
+                    : 'Добавить новое устройство'),
+              )
+            else
+              _Card(c: c, child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Expanded(
+                    child: Text('Новое устройство',
+                        style: TextStyle(color: c.text, fontSize: 15,
+                            fontWeight: FontWeight.w700)),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close, size: 18, color: c.muted),
+                    onPressed: () => setState(() {
+                      _addOpen = false;
+                      _error = null;
+                    }),
+                  ),
+                ]),
+                const SizedBox(height: 4),
+                Text('Адрес устройства',
+                    style: TextStyle(color: c.muted, fontSize: 12.5,
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                _Field(
+                  controller: _ipCtl,
+                  hint: 'например 192.168.1.5',
+                  icon: Icons.lan_outlined,
+                  keyboard: TextInputType.text,
+                  c: c,
+                ),
+                const SizedBox(height: 16),
+                Text('PIN',
+                    style: TextStyle(color: c.muted, fontSize: 12.5,
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                _Field(
+                  controller: _pinCtl,
+                  hint: '6 цифр',
+                  icon: Icons.password_rounded,
+                  keyboard: TextInputType.number,
+                  maxLen: 6,
+                  c: c,
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    Icon(Icons.error_outline_rounded, size: 17, color: c.accent),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(_error!,
+                        style: TextStyle(color: c.accent, fontSize: 13))),
+                  ]),
+                ],
+                const SizedBox(height: 18),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: c.accent,
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                  onPressed: _busy ? null : _pairNew,
+                  icon: _busy
+                      ? const SizedBox(
+                          width: 18, height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.link_rounded),
+                  label: Text(_busy ? 'Сопрягаю…' : 'Сопрячь устройство'),
+                ),
+              ])),
+            const SizedBox(height: 14),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                  'На втором устройстве открой «Локальная сеть → Раздать», '
+                  'включи раздачу и продиктуй адрес и PIN. PIN нужен только '
+                  'в первый раз — дальше устройства помнят друг друга.',
+                  style: TextStyle(color: c.muted, fontSize: 12.5)),
             ),
-            onPressed: _busy ? null : _connect,
-            icon: _busy
-                ? const SizedBox(
-                    width: 18, height: 18,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
-                : const Icon(Icons.cast_connected_rounded),
-            label: Text(_busy ? 'Подключаюсь…' : 'Подключиться'),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Строка запомненного устройства в списке клиента.
+class _KnownRow extends StatelessWidget {
+  final KnownHost host;
+  final bool busy;
+  final AuroraColors c;
+  final VoidCallback onTap;
+  final VoidCallback onForget;
+  const _KnownRow({
+    required this.host,
+    required this.busy,
+    required this.c,
+    required this.onTap,
+    required this.onForget,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: busy ? null : onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(children: [
+          busy
+              ? SizedBox(
+                  width: 20, height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: c.accent))
+              : Icon(Icons.devices_rounded, size: 20, color: c.accent),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(host.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: c.text, fontSize: 14.5, fontWeight: FontWeight.w600)),
+              Text('${host.ip}:${host.port}',
+                  style: TextStyle(color: c.muted, fontSize: 12)),
+            ]),
           ),
-        ])),
-        const SizedBox(height: 14),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Text(
-              'На втором устройстве открой «Локальная сеть → Раздать», '
-              'включи раздачу и продиктуй адрес и PIN.',
-              style: TextStyle(color: c.muted, fontSize: 12.5)),
-        ),
-      ],
+          PopupMenuButton<String>(
+            icon: Icon(Icons.more_vert, size: 18, color: c.muted),
+            onSelected: (v) {
+              if (v == 'forget') onForget();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'forget', child: Text('Забыть устройство')),
+            ],
+          ),
+        ]),
+      ),
     );
   }
 }

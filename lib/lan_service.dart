@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:image/image.dart' as img;
 import 'model.dart';
+import 'lan_store.dart';
 
 /// Хост локальной сети: раздаёт свою галерею другим устройствам в той же
 /// Wi-Fi сети. Поднимает встроенный HTTP-сервер (чистый dart:io, без нативных
@@ -27,8 +28,7 @@ class LanService extends ChangeNotifier {
 
   HttpServer? _server;
   List<PhotoItem> _snapshot = const []; // что раздаём (фиксируется на старте)
-  String _pin = '';
-  String _token = '';
+  String _pin = ''; // PIN только для ПЕРВОГО сопряжения нового устройства
   int _port = _basePort;
 
   // защита от перебора PIN
@@ -58,7 +58,6 @@ class LanService extends ChangeNotifier {
     if (isRunning) return localAddresses();
     _snapshot = List.unmodifiable(_live);
     _pin = (Random.secure().nextInt(900000) + 100000).toString(); // 6 цифр
-    _token = _randomToken();
     _failCount = 0;
     _lockUntil = null;
 
@@ -87,7 +86,6 @@ class LanService extends ChangeNotifier {
     _server = null;
     _snapshot = const [];
     _pin = '';
-    _token = '';
     if (s != null) {
       try {
         await s.close(force: true);
@@ -107,20 +105,31 @@ class LanService extends ChangeNotifier {
         _json(res, {
           'app': 'GOAT',
           'name': _deviceName(),
+          'hostId': LanStore.instance.hostId,
           'count': _snapshot.length,
         });
         return;
       }
 
       if (path == '/pair') {
-        _handlePair(res, q['pin']);
+        _handlePair(res, q['pin'], q['client'], q['name']);
         return;
       }
 
-      // дальше — только с действующим токеном
-      if (q['token'] != _token || _token.isEmpty) {
+      // дальше — только с доверенным токеном (выдан при сопряжении)
+      if (!LanStore.instance.isTrustedToken(q['token'])) {
         res.statusCode = HttpStatus.unauthorized;
         await res.close();
+        return;
+      }
+
+      // быстрая проверка токена при реконнекте запомненного устройства
+      if (path == '/auth') {
+        _json(res, {
+          'name': _deviceName(),
+          'hostId': LanStore.instance.hostId,
+          'count': _snapshot.length,
+        });
         return;
       }
 
@@ -146,7 +155,8 @@ class LanService extends ChangeNotifier {
     }
   }
 
-  void _handlePair(HttpResponse res, String? pin) {
+  void _handlePair(
+      HttpResponse res, String? pin, String? clientId, String? clientName) {
     // блокировка после серии неудачных попыток
     final now = DateTime.now();
     if (_lockUntil != null && now.isBefore(_lockUntil!)) {
@@ -154,9 +164,18 @@ class LanService extends ChangeNotifier {
       res.close();
       return;
     }
-    if (pin != null && pin == _pin && _pin.isNotEmpty) {
+    if (pin != null && pin == _pin && _pin.isNotEmpty && clientId != null) {
       _failCount = 0;
-      _json(res, {'token': _token, 'name': _deviceName()});
+      // запоминаем устройство и выдаём ему ПОСТОЯННЫЙ токен — больше PIN
+      // не понадобится: при следующих подключениях входит сразу по токену
+      final tc = LanStore.instance
+          .trustClient(clientId, clientName ?? 'Устройство');
+      notifyListeners(); // обновить список доверенных в UI
+      _json(res, {
+        'token': tc.token,
+        'name': _deviceName(),
+        'hostId': LanStore.instance.hostId,
+      });
       return;
     }
     _failCount++;
@@ -285,12 +304,6 @@ class LanService extends ChangeNotifier {
     } catch (_) {
       return Platform.isAndroid ? 'Android' : 'Устройство';
     }
-  }
-
-  String _randomToken() {
-    final r = Random.secure();
-    final b = List<int>.generate(16, (_) => r.nextInt(256));
-    return b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
   }
 
   /// Локальные IPv4-адреса (для показа на экране хоста). Приватные сети
