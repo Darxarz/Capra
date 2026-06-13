@@ -74,6 +74,24 @@ void _aggregate(FolderNode n) {
   n.children.sort((a, b) => b.totalCount.compareTo(a.totalCount));
 }
 
+/// Древо из нескольких корней. Если корень один — обычное древо; если
+/// несколько — синтетический корень «Библиотека» с каждой папкой-веткой.
+FolderNode buildForest(List<PhotoItem> photos, List<String> roots) {
+  if (roots.isEmpty) return FolderNode(name: 'Библиотека', path: '');
+  if (roots.length == 1) return buildFolderTree(photos, roots.first);
+  final root = FolderNode(name: 'Библиотека', path: '');
+  var total = 0;
+  for (final r in roots) {
+    final sub = buildFolderTree(photos, r);
+    root.children.add(sub);
+    total += sub.totalCount;
+  }
+  root.totalCount = total;
+  root.cover = root.children.isNotEmpty ? root.children.first.cover : null;
+  root.children.sort((a, b) => b.totalCount.compareTo(a.totalCount));
+  return root;
+}
+
 /// Все фото папки и её вложенных (для входа в папку, когда своих фото нет).
 List<PhotoItem> collectPhotos(FolderNode n) {
   final out = <PhotoItem>[...n.directPhotos];

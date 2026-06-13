@@ -30,7 +30,7 @@ class _HomePageState extends State<HomePage> {
 
   List<PhotoItem> _photos = [];
   List<AlbumItem> _albums = [];
-  String? _folder;
+  List<String> _folders = []; // папки библиотеки (можно несколько)
   bool _loading = false;
   UpdateInfo? _update; // доступное обновление (null = нет)
   String _query = ''; // строка поиска
@@ -63,7 +63,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   FolderNode _folderTreeNode() =>
-      _treeCache ??= buildFolderTree(_photos, _folder ?? '');
+      _treeCache ??= buildForest(_photos, _folders);
 
   Widget _albumsGrid() {
     final q = _query.trim().toLowerCase();
@@ -155,12 +155,14 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _restore() async {
-    final last = await LibraryService.lastFolder();
-    if (last != null) await _scan(last);
+    final f = await LibraryService.folders();
+    if (f.isEmpty) return;
+    setState(() => _folders = f);
+    await _rescan();
   }
 
-  Future<void> _pickFolder() async {
-    String? path;
+  /// Выбрать новую папку (Android — обозреватель, Windows — системный диалог).
+  Future<String?> _chooseFolder() async {
     if (Platform.isAndroid) {
       // на Android системный диалог отдаёт URI, а dart:io читает файлы только
       // с доступом ко всем файлам — запрашиваем его и выбираем папку сами
@@ -173,29 +175,38 @@ class _HomePageState extends State<HomePage> {
                 'Нужен доступ ко всем файлам — включи его в настройках приложения.'),
           ));
         }
-        return;
+        return null;
       }
-      if (!mounted) return;
-      path = await Navigator.of(context).push<String>(MaterialPageRoute(
-        builder: (_) =>
-            const FolderBrowserPage(initialPath: '/storage/emulated/0'),
+      if (!mounted) return null;
+      // стартуем с /storage, чтобы были видны и внутренняя память, и SD-карта
+      return Navigator.of(context).push<String>(MaterialPageRoute(
+        builder: (_) => const FolderBrowserPage(initialPath: '/storage'),
       ));
-    } else {
-      path = await FilePicker.platform.getDirectoryPath(
-        dialogTitle: 'Выбери папку с фотографиями',
-      );
     }
-    if (path == null) return;
-    await LibraryService.saveFolder(path);
-    await _scan(path);
+    return FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Выбери папку с фотографиями',
+    );
   }
 
-  Future<void> _scan(String path) async {
-    setState(() {
-      _loading = true;
-      _folder = path;
-    });
-    final photos = await LibraryService.scan(path);
+  Future<void> _addFolder() async {
+    final path = await _chooseFolder();
+    if (path == null || _folders.contains(path)) return;
+    final next = [..._folders, path];
+    await LibraryService.setFolders(next);
+    setState(() => _folders = next);
+    await _rescan();
+  }
+
+  Future<void> _removeFolder(String path) async {
+    final next = _folders.where((f) => f != path).toList();
+    await LibraryService.setFolders(next);
+    setState(() => _folders = next);
+    await _rescan();
+  }
+
+  Future<void> _rescan() async {
+    setState(() => _loading = true);
+    final photos = await LibraryService.scanAll(_folders);
     if (!mounted) return;
     setState(() {
       _photos = photos;
@@ -203,6 +214,73 @@ class _HomePageState extends State<HomePage> {
       _treeCache = null; // папки изменились — пересоберём древо при показе
       _loading = false;
     });
+  }
+
+  void _manageFolders() {
+    final c = AuroraTheme.of(context).colors;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: c.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => SafeArea(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Row(children: [
+                Icon(Icons.folder_copy_outlined, color: c.accent, size: 20),
+                const SizedBox(width: 10),
+                Text('Папки библиотеки',
+                    style: TextStyle(
+                        color: c.text,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700)),
+              ]),
+            ),
+            const Divider(height: 1),
+            if (_folders.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Text('Пока не добавлено ни одной папки.',
+                    style: TextStyle(color: c.muted)),
+              ),
+            for (final f in _folders)
+              ListTile(
+                leading: Icon(Icons.folder_rounded, color: c.accent, size: 20),
+                title: Text(f,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: c.text, fontSize: 13)),
+                trailing: IconButton(
+                  icon: Icon(Icons.close, color: c.muted, size: 18),
+                  tooltip: 'Убрать',
+                  onPressed: () async {
+                    await _removeFolder(f);
+                    setSheet(() {});
+                  },
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: c.accent,
+                  minimumSize: const Size.fromHeight(46),
+                ),
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  await _addFolder();
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('Добавить папку'),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
   }
 
   @override
@@ -245,7 +323,7 @@ class _HomePageState extends State<HomePage> {
                     }),
                     onMode: (m) => setState(() => _mode = m),
                     onCell: (v) => setState(() => _cell = v),
-                    onPickFolder: _pickFolder,
+                    onPickFolder: _manageFolders,
                     update: _update,
                     onUpdate: _startUpdate,
                   ),
@@ -253,7 +331,11 @@ class _HomePageState extends State<HomePage> {
                     mode: _mode,
                     total: _visiblePhotos.length,
                     albums: _albums.length,
-                    folder: _folder,
+                    folder: _folders.isEmpty
+                        ? null
+                        : (_folders.length == 1
+                            ? _folders.first
+                            : '${_folders.length} папок'),
                   ),
                   if (_filterTags.isNotEmpty)
                     _TagFilterBar(
@@ -288,7 +370,7 @@ class _HomePageState extends State<HomePage> {
         ]),
       );
     }
-    if (_photos.isEmpty) return _EmptyState(onPick: _pickFolder);
+    if (_photos.isEmpty) return _EmptyState(onPick: _addFolder);
 
     if (_mode == ViewMode.albums) {
       return Column(
@@ -463,7 +545,7 @@ class _TopBar extends StatelessWidget {
           IconButton(
             onPressed: onPickFolder,
             icon: Icon(Icons.folder_open, color: c.muted),
-            tooltip: 'Выбрать папку',
+            tooltip: 'Папки библиотеки',
           ),
           const SizedBox(width: 4),
           _Tabs(mode: mode, onMode: onMode),

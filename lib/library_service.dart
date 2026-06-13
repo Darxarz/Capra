@@ -5,12 +5,33 @@ import 'model.dart';
 
 /// Сканирование папок и работа с библиотекой.
 class LibraryService {
-  static const _prefKey = 'aurora_folder';
+  static const _prefKey = 'aurora_folder'; // старый одиночный (миграция)
+  static const _foldersKey = 'aurora_folders'; // список папок библиотеки
 
-  /// Рекурсивно собирает все изображения из папки [root].
-  /// Работает в отдельном изоляте (compute), чтобы интерфейс не подвисал
-  /// даже на 100к+ файлов. Возвращает список от новых к старым.
+  /// Рекурсивно собирает все изображения из папки [root] (один корень).
   static Future<List<PhotoItem>> scan(String root) => compute(_scanFolder, root);
+
+  /// Сканирует несколько корней и объединяет (без дублей), в фоне.
+  static Future<List<PhotoItem>> scanAll(List<String> roots) =>
+      compute(_scanFolders, roots);
+
+  /// Список папок библиотеки (с миграцией со старого одиночного ключа).
+  static Future<List<String>> folders() async {
+    final p = await SharedPreferences.getInstance();
+    final list = p.getStringList(_foldersKey);
+    if (list != null) return list;
+    final old = p.getString(_prefKey);
+    if (old != null && old.isNotEmpty) {
+      await p.setStringList(_foldersKey, [old]);
+      return [old];
+    }
+    return const [];
+  }
+
+  static Future<void> setFolders(List<String> list) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setStringList(_foldersKey, list);
+  }
 
   /// Группирует фото по папкам → список альбомов (по убыванию размера).
   static List<AlbumItem> albums(List<PhotoItem> photos) {
@@ -34,15 +55,20 @@ class LibraryService {
     return list;
   }
 
-  static Future<String?> lastFolder() async {
-    final p = await SharedPreferences.getInstance();
-    return p.getString(_prefKey);
-  }
+}
 
-  static Future<void> saveFolder(String path) async {
-    final p = await SharedPreferences.getInstance();
-    await p.setString(_prefKey, path);
+/// Сканирует список корней в одном изоляте, объединяя без дублей по пути.
+Future<List<PhotoItem>> _scanFolders(List<String> roots) async {
+  final out = <PhotoItem>[];
+  final seen = <String>{};
+  for (final root in roots) {
+    final part = await _scanFolder(root);
+    for (final p in part) {
+      if (seen.add(p.path)) out.add(p);
+    }
   }
+  out.sort((a, b) => b.modified.compareTo(a.modified));
+  return out;
 }
 
 /// Тело сканирования — выполняется в отдельном изоляте через [compute].
