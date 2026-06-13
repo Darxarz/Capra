@@ -5,6 +5,7 @@ import 'favorites.dart';
 import 'tag_service.dart';
 import 'tagger_service.dart';
 import 'metadata_service.dart';
+import 'settings_service.dart';
 
 /// Открыть просмотрщик на конкретном фото.
 void openViewer(BuildContext context, List<PhotoItem> photos, int index) {
@@ -25,6 +26,7 @@ class ViewerPage extends StatefulWidget {
 class _ViewerPageState extends State<ViewerPage> {
   late final PageController _controller;
   late int _index;
+  bool _infoOpen = false; // боковая панель свёрнута по умолчанию
 
   @override
   void initState() {
@@ -70,6 +72,15 @@ class _ViewerPageState extends State<ViewerPage> {
           left: 14,
           child: _RoundBtn(icon: Icons.close, onTap: () => Navigator.pop(context)),
         ),
+        // кнопка «инфо» — открывает/прячет выезжающую панель
+        Positioned(
+          top: 14,
+          right: 14,
+          child: _RoundBtn(
+            icon: _infoOpen ? Icons.info : Icons.info_outline,
+            onTap: () => setState(() => _infoOpen = !_infoOpen),
+          ),
+        ),
       ],
     );
 
@@ -78,13 +89,52 @@ class _ViewerPageState extends State<ViewerPage> {
       body: SafeArea(
         child: LayoutBuilder(builder: (ctx, cns) {
           final wide = cns.maxWidth > 720;
-          if (!wide) return stage;
-          return Row(
-            children: [
-              Expanded(child: stage),
-              SizedBox(width: 320, child: _InfoPanel(photo: photo, colors: c)),
-            ],
-          );
+          final dur = SettingsService.instance.reduceMotion
+              ? Duration.zero
+              : const Duration(milliseconds: 220);
+          // на ПК панель шириной 360, на телефоне — лист на 78% высоты
+          final panelW = wide ? 360.0 : cns.maxWidth;
+          final panelH = wide ? cns.maxHeight : cns.maxHeight * 0.78;
+
+          return Stack(children: [
+            Positioned.fill(child: stage),
+
+            // затемнение-подложка: тап мимо панели закрывает её
+            if (_infoOpen)
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: () => setState(() => _infoOpen = false),
+                  child: Container(color: Colors.black.withValues(alpha: 0.45)),
+                ),
+              ),
+
+            // сама панель — выезжает справа (ПК) или снизу (телефон)
+            if (wide)
+              AnimatedPositioned(
+                duration: dur,
+                curve: Curves.easeOutCubic,
+                top: 0,
+                bottom: 0,
+                right: _infoOpen ? 0 : -panelW,
+                width: panelW,
+                child: _InfoPanel(photo: photo, colors: c),
+              )
+            else
+              AnimatedPositioned(
+                duration: dur,
+                curve: Curves.easeOutCubic,
+                left: 0,
+                right: 0,
+                height: panelH,
+                bottom: _infoOpen ? 0 : -panelH,
+                child: ClipRRect(
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(20)),
+                  child: _InfoPanel(
+                      photo: photo, colors: c, showHandle: true),
+                ),
+              ),
+          ]);
         }),
       ),
     );
@@ -117,7 +167,9 @@ class _RoundBtn extends StatelessWidget {
 class _InfoPanel extends StatelessWidget {
   final PhotoItem photo;
   final AuroraColors colors;
-  const _InfoPanel({required this.photo, required this.colors});
+  final bool showHandle; // показывать «ручку» сверху (лист на телефоне)
+  const _InfoPanel(
+      {required this.photo, required this.colors, this.showHandle = false});
 
   @override
   Widget build(BuildContext context) {
@@ -163,8 +215,20 @@ class _InfoPanel extends StatelessWidget {
 
     return Container(
       color: c.surface,
-      padding: const EdgeInsets.fromLTRB(22, 24, 22, 24),
+      padding: EdgeInsets.fromLTRB(22, showHandle ? 10 : 24, 22, 24),
       child: ListView(children: [
+        if (showHandle)
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 14),
+              decoration: BoxDecoration(
+                color: c.line,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
         Text(photo.fileName,
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: c.text)),
         const SizedBox(height: 4),

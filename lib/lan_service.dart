@@ -52,10 +52,10 @@ class LanService extends ChangeNotifier {
     if (isRunning) _snapshot = List.unmodifiable(_live);
   }
 
-  /// Запустить раздачу. Возвращает список локальных адресов, по которым
-  /// устройство доступно (для показа на экране).
-  Future<List<String>> start() async {
-    if (isRunning) return localAddresses();
+  /// Запустить раздачу. Возвращает список локальных адресов (с подписью
+  /// адаптера), по которым устройство доступно.
+  Future<List<LanAdapter>> start() async {
+    if (isRunning) return localAdapters();
     _snapshot = List.unmodifiable(_live);
     _pin = (Random.secure().nextInt(900000) + 100000).toString(); // 6 цифр
     _failCount = 0;
@@ -78,7 +78,7 @@ class LanService extends ChangeNotifier {
     _server = srv;
     srv.listen(_onRequest, onError: (_) {});
     notifyListeners();
-    return localAddresses();
+    return localAdapters();
   }
 
   Future<void> stop() async {
@@ -306,10 +306,11 @@ class LanService extends ChangeNotifier {
     }
   }
 
-  /// Локальные IPv4-адреса (для показа на экране хоста). Приватные сети
-  /// (192.168.* / 10.* / 172.16-31.*) — в начало списка.
-  static Future<List<String>> localAddresses() async {
-    final out = <String>[];
+  /// Локальные IPv4-адреса с подписью адаптера (для показа на экране хоста).
+  /// Приватные домашние сети — выше, VPN/виртуальные — отдельно подписаны,
+  /// чтобы было понятно, какой адрес для чего (например, для VPN-доступа).
+  static Future<List<LanAdapter>> localAdapters() async {
+    final out = <LanAdapter>[];
     try {
       final ifaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4,
@@ -317,22 +318,82 @@ class LanService extends ChangeNotifier {
       );
       for (final iface in ifaces) {
         for (final a in iface.addresses) {
-          out.add(a.address);
+          out.add(LanAdapter(
+            ip: a.address,
+            adapter: iface.name,
+            kind: _adapterKind(iface.name),
+            private: _isPrivate(a.address),
+          ));
         }
       }
     } catch (_) {}
-    out.sort((a, b) {
-      final pa = _isPrivate(a) ? 0 : 1;
-      final pb = _isPrivate(b) ? 0 : 1;
-      return pa.compareTo(pb);
-    });
+    // домашние/локальные сети — в начало
+    out.sort((a, b) => (a.private ? 0 : 1).compareTo(b.private ? 0 : 1));
     return out;
   }
+
+  /// Только адреса строкой (если где-то нужно без подписи).
+  static Future<List<String>> localAddresses() async =>
+      [for (final a in await localAdapters()) a.ip];
 
   static bool _isPrivate(String ip) =>
       ip.startsWith('192.168.') ||
       ip.startsWith('10.') ||
       RegExp(r'^172\.(1[6-9]|2[0-9]|3[0-1])\.').hasMatch(ip);
+
+  /// Грубо угадать тип сети по имени адаптера (кроссплатформенно).
+  static String _adapterKind(String name) {
+    final n = name.toLowerCase();
+    if (n.contains('wg') ||
+        n.contains('tun') ||
+        n.contains('tap') ||
+        n.contains('vpn') ||
+        n.contains('ppp') ||
+        n.contains('wireguard') ||
+        n.contains('nordlynx')) {
+      return 'VPN';
+    }
+    if (n.contains('virtual') ||
+        n.contains('vbox') ||
+        n.contains('vmware') ||
+        n.contains('hyper-v') ||
+        n.contains('vethernet') ||
+        n.contains('docker') ||
+        n.contains('wsl')) {
+      return 'Виртуальная сеть';
+    }
+    if (n.contains('wlan') ||
+        n.contains('wi-fi') ||
+        n.contains('wifi') ||
+        n.contains('wireless') ||
+        n.contains('wlp')) {
+      return 'Wi-Fi';
+    }
+    if (n.contains('eth') || n.contains('enp') || n.contains('ethernet')) {
+      return 'Ethernet (кабель)';
+    }
+    if (n.contains('rmnet') ||
+        n.contains('radio') ||
+        n.contains('ccmni') ||
+        n.contains('radio')) {
+      return 'Моб. интернет';
+    }
+    return name;
+  }
+}
+
+/// Локальный адрес с подписью сетевого адаптера.
+class LanAdapter {
+  final String ip;
+  final String adapter; // системное имя интерфейса
+  final String kind; // человекочитаемый тип (Wi-Fi / VPN / …)
+  final bool private; // приватная домашняя сеть
+  const LanAdapter({
+    required this.ip,
+    required this.adapter,
+    required this.kind,
+    required this.private,
+  });
 }
 
 /// Запрос на ужатие (для compute).

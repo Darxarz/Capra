@@ -128,8 +128,19 @@ class _HostView extends StatefulWidget {
 }
 
 class _HostViewState extends State<_HostView> {
-  List<String> _addresses = const [];
+  List<LanAdapter> _addresses = const [];
   bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // если раздача уже идёт (вернулись на экран) — подтянуть адреса
+    if (LanService.instance.isRunning) {
+      LanService.localAdapters().then((a) {
+        if (mounted) setState(() => _addresses = a);
+      });
+    }
+  }
 
   Future<void> _toggle() async {
     final lan = LanService.instance;
@@ -220,7 +231,7 @@ class _HostViewState extends State<_HostView> {
                       style: TextStyle(color: c.muted, fontSize: 13))
                 else
                   for (final a in _addresses)
-                    _AddressRow(address: '$a:${lan.port}', c: c),
+                    _AddressRow(adapter: a, port: lan.port, c: c),
                 const SizedBox(height: 6),
                 Text('Раздаётся фото: ${lan.sharedCount}',
                     style: TextStyle(color: c.muted, fontSize: 12.5)),
@@ -289,21 +300,53 @@ class _TrustedList extends StatelessWidget {
 }
 
 class _AddressRow extends StatelessWidget {
-  final String address;
+  final LanAdapter adapter;
+  final int port;
   final AuroraColors c;
-  const _AddressRow({required this.address, required this.c});
+  const _AddressRow(
+      {required this.adapter, required this.port, required this.c});
+
+  IconData get _icon {
+    switch (adapter.kind) {
+      case 'VPN':
+        return Icons.vpn_lock_rounded;
+      case 'Виртуальная сеть':
+        return Icons.developer_board_rounded;
+      case 'Wi-Fi':
+        return Icons.wifi_rounded;
+      case 'Ethernet (кабель)':
+        return Icons.settings_ethernet_rounded;
+      case 'Моб. интернет':
+        return Icons.signal_cellular_alt_rounded;
+      default:
+        return Icons.lan_outlined;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final address = '${adapter.ip}:$port';
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(children: [
-        Icon(Icons.lan_outlined, size: 18, color: c.muted),
+        Icon(_icon, size: 20, color: adapter.private ? c.accent : c.muted),
         const SizedBox(width: 10),
         Expanded(
-          child: Text(address,
-              style: TextStyle(
-                  color: c.text, fontSize: 15, fontWeight: FontWeight.w600)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Flexible(
+                child: Text(adapter.kind,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        color: c.muted, fontSize: 11.5,
+                        fontWeight: FontWeight.w600)),
+              ),
+            ]),
+            Text(address,
+                style: TextStyle(
+                    color: c.text, fontSize: 15, fontWeight: FontWeight.w600)),
+          ]),
         ),
         IconButton(
           icon: Icon(Icons.copy_rounded, size: 18, color: c.muted),
