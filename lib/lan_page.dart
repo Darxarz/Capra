@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'theme.dart';
 import 'model.dart';
 import 'lan_service.dart';
@@ -231,7 +233,7 @@ class _HostViewState extends State<_HostView> {
                       style: TextStyle(color: c.muted, fontSize: 13))
                 else
                   for (final a in _addresses)
-                    _AddressRow(adapter: a, port: lan.port, c: c),
+                    _AddressRow(adapter: a, port: lan.port, pin: lan.pin, c: c),
                 const SizedBox(height: 6),
                 Text('Раздаётся фото: ${lan.sharedCount}',
                     style: TextStyle(color: c.muted, fontSize: 12.5)),
@@ -302,9 +304,13 @@ class _TrustedList extends StatelessWidget {
 class _AddressRow extends StatelessWidget {
   final LanAdapter adapter;
   final int port;
+  final String pin;
   final AuroraColors c;
   const _AddressRow(
-      {required this.adapter, required this.port, required this.c});
+      {required this.adapter,
+      required this.port,
+      required this.pin,
+      required this.c});
 
   IconData get _icon {
     switch (adapter.kind) {
@@ -349,6 +355,11 @@ class _AddressRow extends StatelessWidget {
           ]),
         ),
         IconButton(
+          icon: Icon(Icons.qr_code_rounded, size: 20, color: c.muted),
+          tooltip: 'QR-код',
+          onPressed: () => _showQr(context, adapter, port, pin, c),
+        ),
+        IconButton(
           icon: Icon(Icons.copy_rounded, size: 18, color: c.muted),
           tooltip: 'Скопировать',
           onPressed: () {
@@ -360,6 +371,49 @@ class _AddressRow extends StatelessWidget {
       ]),
     );
   }
+}
+
+/// Диалог с QR-кодом для быстрого подключения второго устройства.
+void _showQr(BuildContext context, LanAdapter adapter, int port, String pin,
+    AuroraColors c) {
+  final data = buildLanQr(adapter.ip, port, pin);
+  showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: c.surface,
+      title: Text('Сканируй на другом устройстве',
+          style: TextStyle(color: c.text, fontSize: 16)),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: QrImageView(
+            data: data,
+            version: QrVersions.auto,
+            size: 220,
+            backgroundColor: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text('${adapter.kind} · ${adapter.ip}:$port',
+            style: TextStyle(color: c.muted, fontSize: 12.5)),
+        const SizedBox(height: 2),
+        Text('GOAT → Подключиться → Сканировать QR',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: c.muted, fontSize: 11.5)),
+      ]),
+      actions: [
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: c.accent),
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Готово'),
+        ),
+      ],
+    ),
+  );
 }
 
 // ───────────────────────── ПОДКЛЮЧИТЬСЯ (клиент) ─────────────────────────
@@ -404,6 +458,23 @@ class _ClientViewState extends State<_ClientView> {
     ));
     messenger.showSnackBar(SnackBar(
         content: Text('Подключено к ${conn.hostName}: ${photos.length} фото')));
+  }
+
+  /// Сканировать QR с экрана раздачи: подставить адрес+PIN и сразу сопрячь.
+  Future<void> _scanQr() async {
+    final navigator = Navigator.of(context);
+    final raw = await navigator.push<String>(
+      MaterialPageRoute(builder: (_) => const _ScanPage()),
+    );
+    if (raw == null) return;
+    final data = parseLanQr(raw);
+    if (data == null) {
+      if (mounted) setState(() => _error = 'QR не от GOAT.');
+      return;
+    }
+    _ipCtl.text = '${data.ip}:${data.port}';
+    _pinCtl.text = data.pin;
+    await _pairNew();
   }
 
   /// ПЕРВОЕ сопряжение нового устройства (адрес + PIN).
@@ -594,6 +665,30 @@ class _ClientViewState extends State<_ClientView> {
                   ),
                 ]),
                 const SizedBox(height: 4),
+                // быстрый путь: сканировать QR с экрана раздачи (моб. устройства)
+                if (Platform.isAndroid || Platform.isIOS) ...[
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: c.accent,
+                      side: BorderSide(color: c.accent),
+                      minimumSize: const Size.fromHeight(46),
+                    ),
+                    onPressed: _busy ? null : _scanQr,
+                    icon: const Icon(Icons.qr_code_scanner_rounded),
+                    label: const Text('Сканировать QR'),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(children: [
+                    Expanded(child: Divider(color: c.line)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Text('или вручную',
+                          style: TextStyle(color: c.muted, fontSize: 12)),
+                    ),
+                    Expanded(child: Divider(color: c.line)),
+                  ]),
+                  const SizedBox(height: 14),
+                ],
                 Text('Адрес устройства',
                     style: TextStyle(color: c.muted, fontSize: 12.5,
                         fontWeight: FontWeight.w600)),
@@ -755,6 +850,80 @@ class _Field extends StatelessWidget {
               border: InputBorder.none,
               hintText: hint,
               hintStyle: TextStyle(color: c.muted, fontSize: 14),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+// ───────────────────────── сканер QR ─────────────────────────
+class _ScanPage extends StatefulWidget {
+  const _ScanPage();
+  @override
+  State<_ScanPage> createState() => _ScanPageState();
+}
+
+class _ScanPageState extends State<_ScanPage> {
+  bool _handled = false; // чтобы не сработать на одном коде дважды
+
+  void _onDetect(BarcodeCapture capture) {
+    if (_handled) return;
+    for (final b in capture.barcodes) {
+      final raw = b.rawValue;
+      if (raw != null && parseLanQr(raw) != null) {
+        _handled = true;
+        Navigator.of(context).pop(raw);
+        return;
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(children: [
+        Positioned.fill(child: MobileScanner(onDetect: _onDetect)),
+        // рамка-подсказка в центре
+        Center(
+          child: Container(
+            width: 230,
+            height: 230,
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.white, width: 3),
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ),
+        ),
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                color: Colors.white24,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () => Navigator.pop(context),
+                  child: const SizedBox(
+                    width: 44, height: 44,
+                    child: Icon(Icons.close, color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SafeArea(
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: Padding(
+              padding: EdgeInsets.only(bottom: 30),
+              child: Text('Наведи на QR с экрана раздачи',
+                  style: TextStyle(color: Colors.white, fontSize: 14)),
             ),
           ),
         ),

@@ -29,6 +29,37 @@ class LanError implements Exception {
   String toString() => message;
 }
 
+/// Данные подключения, закодированные в QR-коде.
+class LanQrData {
+  final String ip;
+  final int port;
+  final String pin;
+  const LanQrData({required this.ip, required this.port, required this.pin});
+}
+
+/// Сформировать строку QR: goat://pair?ip=&port=&pin=
+String buildLanQr(String ip, int port, String pin) =>
+    Uri(scheme: 'goat', host: 'pair', queryParameters: {
+      'ip': ip,
+      'port': port.toString(),
+      'pin': pin,
+    }).toString();
+
+/// Разобрать строку QR обратно. null — если это не наш формат.
+LanQrData? parseLanQr(String raw) {
+  try {
+    final u = Uri.parse(raw.trim());
+    if (u.scheme != 'goat') return null;
+    final ip = u.queryParameters['ip'];
+    final pin = u.queryParameters['pin'];
+    final port = int.tryParse(u.queryParameters['port'] ?? '') ?? 8787;
+    if (ip == null || ip.isEmpty || pin == null || pin.isEmpty) return null;
+    return LanQrData(ip: ip, port: port, pin: pin);
+  } catch (_) {
+    return null;
+  }
+}
+
 /// Клиент локальной сети: подключается к устройству-хосту и тянет его галерею.
 class LanClient {
   /// ПЕРВОЕ сопряжение по адресу [ip]:[port] и PIN. Передаёт хосту свой
