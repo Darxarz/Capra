@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:path/path.dart' as p;
 import 'package:photo_manager/photo_manager.dart';
 import 'theme.dart';
@@ -19,6 +20,7 @@ import 'settings_service.dart';
 import 'settings_page.dart';
 import 'lan_service.dart';
 import 'lan_page.dart';
+import 'dims_service.dart';
 
 enum ViewMode { all, dates, albums }
 
@@ -747,7 +749,9 @@ class _TopBar extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           _Tabs(mode: mode, onMode: onMode),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
+          const _LayoutToggle(),
+          const SizedBox(width: 4),
           Icon(Icons.grid_view, size: 16, color: c.muted),
           SizedBox(
             width: 110,
@@ -765,6 +769,42 @@ class _TopBar extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+// ───────── переключатель раскладки: квадраты / мозаика ─────────
+class _LayoutToggle extends StatelessWidget {
+  const _LayoutToggle();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AuroraTheme.of(context).colors;
+    return AnimatedBuilder(
+      animation: SettingsService.instance,
+      builder: (ctx, _) {
+        final mosaic = SettingsService.instance.gridLayout == GridLayout.mosaic;
+        return Tooltip(
+          message: mosaic ? 'Мозаика' : 'Ровные квадраты',
+          child: Material(
+            color: mosaic ? c.accentSoft : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () => SettingsService.instance.setGridLayout(
+                  mosaic ? GridLayout.square : GridLayout.mosaic),
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Icon(
+                  mosaic ? Icons.dashboard_rounded : Icons.grid_view_rounded,
+                  size: 18,
+                  color: mosaic ? c.accentInk : c.muted,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -1265,12 +1305,17 @@ class _AllGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = SettingsService.instance;
+    if (s.gridLayout == GridLayout.mosaic) {
+      return _MosaicGrid(photos: photos, cell: cell);
+    }
+    final gap = s.tileSpacing;
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 18),
       gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: cell,
-        mainAxisSpacing: 4,
-        crossAxisSpacing: 4,
+        mainAxisSpacing: gap,
+        crossAxisSpacing: gap,
         childAspectRatio: 1,
       ),
       itemCount: photos.length,
@@ -1279,6 +1324,72 @@ class _AllGrid extends StatelessWidget {
         cell: cell,
         onTap: () => openViewer(ctx, photos, i),
       ),
+    );
+  }
+}
+
+/// Мозаичная раскладка: плитки разной формы (широкая / квадрат / высокая)
+/// по пропорциям фото. Прямоугольные картинки меньше обрезаются — видно
+/// больше. Размеры берутся из [DimsService] (фоновый кэш заголовков).
+class _MosaicGrid extends StatefulWidget {
+  final List<PhotoItem> photos;
+  final double cell;
+  const _MosaicGrid({required this.photos, required this.cell});
+
+  @override
+  State<_MosaicGrid> createState() => _MosaicGridState();
+}
+
+class _MosaicGridState extends State<_MosaicGrid> {
+  @override
+  void initState() {
+    super.initState();
+    // запустить фоновое заполнение размеров (если ещё не знаем)
+    DimsService.instance.ensureFilled(widget.photos);
+  }
+
+  @override
+  void didUpdateWidget(_MosaicGrid old) {
+    super.didUpdateWidget(old);
+    if (old.photos.length != widget.photos.length) {
+      DimsService.instance.ensureFilled(widget.photos);
+    }
+  }
+
+  /// Пропорция плитки (ширина/высота) из пропорции фото — три фикс-формы.
+  double _tileAspect(double? ratio) {
+    if (ratio == null) return 1.0; // ещё неизвестно — квадрат
+    if (ratio >= 1.4) return 1.5; // широкая (пейзаж)
+    if (ratio <= 0.71) return 0.66; // высокая (портрет)
+    return 1.0; // квадрат
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final gap = SettingsService.instance.tileSpacing;
+    return AnimatedBuilder(
+      animation: DimsService.instance,
+      builder: (ctx, _) {
+        return MasonryGridView.extent(
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 18),
+          maxCrossAxisExtent: widget.cell,
+          mainAxisSpacing: gap,
+          crossAxisSpacing: gap,
+          itemCount: widget.photos.length,
+          itemBuilder: (ctx, i) {
+            final photo = widget.photos[i];
+            final ratio = DimsService.instance.ratioOf(photo.path);
+            return AspectRatio(
+              aspectRatio: _tileAspect(ratio),
+              child: PhotoTile(
+                photo: photo,
+                cell: widget.cell,
+                onTap: () => openViewer(ctx, widget.photos, i),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -1313,13 +1424,14 @@ class _DatesView extends StatelessWidget {
               ]),
         ),
       ));
+      final gap = SettingsService.instance.tileSpacing;
       slivers.add(SliverPadding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         sliver: SliverGrid(
           gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
             maxCrossAxisExtent: cell,
-            mainAxisSpacing: 4,
-            crossAxisSpacing: 4,
+            mainAxisSpacing: gap,
+            crossAxisSpacing: gap,
             childAspectRatio: 1,
           ),
           delegate: SliverChildBuilderDelegate(

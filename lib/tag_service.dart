@@ -99,6 +99,30 @@ class TagService {
     );
   }
 
+  /// Записать только размеры (для мозаичной сетки), не трогая хеши.
+  void storeDimsOnly(String path, int size, int mtime, int width, int height) {
+    _db?.execute(
+      'INSERT INTO file_sig(path, size, mtime, width, height) VALUES(?,?,?,?,?) '
+      'ON CONFLICT(path) DO UPDATE SET width=excluded.width, '
+      'height=excluded.height, size=excluded.size, mtime=excluded.mtime',
+      [path, size, mtime, width, height],
+    );
+  }
+
+  /// Все известные размеры: path → (width, height). Только заполненные.
+  Map<String, List<int>> loadAllDims() {
+    final db = _db;
+    if (db == null) return {};
+    final rows = db.select(
+        'SELECT path, width, height FROM file_sig '
+        'WHERE width IS NOT NULL AND width > 0 AND height > 0');
+    final out = <String, List<int>>{};
+    for (final r in rows) {
+      out[r['path'] as String] = [r['width'] as int, r['height'] as int];
+    }
+    return out;
+  }
+
   /// Пути с заданным точным хешем (для перепривязки тегов после переноса).
   List<String> pathsWithSha(String sha) {
     final db = _db;

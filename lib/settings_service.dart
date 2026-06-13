@@ -7,6 +7,9 @@ enum ThemeModeChoice { system, light, dark }
 /// Стартовый раздел при запуске.
 enum StartSection { all, dates, albums }
 
+/// Раскладка сетки: ровные квадраты или мозаика с разными формами.
+enum GridLayout { square, mosaic }
+
 /// Единый сервис настроек пользователя: палитра, плотность сетки, поведение
 /// при старте, мелкие визуальные предпочтения. Все значения сохраняются
 /// в shared_preferences и рассылаются подписчикам через ChangeNotifier.
@@ -21,6 +24,8 @@ class SettingsService extends ChangeNotifier {
   static const _kAccent = 'goat_accent';
   static const _kCellSize = 'goat_cell_size';
   static const _kGridRadius = 'goat_grid_radius';
+  static const _kTileSpacing = 'goat_tile_spacing';
+  static const _kGridLayout = 'goat_grid_layout';
   static const _kSquareThumbs = 'goat_square_thumbs';
   static const _kReduceMotion = 'goat_reduce_motion';
   static const _kStartSection = 'goat_start_section';
@@ -37,6 +42,8 @@ class SettingsService extends ChangeNotifier {
   String accentId = 'coral';
   double cellSize = 120;
   double gridRadius = 7; // скругление миниатюр
+  double tileSpacing = 4; // зазор между плитками (0 = плотная мозаика)
+  GridLayout gridLayout = GridLayout.square; // раскладка сетки
   bool squareThumbs = true; // true: BoxFit.cover; false: contain
   bool reduceMotion = false;
   StartSection startSection = StartSection.all;
@@ -53,6 +60,10 @@ class SettingsService extends ChangeNotifier {
     accentId = _p.getString(_kAccent) ?? accentId;
     cellSize = _p.getDouble(_kCellSize) ?? cellSize;
     gridRadius = _p.getDouble(_kGridRadius) ?? gridRadius;
+    tileSpacing = _p.getDouble(_kTileSpacing) ?? tileSpacing;
+    gridLayout = (_p.getString(_kGridLayout) == 'mosaic')
+        ? GridLayout.mosaic
+        : GridLayout.square;
     squareThumbs = _p.getBool(_kSquareThumbs) ?? squareThumbs;
     reduceMotion = _p.getBool(_kReduceMotion) ?? reduceMotion;
     startSection = _decodeStart(_p.getString(_kStartSection));
@@ -96,6 +107,18 @@ class SettingsService extends ChangeNotifier {
   void setGridRadius(double v) {
     gridRadius = v;
     _p.setDouble(_kGridRadius, v);
+    notifyListeners();
+  }
+
+  void setTileSpacing(double v) {
+    tileSpacing = v;
+    _p.setDouble(_kTileSpacing, v);
+    notifyListeners();
+  }
+
+  void setGridLayout(GridLayout v) {
+    gridLayout = v;
+    _p.setString(_kGridLayout, v.name);
     notifyListeners();
   }
 

@@ -132,6 +132,21 @@ class _Sections extends StatelessWidget {
             onChanged: s.setGridRadius,
             c: c,
           ),
+          const SizedBox(height: 16),
+          _SliderRow(
+            label: 'Зазор между плитками',
+            value: s.tileSpacing,
+            min: 0, max: 10,
+            valueLabel: s.tileSpacing < 0.5
+                ? 'без зазора'
+                : '${s.tileSpacing.round()} px',
+            onChanged: s.setTileSpacing,
+            c: c,
+          ),
+          const SizedBox(height: 18),
+          _RowLabel('Раскладка', c: c),
+          const SizedBox(height: 8),
+          const _LayoutPicker(),
           const SizedBox(height: 12),
           _SwitchRow(
             title: 'Квадратные миниатюры',
@@ -474,6 +489,52 @@ class _ModePicker extends StatelessWidget {
       chip('Как в системе', Icons.brightness_auto_rounded, ThemeModeChoice.system),
       chip('Светлая', Icons.light_mode_rounded, ThemeModeChoice.light),
       chip('Тёмная', Icons.dark_mode_rounded, ThemeModeChoice.dark),
+    ]);
+  }
+}
+
+// ───────────────────────── выбор раскладки сетки ─────────────────────────
+class _LayoutPicker extends StatelessWidget {
+  const _LayoutPicker();
+  @override
+  Widget build(BuildContext context) {
+    final c = AuroraTheme.of(context).colors;
+    final s = SettingsService.instance;
+    Widget chip(String label, String sub, IconData icon, GridLayout v) {
+      final on = s.gridLayout == v;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => s.setGridLayout(v),
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+            decoration: BoxDecoration(
+              color: on ? c.accentSoft : c.surface2,
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(color: on ? c.accent : c.line),
+            ),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Icon(icon, size: 18, color: on ? c.accentInk : c.muted),
+              const SizedBox(height: 4),
+              Text(label,
+                  style: TextStyle(
+                      color: on ? c.accentInk : c.text,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(height: 2),
+              Text(sub,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: c.muted, fontSize: 10.5)),
+            ]),
+          ),
+        ),
+      );
+    }
+    return Row(children: [
+      chip('Квадраты', 'ровная сетка', Icons.grid_view_rounded,
+          GridLayout.square),
+      chip('Мозаика', 'разные формы, видно больше', Icons.dashboard_rounded,
+          GridLayout.mosaic),
     ]);
   }
 }
