@@ -206,6 +206,24 @@ class Tagger {
     } catch (_) {}
   }
 
+  // признаки «реалистичности»/3D в словаре danbooru — для роутера типа
+  static const _photoMarkers = {
+    'realistic', 'photorealistic', 'photo', 'photo_(medium)', 'real_life',
+  };
+
+  /// Роутер типа изображения (1-й этап конвейера автотегов). Сейчас тип
+  /// выводится из тегов WD-модели; в будущем сюда встанет CLIP/SigLIP-роутер,
+  /// направляющий фото в RAM++, а арт — в WD/JoyTag (см. дорожную карту).
+  String _deriveType(List<({String tag, int category, double conf})> tags) {
+    final general = {for (final t in tags) if (t.category == 0) t.tag};
+    if (general.intersection(_photoMarkers).isNotEmpty) return 'фото';
+    if (general.contains('3d')) return '3d';
+    if (general.contains('comic') || general.contains('screenshot')) {
+      return 'скриншот';
+    }
+    return 'рисунок';
+  }
+
   void _store(
       String path, List<({String tag, int category, double conf})> tags) {
     for (final t in tags) {
@@ -216,6 +234,10 @@ class Tagger {
               : 'general';
       TagService.instance.addTag(path, t.tag,
           category: cat, source: source, confidence: t.conf);
+    }
+    if (tags.isNotEmpty) {
+      TagService.instance.addTag(path, 'тип:${_deriveType(tags)}',
+          category: 'type', source: source, confidence: 1.0);
     }
   }
 

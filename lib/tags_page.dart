@@ -30,7 +30,7 @@ class _TagsPanelState extends State<TagsPanel> {
   bool _byCount = true;
   List<({String tag, int count, String category})> _all = const [];
 
-  static const _catOrder = ['rating', 'character', 'general', 'manual'];
+  static const _catOrder = ['type', 'rating', 'character', 'general', 'manual'];
 
   @override
   void initState() {
@@ -61,6 +61,7 @@ class _TagsPanelState extends State<TagsPanel> {
   }
 
   String _catLabel(String c) => switch (c) {
+        'type' => 'Тип',
         'rating' => 'Рейтинг',
         'character' => 'Персонажи',
         'manual' => 'Вручную',
