@@ -17,6 +17,8 @@ import 'batch_tagger.dart';
 import 'dedup_page.dart';
 import 'settings_service.dart';
 import 'settings_page.dart';
+import 'lan_service.dart';
+import 'lan_page.dart';
 
 enum ViewMode { all, dates, albums }
 
@@ -269,6 +271,8 @@ class _HomePageState extends State<HomePage> {
     try {
       TagService.instance.relink({for (final p in photos) p.path});
     } catch (_) {}
+    // отдать актуальную библиотеку раздаче по локальной сети
+    LanService.instance.setLibrary(photos);
     setState(() {
       _photos = photos;
       _albums = LibraryService.albums(photos);
@@ -296,6 +300,12 @@ class _HomePageState extends State<HomePage> {
     if (_photos.isEmpty) return;
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => DupPage(photos: _photos, onLibraryChanged: _rescan),
+    ));
+  }
+
+  void _openLan() {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => const LanPage(),
     ));
   }
 
@@ -443,6 +453,7 @@ class _HomePageState extends State<HomePage> {
               onTags: () => setState(() => _tagsPanelOpen = !_tagsPanelOpen),
               tagsOpen: _tagsPanelOpen,
               onDedup: _openDedup,
+              onLan: _openLan,
               onSettings: _openSettings,
             ),
             if (_tagsPanelOpen)
@@ -616,6 +627,7 @@ class _Rail extends StatelessWidget {
   final VoidCallback onTags;
   final bool tagsOpen;
   final VoidCallback onDedup;
+  final VoidCallback onLan;
   final VoidCallback onSettings;
   const _Rail({
     required this.mode,
@@ -625,6 +637,7 @@ class _Rail extends StatelessWidget {
     required this.onTags,
     required this.tagsOpen,
     required this.onDedup,
+    required this.onLan,
     required this.onSettings,
   });
 
@@ -677,6 +690,12 @@ class _Rail extends StatelessWidget {
               null, onTap: onFav, active: favOnly),
           item(Icons.sell_outlined, null, onTap: onTags, active: tagsOpen),
           item(Icons.content_copy_outlined, null, onTap: onDedup),
+          // активная подсветка, пока раздаём по сети
+          AnimatedBuilder(
+            animation: LanService.instance,
+            builder: (_, __) => item(Icons.wifi_tethering_rounded, null,
+                onTap: onLan, active: LanService.instance.isRunning),
+          ),
           const Spacer(),
           item(Icons.settings_outlined, null, onTap: onSettings),
           const SizedBox(height: 10),

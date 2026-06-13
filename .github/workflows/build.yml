@@ -62,6 +62,11 @@ jobs:
           if ($mc -notmatch 'requestLegacyExternalStorage') {
             $mc = $mc -replace '(<application)', '$1 android:requestLegacyExternalStorage="true"'
           }
+          # локальная сеть: клиент тянет фото по http:// с другого устройства —
+          # Android по умолчанию блокирует cleartext-трафик, разрешаем его
+          if ($mc -notmatch 'usesCleartextTraffic') {
+            $mc = $mc -replace '(<application)', '$1 android:usesCleartextTraffic="true"'
+          }
           # имя приложения на устройстве — GOAT (вместо служебного aurora_gallery)
           $mc = $mc -replace 'android:label="[^"]+"', 'android:label="GOAT"'
           Set-Content $m $mc
