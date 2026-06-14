@@ -7,6 +7,7 @@ import 'theme.dart';
 import 'settings_service.dart';
 import 'tag_service.dart';
 import 'update_service.dart';
+import 'library_service.dart';
 
 /// Полноэкранный раздел настроек: внешний вид, сетка, теги, о приложении.
 class SettingsPage extends StatefulWidget {
@@ -206,6 +207,12 @@ class _Sections extends StatelessWidget {
                     style: TextStyle(color: c.muted, fontSize: 12.5)),
               ),
             ),
+          // на Android секретные .nomedia-папки видны только с «доступом ко
+          // всем файлам» (их прячет MediaStore) — отдельный опт-ин
+          if (Platform.isAndroid) ...[
+            const SizedBox(height: 10),
+            const _AllFilesTile(),
+          ],
         ])),
         const SizedBox(height: 22),
 
@@ -469,6 +476,72 @@ class _ActionRow extends StatelessWidget {
         ]),
       ),
     );
+  }
+}
+
+// ── доступ ко всем файлам (Android) — для секретных .nomedia-папок ──
+class _AllFilesTile extends StatefulWidget {
+  const _AllFilesTile();
+  @override
+  State<_AllFilesTile> createState() => _AllFilesTileState();
+}
+
+class _AllFilesTileState extends State<_AllFilesTile> {
+  bool _granted = false;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    LibraryService.hasAllFilesAccess().then((v) {
+      if (mounted) setState(() => _granted = v);
+    });
+  }
+
+  Future<void> _request() async {
+    setState(() => _busy = true);
+    final ok = await LibraryService.requestAllFilesAccess();
+    if (mounted) {
+      setState(() {
+        _granted = ok;
+        _busy = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AuroraTheme.of(context).colors;
+    return Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Доступ ко всем файлам (секретные папки)',
+              style: TextStyle(
+                  color: c.text, fontSize: 14, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 2),
+          Text(
+              _granted
+                  ? 'Включён — GOAT видит скрытые .nomedia-папки, другие галереи нет.'
+                  : 'Нужен, чтобы видеть в GOAT секретные папки, скрытые от '
+                      'других галерей через .nomedia.',
+              style: TextStyle(color: c.muted, fontSize: 12.5)),
+        ]),
+      ),
+      const SizedBox(width: 10),
+      if (_granted)
+        Icon(Icons.check_circle_rounded, color: c.accent, size: 22)
+      else
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: c.accent),
+          onPressed: _busy ? null : _request,
+          child: _busy
+              ? const SizedBox(
+                  width: 16, height: 16,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white))
+              : const Text('Включить'),
+        ),
+    ]);
   }
 }
 

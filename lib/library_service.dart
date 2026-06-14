@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:photo_manager/photo_manager.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'model.dart';
 
 /// Сканирование папок и работа с библиотекой.
@@ -22,6 +23,26 @@ class LibraryService {
     final ps = await PhotoManager.requestPermissionExtend();
     return ps.isAuth || ps.hasAccess;
   }
+
+  /// «Доступ ко всем файлам» (Android) — нужен для секретных .nomedia-папок,
+  /// которые система прячет от MediaStore. На ПК ограничений нет.
+  static Future<bool> hasAllFilesAccess() async {
+    if (!Platform.isAndroid) return true;
+    return Permission.manageExternalStorage.isGranted;
+  }
+
+  /// Запросить «Доступ ко всем файлам» (открывает системный экран). true —
+  /// если в итоге выдан.
+  static Future<bool> requestAllFilesAccess() async {
+    if (!Platform.isAndroid) return true;
+    final s = await Permission.manageExternalStorage.request();
+    return s.isGranted;
+  }
+
+  /// Просканировать конкретные папки по пути (для секретных .nomedia-папок,
+  /// которых нет в MediaStore). Требует «Доступ ко всем файлам» на Android.
+  static Future<List<PhotoItem>> scanFolders(List<String> paths) =>
+      scanAll(paths);
 
   /// Все изображения устройства через MediaStore (как в обычных галереях):
   /// без выбора папок и без доступа ко всем файлам. Внутренняя память + SD.

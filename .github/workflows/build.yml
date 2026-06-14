@@ -58,6 +58,12 @@ jobs:
             $perms = "    <uses-permission android:name=`"android.permission.INTERNET`"/>`n    <uses-permission android:name=`"android.permission.CAMERA`"/>`n    <uses-permission android:name=`"android.permission.READ_MEDIA_IMAGES`"/>`n    <uses-permission android:name=`"android.permission.READ_MEDIA_VISUAL_USER_SELECTED`"/>`n    <uses-permission android:name=`"android.permission.READ_EXTERNAL_STORAGE`" android:maxSdkVersion=`"32`"/>`n    "
             $mc = $mc -replace '(<manifest[^>]*>\s*)', "`$1$perms"
           }
+          # «Доступ ко всем файлам» — опционально, ТОЛЬКО для секретных
+          # .nomedia-папок (их прячет MediaStore). Запрашивается из настроек.
+          if ($mc -notmatch 'MANAGE_EXTERNAL_STORAGE') {
+            $mperm = "    <uses-permission android:name=`"android.permission.MANAGE_EXTERNAL_STORAGE`"/>`n    "
+            $mc = $mc -replace '(<manifest[^>]*>\s*)', "`$1$mperm"
+          }
           # фоновый сервер раздачи: foreground-сервис типа dataSync (Android 14+
           # требует и разрешение, и объявление сервиса с этим типом)
           if ($mc -notmatch 'FOREGROUND_SERVICE_DATA_SYNC') {

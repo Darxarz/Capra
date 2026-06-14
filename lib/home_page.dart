@@ -59,6 +59,7 @@ class _HomePageState extends State<HomePage> {
   FolderNode? _treeCache; // построенное древо папок (кэш)
   int _tagsRev = 0; // счётчик для пересоздания панели тегов после импорта
   bool _mediaGranted = false; // на Android: есть доступ к фото устройства
+  bool _allFiles = false; // на Android: «доступ ко всем файлам» (секретные папки)
   bool get _useDeviceMedia => Platform.isAndroid || Platform.isIOS;
 
   /// Папка скрыта (сама или её родитель в списке скрытых)?
@@ -155,8 +156,22 @@ class _HomePageState extends State<HomePage> {
   Future<void> _toggleHideFolder(AlbumItem album) async {
     final s = SettingsService.instance;
     final nowHidden = !s.isHidden(album.folderPath);
+    final messenger = ScaffoldMessenger.of(context);
+
+    // на Android, чтобы записать .nomedia и потом видеть папку только в GOAT,
+    // нужен «доступ ко всем файлам». Просим один раз.
+    if (_useDeviceMedia && nowHidden && !_allFiles) {
+      final ok = await _ensureAllFiles();
+      if (!ok) {
+        messenger.showSnackBar(const SnackBar(
+            content: Text('Для секретных папок нужен «доступ ко всем файлам» '
+                '(Настройки → Приватность).')));
+        return;
+      }
+    }
+
     s.setFolderHidden(album.folderPath, nowHidden);
-    // .nomedia — лучшее усилие, не критично при отказе
+    // .nomedia — другие галереи перестают сканировать папку
     try {
       final f = File(p.join(album.folderPath, '.nomedia'));
       if (nowHidden) {
@@ -165,14 +180,21 @@ class _HomePageState extends State<HomePage> {
         if (f.existsSync()) f.deleteSync();
       }
     } catch (_) {}
-    setState(_applyHidden);
+    await _rescan(); // пересобрать (на Android — досканировать секретную по пути)
     if (!mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(SnackBar(
       content: Text(nowHidden
           ? 'Папка скрыта. Показать — в Настройках → «Показывать скрытые».'
           : 'Папка снова видна.'),
     ));
+  }
+
+  /// Убедиться, что есть «доступ ко всем файлам» (Android). Запрашивает при нужде.
+  Future<bool> _ensureAllFiles() async {
+    if (_allFiles) return true;
+    final granted = await LibraryService.requestAllFilesAccess();
+    if (mounted) setState(() => _allFiles = granted);
+    return granted;
   }
 
   void _openTreeFolder(FolderNode node) {
@@ -281,6 +303,7 @@ class _HomePageState extends State<HomePage> {
     // на Android/iOS — сразу доступ к фото устройства (как обычные галереи)
     if (_useDeviceMedia) {
       _mediaGranted = await LibraryService.requestMediaAccess();
+      _allFiles = await LibraryService.hasAllFilesAccess();
     } else if (_folders.isEmpty) {
       // на ПК по умолчанию открываем системную папку «Изображения»
       final pics = _defaultPicturesDir();
@@ -357,6 +380,15 @@ class _HomePageState extends State<HomePage> {
     }
     if (_folders.isNotEmpty) {
       addAll(await LibraryService.scanAll(_folders));
+    }
+    // секретные .nomedia-папки: на Android их нет в MediaStore — сканируем
+    // по пути напрямую (нужен «доступ ко всем файлам»). На ПК они и так в
+    // обычном скане папок. Видны только в GOAT (фильтр скрытых — в _applyHidden).
+    final hidden = SettingsService.instance.hiddenFolders.toList();
+    if (_useDeviceMedia && _allFiles && hidden.isNotEmpty) {
+      try {
+        addAll(await LibraryService.scanFolders(hidden));
+      } catch (_) {}
     }
     photos.sort((a, b) => b.modified.compareTo(a.modified));
     if (!mounted) return;
