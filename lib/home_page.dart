@@ -587,7 +587,7 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
               child: FilledButton.icon(
                 style: FilledButton.styleFrom(
                   backgroundColor: c.accent,
@@ -601,10 +601,52 @@ class _HomePageState extends State<HomePage> {
                 label: const Text('Добавить папку'),
               ),
             ),
+            if (Platform.isWindows)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: c.accent,
+                    side: BorderSide(color: c.accent),
+                    minimumSize: const Size.fromHeight(46),
+                  ),
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    await _scanWholePc();
+                  },
+                  icon: const Icon(Icons.travel_explore_rounded),
+                  label: const Text('Найти все картинки на ПК'),
+                ),
+              ),
           ]),
         ),
       ),
     );
+  }
+
+  /// Глубокий поиск всех картинок на компьютере (Windows). Найденные папки
+  /// добавляются в библиотеку (минимальный набор верхних), чтобы повторные
+  /// сканы были быстрыми.
+  Future<void> _scanWholePc() async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _loading = true);
+    final photos = await LibraryService.scanWholePc();
+    final folders = LibraryService.topFolders(
+        {for (final ph in photos) ph.folderPath});
+    await LibraryService.setFolders(folders);
+    if (!mounted) return;
+    try {
+      TagService.instance.relink({for (final ph in photos) ph.path});
+    } catch (_) {}
+    setState(() {
+      _folders = folders;
+      _photos = photos;
+      _applyHidden();
+      _loading = false;
+    });
+    messenger.showSnackBar(SnackBar(
+        content: Text('Найдено картинок: ${photos.length} '
+            'в ${folders.length} папках')));
   }
 
   @override

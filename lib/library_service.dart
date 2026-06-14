@@ -44,6 +44,22 @@ class LibraryService {
   static Future<List<PhotoItem>> scanFolders(List<String> paths) =>
       scanAll(paths);
 
+  /// Найти все картинки на компьютере (Windows): обходит все диски, пропуская
+  /// системные/служебные папки. Возвращает фото в фоне.
+  static Future<List<PhotoItem>> scanWholePc() => compute(_scanWholePc, true);
+
+  /// Минимальный набор «верхних» папок: убираем те, у кого предок уже в наборе
+  /// (чтобы не сканировать одно и то же дважды).
+  static List<String> topFolders(Set<String> dirs) {
+    final sorted = dirs.toList()..sort((a, b) => a.length.compareTo(b.length));
+    final res = <String>[];
+    for (final d in sorted) {
+      final sep = Platform.pathSeparator;
+      if (!res.any((r) => d == r || d.startsWith('$r$sep'))) res.add(d);
+    }
+    return res;
+  }
+
   /// Все изображения устройства через MediaStore (как в обычных галереях):
   /// без выбора папок и без доступа ко всем файлам. Внутренняя память + SD.
   static Future<List<PhotoItem>> scanDeviceMedia() async {
@@ -201,6 +217,79 @@ Future<List<PhotoItem>> _scanFolders(List<String> roots) async {
     final part = await _scanFolder(root);
     for (final p in part) {
       if (seen.add(p.path)) out.add(p);
+    }
+  }
+  out.sort((a, b) => b.modified.compareTo(a.modified));
+  return out;
+}
+
+/// Папки, которые НЕ обходим при поиске по всему ПК (системные/служебные).
+const Set<String> _skipDirs = {
+  'windows', 'program files', 'program files (x86)', 'programdata',
+  r'$recycle.bin', 'system volume information', 'recovery', 'appdata',
+  'node_modules', '.git', '.cache', 'temp', 'tmp', 'cache',
+  'windows.old', 'msocache', 'perflogs',
+};
+
+/// Обойти все диски (Windows) и собрать изображения, пропуская системные папки.
+/// Синхронный обход со стеком (без рекурсии) — устойчив к глубоким деревьям.
+List<PhotoItem> _scanWholePc(bool _) {
+  final out = <PhotoItem>[];
+  final seen = <String>{};
+  final sep = Platform.pathSeparator;
+
+  // корни дисков: A:\ … Z:\ (существующие)
+  final roots = <String>[];
+  if (Platform.isWindows) {
+    for (var ch = 'A'.codeUnitAt(0); ch <= 'Z'.codeUnitAt(0); ch++) {
+      final root = '${String.fromCharCode(ch)}:$sep';
+      try {
+        if (Directory(root).existsSync()) roots.add(root);
+      } catch (_) {}
+    }
+  } else {
+    roots.add(sep); // на прочих ОС — от корня
+  }
+
+  final stack = <String>[...roots];
+  while (stack.isNotEmpty) {
+    final dirPath = stack.removeLast();
+    List<FileSystemEntity> entries;
+    try {
+      entries = Directory(dirPath).listSync(followLinks: false);
+    } catch (_) {
+      continue; // нет доступа — пропускаем
+    }
+    for (final ent in entries) {
+      final base = ent.path.split(sep).last;
+      if (ent is Directory) {
+        final low = base.toLowerCase();
+        if (low.startsWith('.') || _skipDirs.contains(low)) continue;
+        stack.add(ent.path);
+      } else if (ent is File) {
+        final lower = ent.path.toLowerCase();
+        final dot = lower.lastIndexOf('.');
+        if (dot < 0) continue;
+        if (!kImageExtensions.contains(lower.substring(dot))) continue;
+        if (!seen.add(ent.path)) continue;
+        FileStat st;
+        try {
+          st = ent.statSync();
+        } catch (_) {
+          continue;
+        }
+        final folderPath = ent.parent.path;
+        final segs =
+            folderPath.split(sep).where((s) => s.isNotEmpty).toList();
+        out.add(PhotoItem(
+          path: ent.path,
+          isGif: lower.endsWith('.gif'),
+          folderPath: folderPath,
+          folderName: segs.isNotEmpty ? segs.last : folderPath,
+          modified: st.modified,
+          sizeBytes: st.size,
+        ));
+      }
     }
   }
   out.sort((a, b) => b.modified.compareTo(a.modified));
