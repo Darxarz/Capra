@@ -10,6 +10,9 @@ enum StartSection { all, dates, albums }
 /// Раскладка сетки: ровные квадраты или мозаика с разными формами.
 enum GridLayout { square, mosaic }
 
+/// Оформление зазоров между плитками.
+enum GapStyle { none, color, silver, gold, holographic, polaroid }
+
 /// Единый сервис настроек пользователя: палитра, плотность сетки, поведение
 /// при старте, мелкие визуальные предпочтения. Все значения сохраняются
 /// в shared_preferences и рассылаются подписчикам через ChangeNotifier.
@@ -33,6 +36,8 @@ class SettingsService extends ChangeNotifier {
   static const _kShowGif = 'goat_show_gif_badge';
   static const _kHiddenFolders = 'goat_hidden_folders';
   static const _kShowHidden = 'goat_show_hidden';
+  static const _kGapStyle = 'goat_gap_style';
+  static const _kGapColor = 'goat_gap_color';
 
   late SharedPreferences _p;
   bool _ready = false;
@@ -53,6 +58,8 @@ class SettingsService extends ChangeNotifier {
   bool showGifBadge = true;
   Set<String> hiddenFolders = {}; // скрытые папки (секретные альбомы)
   bool showHidden = false; // показывать ли скрытые папки в галерее
+  GapStyle gapStyle = GapStyle.none; // оформление зазоров
+  int gapColorValue = 0xFFC96442; // цвет для GapStyle.color (ARGB)
 
   bool get ready => _ready;
 
@@ -75,6 +82,10 @@ class SettingsService extends ChangeNotifier {
     showGifBadge = _p.getBool(_kShowGif) ?? showGifBadge;
     hiddenFolders = (_p.getStringList(_kHiddenFolders) ?? const []).toSet();
     showHidden = _p.getBool(_kShowHidden) ?? showHidden;
+    gapStyle = GapStyle.values.firstWhere(
+        (e) => e.name == _p.getString(_kGapStyle),
+        orElse: () => GapStyle.none);
+    gapColorValue = _p.getInt(_kGapColor) ?? gapColorValue;
     _ready = true;
     notifyListeners();
   }
@@ -161,6 +172,18 @@ class SettingsService extends ChangeNotifier {
   void setShowHidden(bool v) {
     showHidden = v;
     _p.setBool(_kShowHidden, v);
+    notifyListeners();
+  }
+
+  void setGapStyle(GapStyle v) {
+    gapStyle = v;
+    _p.setString(_kGapStyle, v.name);
+    notifyListeners();
+  }
+
+  void setGapColor(int argb) {
+    gapColorValue = argb;
+    _p.setInt(_kGapColor, argb);
     notifyListeners();
   }
 

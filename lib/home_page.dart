@@ -26,6 +26,7 @@ import 'lan_page.dart';
 import 'dims_service.dart';
 import 'selection.dart';
 import 'media_actions.dart';
+import 'gap_background.dart';
 
 enum ViewMode { all, dates, albums }
 
@@ -1572,7 +1573,8 @@ class _UpdateProgressDialogState extends State<_UpdateProgressDialog> {
 class _Tabs extends StatelessWidget {
   final ViewMode mode;
   final ValueChanged<ViewMode> onMode;
-  const _Tabs({required this.mode, required this.onMode});
+  final List<ViewMode>? only; // ограничить набор (например, без «Альбомы»)
+  const _Tabs({required this.mode, required this.onMode, this.only});
 
   @override
   Widget build(BuildContext context) {
@@ -1608,9 +1610,11 @@ class _Tabs extends StatelessWidget {
         border: Border.all(color: c.line),
       ),
       child: Row(children: [
-        tab('Все', ViewMode.all),
-        tab('По датам', ViewMode.dates),
-        tab('Альбомы', ViewMode.albums),
+        if (only == null || only!.contains(ViewMode.all)) tab('Все', ViewMode.all),
+        if (only == null || only!.contains(ViewMode.dates))
+          tab('По датам', ViewMode.dates),
+        if (only == null || only!.contains(ViewMode.albums))
+          tab('Альбомы', ViewMode.albums),
       ]),
     );
   }
@@ -1959,7 +1963,8 @@ class _AllGridState extends State<_AllGrid> {
           onTap: () => openViewer(ctx, widget.photos, i),
         ),
       );
-      if (!widget.selectable) return grid;
+      final wrapped = GapBackground(child: grid);
+      if (!widget.selectable) return wrapped;
       // телефон: «паровозик» долгим тапом; ПК: правой кнопкой мыши (Listener)
       return Listener(
         onPointerDown: _onPointerDown,
@@ -1971,7 +1976,7 @@ class _AllGridState extends State<_AllGrid> {
           onLongPressMoveUpdate: _onLongPressMove,
           onLongPressEnd: _onLongPressEnd,
           onLongPressCancel: () => _onLongPressEnd(null),
-          child: grid,
+          child: wrapped,
         ),
       );
     });
@@ -2032,18 +2037,20 @@ class _MosaicGridState extends State<_MosaicGrid> {
             _sig = sig;
           }
 
-          return GridView.custom(
-            padding: _pad,
-            gridDelegate: _QuiltDelegate(_layout!),
-            childrenDelegate: SliverChildBuilderDelegate(
-              (ctx3, i) => PhotoTile(
-                photo: widget.photos[i],
-                cell: widget.cell,
-                onLongPress: () =>
-                    Selection.instance.enter(widget.photos[i].path),
-                onTap: () => openViewer(ctx3, widget.photos, i),
+          return GapBackground(
+            child: GridView.custom(
+              padding: _pad,
+              gridDelegate: _QuiltDelegate(_layout!),
+              childrenDelegate: SliverChildBuilderDelegate(
+                (ctx3, i) => PhotoTile(
+                  photo: widget.photos[i],
+                  cell: widget.cell,
+                  onLongPress: () =>
+                      Selection.instance.enter(widget.photos[i].path),
+                  onTap: () => openViewer(ctx3, widget.photos, i),
+                ),
+                childCount: widget.photos.length,
               ),
-              childCount: widget.photos.length,
             ),
           );
         });
@@ -2249,7 +2256,7 @@ class _DatesView extends StatelessWidget {
       ));
     });
     slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 18)));
-    return CustomScrollView(slivers: slivers);
+    return GapBackground(child: CustomScrollView(slivers: slivers));
   }
 }
 
@@ -2509,7 +2516,7 @@ class _AlbumRow extends StatelessWidget {
 }
 
 // ───────────────────────── экран содержимого папки ─────────────────────────
-class _FolderPage extends StatelessWidget {
+class _FolderPage extends StatefulWidget {
   final AlbumItem album;
   final List<PhotoItem> photos;
   final double cell;
@@ -2520,16 +2527,40 @@ class _FolderPage extends StatelessWidget {
   });
 
   @override
+  State<_FolderPage> createState() => _FolderPageState();
+}
+
+class _FolderPageState extends State<_FolderPage> {
+  String _query = '';
+  Set<String> _tagMatch = const {};
+  ViewMode _mode = ViewMode.all; // внутри папки: Все / По датам
+
+  /// Фото папки с учётом поиска (имя файла / папка / теги).
+  List<PhotoItem> get _visible {
+    if (_query.trim().isEmpty) return widget.photos;
+    final q = _query.trim().toLowerCase();
+    return widget.photos
+        .where((p) =>
+            p.fileName.toLowerCase().contains(q) ||
+            p.folderName.toLowerCase().contains(q) ||
+            _tagMatch.contains(p.path))
+        .toList();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
+    final cell = SettingsService.instance.cellSize;
+    final visible = _visible;
     return Scaffold(
       backgroundColor: c.bg,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // заголовок
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
+              padding: const EdgeInsets.fromLTRB(8, 8, 16, 4),
               child: Row(children: [
                 IconButton(
                   onPressed: () => Navigator.pop(context),
@@ -2541,22 +2572,68 @@ class _FolderPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(album.name,
+                      Text(widget.album.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w800,
                               color: c.text)),
-                      Text('${album.count} изображений',
+                      Text('${visible.length} из ${widget.album.count}',
                           style: TextStyle(fontSize: 12, color: c.muted)),
                     ],
                   ),
                 ),
               ]),
             ),
+            // панель: поиск + режимы + плотность + раскладка (как на главной)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: Row(children: [
+                Expanded(
+                  child: _SearchField(
+                    initial: _query,
+                    onSearch: (q) => setState(() {
+                      _query = q;
+                      _tagMatch = q.trim().isEmpty
+                          ? const {}
+                          : TagService.instance.pathsMatchingTag(q);
+                    }),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _Tabs(
+                  mode: _mode,
+                  onMode: (m) => setState(() => _mode = m),
+                  only: const [ViewMode.all, ViewMode.dates],
+                ),
+                const SizedBox(width: 8),
+                const _LayoutToggle(),
+                const SizedBox(width: 2),
+                Icon(Icons.grid_view, size: 16, color: c.muted),
+                SizedBox(
+                  width: 100,
+                  child: AnimatedBuilder(
+                    animation: SettingsService.instance,
+                    builder: (_, __) => Slider(
+                      value: SettingsService.instance.cellSize,
+                      min: 70,
+                      max: 220,
+                      activeColor: c.accent,
+                      onChanged: SettingsService.instance.setCellSize,
+                    ),
+                  ),
+                ),
+              ]),
+            ),
             Expanded(
-                child: _AllGrid(photos: photos, cell: cell, selectable: false)),
+              child: visible.isEmpty
+                  ? const _NoResults(favOnly: false)
+                  : (_mode == ViewMode.dates
+                      ? _DatesView(photos: visible, cell: cell)
+                      : _AllGrid(
+                          photos: visible, cell: cell, selectable: false)),
+            ),
           ],
         ),
       ),

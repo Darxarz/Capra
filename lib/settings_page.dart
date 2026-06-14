@@ -148,6 +148,10 @@ class _Sections extends StatelessWidget {
           _RowLabel('Раскладка', c: c),
           const SizedBox(height: 8),
           const _LayoutPicker(),
+          const SizedBox(height: 18),
+          _RowLabel('Зазоры', c: c),
+          const SizedBox(height: 8),
+          const _GapStylePicker(),
           const SizedBox(height: 12),
           _SwitchRow(
             title: 'Квадратные миниатюры',
@@ -584,6 +588,119 @@ class _ModePicker extends StatelessWidget {
       chip('Как в системе', Icons.brightness_auto_rounded, ThemeModeChoice.system),
       chip('Светлая', Icons.light_mode_rounded, ThemeModeChoice.light),
       chip('Тёмная', Icons.dark_mode_rounded, ThemeModeChoice.dark),
+    ]);
+  }
+}
+
+// ───────────────────────── выбор стиля зазоров ─────────────────────────
+class _GapStylePicker extends StatelessWidget {
+  const _GapStylePicker();
+
+  static const _items = [
+    (GapStyle.none, 'Нет'),
+    (GapStyle.color, 'Цвет'),
+    (GapStyle.silver, 'Серебро'),
+    (GapStyle.gold, 'Золото'),
+    (GapStyle.holographic, 'Голография'),
+    (GapStyle.polaroid, 'Полароид'),
+  ];
+
+  static const _palette = [
+    0xFFC96442, 0xFFD08F3A, 0xFF3F7D54, 0xFF3E8C8C, 0xFF3D7AB8,
+    0xFF8C5FB8, 0xFFC7508B, 0xFF2B2620, 0xFFFAFAF7,
+  ];
+
+  BoxDecoration _swatch(GapStyle st, int colorValue) {
+    switch (st) {
+      case GapStyle.none:
+        return BoxDecoration(
+          color: const Color(0x00000000),
+          border: Border.all(color: const Color(0x55888888)),
+          borderRadius: BorderRadius.circular(8),
+        );
+      case GapStyle.color:
+        return BoxDecoration(
+            color: Color(colorValue), borderRadius: BorderRadius.circular(8));
+      case GapStyle.polaroid:
+        return BoxDecoration(
+            color: const Color(0xFFFAFAF7),
+            border: Border.all(color: const Color(0x33000000)),
+            borderRadius: BorderRadius.circular(8));
+      case GapStyle.silver:
+        return _grad(const [Color(0xFF8E8E8E), Color(0xFFFFFFFF), Color(0xFF9C9C9C)]);
+      case GapStyle.gold:
+        return _grad(const [Color(0xFF7C5A1E), Color(0xFFFFF0C0), Color(0xFF8A6A24)]);
+      case GapStyle.holographic:
+        return _grad(const [
+          Color(0xFFFF5D8F), Color(0xFFFFF35D), Color(0xFF5DD8FF), Color(0xFF8A5DFF)
+        ]);
+    }
+  }
+
+  BoxDecoration _grad(List<Color> colors) => BoxDecoration(
+        gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: colors),
+        borderRadius: BorderRadius.circular(8),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AuroraTheme.of(context).colors;
+    final s = SettingsService.instance;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Wrap(spacing: 10, runSpacing: 10, children: [
+        for (final (st, label) in _items)
+          GestureDetector(
+            onTap: () => s.setGapStyle(st),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Container(
+                width: 54,
+                height: 40,
+                decoration: _swatch(st, s.gapColorValue).copyWith(
+                  border: Border.all(
+                    color: s.gapStyle == st ? c.accent : c.line,
+                    width: s.gapStyle == st ? 2.5 : 1,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(label,
+                  style: TextStyle(
+                      color: s.gapStyle == st ? c.accentInk : c.muted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600)),
+            ]),
+          ),
+      ]),
+      // палитра цветов для стиля «Цвет»
+      if (s.gapStyle == GapStyle.color) ...[
+        const SizedBox(height: 12),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          for (final v in _palette)
+            GestureDetector(
+              onTap: () => s.setGapColor(v),
+              child: Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: Color(v),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: s.gapColorValue == v ? c.text : c.line,
+                    width: s.gapColorValue == v ? 3 : 1,
+                  ),
+                ),
+              ),
+            ),
+        ]),
+      ],
+      if (s.gapStyle != GapStyle.none) ...[
+        const SizedBox(height: 8),
+        Text('Зазоры видны лучше при ненулевом «зазоре между плитками» выше.',
+            style: TextStyle(color: c.muted, fontSize: 11.5)),
+      ],
     ]);
   }
 }
