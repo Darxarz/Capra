@@ -55,6 +55,7 @@ class _HomePageState extends State<HomePage> {
   Set<String> _filterPaths = const {}; // пути, подходящие под фильтр тегов
   bool _tagsPanelOpen = false; // открыта боковая панель тегов
   bool _favOnly = false; // показывать только избранное
+  bool _projectsOnly = false; // показывать только проекты (KRA/PSD)
   FolderView _folderView = FolderView.grid; // вид раздела «Альбомы»
   FolderNode? _treeCache; // построенное древо папок (кэш)
   int _tagsRev = 0; // счётчик для пересоздания панели тегов после импорта
@@ -93,6 +94,12 @@ class _HomePageState extends State<HomePage> {
   /// Фото с учётом поиска и фильтра «только избранное».
   List<PhotoItem> get _visiblePhotos {
     Iterable<PhotoItem> r = _shown;
+    // отдельный режим: только проекты (KRA/PSD) или, наоборот, без них
+    if (_projectsOnly) {
+      r = r.where((p) => p.isProject);
+    } else {
+      r = r.where((p) => !p.isProject);
+    }
     if (_favOnly) {
       final favs = Favorites.instance.paths;
       r = r.where((p) => favs.contains(p.path));
@@ -663,6 +670,11 @@ class _HomePageState extends State<HomePage> {
               onMode: (m) => setState(() => _mode = m),
               favOnly: _favOnly,
               onFav: () => setState(() => _favOnly = !_favOnly),
+              projectsOnly: _projectsOnly,
+              onProjects: () => setState(() {
+                _projectsOnly = !_projectsOnly;
+                if (_projectsOnly) _mode = ViewMode.all;
+              }),
               onTags: () => setState(() => _tagsPanelOpen = !_tagsPanelOpen),
               tagsOpen: _tagsPanelOpen,
               onDedup: _openDedup,
@@ -922,6 +934,8 @@ class _Rail extends StatelessWidget {
   final ValueChanged<ViewMode> onMode;
   final bool favOnly;
   final VoidCallback onFav;
+  final bool projectsOnly;
+  final VoidCallback onProjects;
   final VoidCallback onTags;
   final bool tagsOpen;
   final VoidCallback onDedup;
@@ -933,6 +947,8 @@ class _Rail extends StatelessWidget {
     required this.onMode,
     required this.favOnly,
     required this.onFav,
+    required this.projectsOnly,
+    required this.onProjects,
     required this.onTags,
     required this.tagsOpen,
     required this.onDedup,
@@ -988,6 +1004,8 @@ class _Rail extends StatelessWidget {
           item(Icons.folder_rounded, ViewMode.albums),
           item(favOnly ? Icons.favorite_rounded : Icons.favorite_border_rounded,
               null, onTap: onFav, active: favOnly),
+          item(Icons.brush_outlined, null,
+              onTap: onProjects, active: projectsOnly),
           item(Icons.sell_outlined, null, onTap: onTags, active: tagsOpen),
           item(Icons.content_copy_outlined, null, onTap: onDedup),
           // активная подсветка, пока раздаём по сети

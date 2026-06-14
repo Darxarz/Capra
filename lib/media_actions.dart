@@ -13,6 +13,30 @@ import 'tag_service.dart';
 /// перемещение, отправка, добавление тегов. Используются и из контекстных
 /// действий, и из режима массового выделения.
 class MediaActions {
+  /// Открыть файл в ассоциированном редакторе (KRA → Krita, PSD → Photoshop
+  /// и т.п. — что назначено в системе). На ПК через системный «открыть».
+  static Future<void> openInEditor(
+      BuildContext context, PhotoItem photo) async {
+    if (photo.isRemote) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      if (Platform.isWindows) {
+        await Process.start('cmd', ['/c', 'start', '', photo.path],
+            runInShell: false);
+      } else if (Platform.isLinux) {
+        await Process.start('xdg-open', [photo.path]);
+      } else if (Platform.isMacOS) {
+        await Process.start('open', [photo.path]);
+      } else {
+        messenger.showSnackBar(const SnackBar(
+            content: Text('Открытие в редакторе доступно на ПК')));
+      }
+    } catch (e) {
+      messenger.showSnackBar(
+          SnackBar(content: Text('Не удалось открыть: $e')));
+    }
+  }
+
   /// Отправить файлы системным «Поделиться». Удалённые (по сети) пропускаются.
   static Future<int> share(List<PhotoItem> photos) async {
     final files = [

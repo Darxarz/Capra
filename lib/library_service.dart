@@ -270,7 +270,7 @@ List<PhotoItem> _scanWholePc(bool _) {
         final lower = ent.path.toLowerCase();
         final dot = lower.lastIndexOf('.');
         if (dot < 0) continue;
-        if (!kImageExtensions.contains(lower.substring(dot))) continue;
+        if (!kScanExtensions.contains(lower.substring(dot))) continue;
         if (!seen.add(ent.path)) continue;
         FileStat st;
         try {
@@ -308,7 +308,7 @@ Future<List<PhotoItem>> _scanFolder(String root) async {
       final lower = ent.path.toLowerCase();
       final dot = lower.lastIndexOf('.');
       if (dot < 0) continue;
-      if (!kImageExtensions.contains(lower.substring(dot))) continue;
+      if (!kScanExtensions.contains(lower.substring(dot))) continue;
 
       FileStat st;
       try {

@@ -1,10 +1,18 @@
 import 'dart:io';
 import 'package:flutter/widgets.dart';
+import 'preview_service.dart';
 
 /// Расширения, которые считаем изображениями.
 const Set<String> kImageExtensions = {
   '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.jfif'
 };
+
+/// «Проектные» форматы редакторов: показываем встроенное превью, открываем
+/// в соответствующем редакторе.
+const Set<String> kProjectExtensions = {'.kra', '.psd'};
+
+/// Всё, что собираем при сканировании (картинки + проекты).
+const Set<String> kScanExtensions = {...kImageExtensions, ...kProjectExtensions};
 
 /// Одно изображение. Обычно — файл на диске; но может быть и удалённым,
 /// если получено с другого устройства по локальной сети (тогда заданы
@@ -39,18 +47,34 @@ class PhotoItem {
   /// true — фото получено с другого устройства, файла на диске нет.
   bool get isRemote => remoteBase != null;
 
+  /// Расширение в нижнем регистре (с точкой), напр. '.kra'.
+  String get extension {
+    final i = path.lastIndexOf('.');
+    return i >= 0 ? path.substring(i).toLowerCase() : '';
+  }
+
+  /// true — «проектный» формат редактора (KRA/PSD): нужно встроенное превью.
+  bool get isProject => kProjectExtensions.contains(extension);
+
   String get fileName {
     if (isRemote) return path; // у удалённого в path лежит имя
-    final i = path.lastIndexOf(Platform.pathSeparator);
+    final sep = path.contains('/') ? '/' : Platform.pathSeparator;
+    final i = path.lastIndexOf(sep);
     return i >= 0 ? path.substring(i + 1) : path;
   }
 
   /// Превью: декодируется уменьшённым (cacheWidth) — это и держит сетку лёгкой.
-  /// Для удалённого фото берётся уменьшённая версия прямо с хоста.
+  /// Для удалённого фото — с хоста; для KRA/PSD — встроенное превью.
   ImageProvider thumb(int cacheWidth) {
     if (isRemote) {
       return NetworkImage(
           '$remoteBase/thumb?token=$remoteToken&id=$remoteId&w=$cacheWidth');
+    }
+    if (isProject) {
+      return ProjectImage(path,
+          mtime: modified.millisecondsSinceEpoch,
+          full: false,
+          cacheWidth: cacheWidth);
     }
     return ResizeImage(FileImage(File(path)),
         width: cacheWidth, allowUpscaling: false);
@@ -60,6 +84,10 @@ class PhotoItem {
   ImageProvider get full {
     if (isRemote) {
       return NetworkImage('$remoteBase/file?token=$remoteToken&id=$remoteId');
+    }
+    if (isProject) {
+      return ProjectImage(path,
+          mtime: modified.millisecondsSinceEpoch, full: true);
     }
     return FileImage(File(path));
   }

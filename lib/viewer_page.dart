@@ -6,6 +6,7 @@ import 'tag_service.dart';
 import 'tagger_service.dart';
 import 'metadata_service.dart';
 import 'settings_service.dart';
+import 'media_actions.dart';
 
 /// Открыть просмотрщик на конкретном фото.
 void openViewer(BuildContext context, List<PhotoItem> photos, int index) {
@@ -233,6 +234,19 @@ class _InfoPanel extends StatelessWidget {
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: c.text)),
         const SizedBox(height: 4),
         Text(prettyDate(photo.modified), style: TextStyle(fontSize: 13, color: c.muted)),
+        if (photo.isProject) ...[
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: c.accent,
+              minimumSize: const Size.fromHeight(46),
+            ),
+            onPressed: () => MediaActions.openInEditor(context, photo),
+            icon: const Icon(Icons.open_in_new_rounded),
+            label: Text('Открыть ${photo.extension.replaceFirst('.', '').toUpperCase()} '
+                'в редакторе'),
+          ),
+        ],
         const SizedBox(height: 18),
         _TagsSection(photo: photo, colors: c),
         const SizedBox(height: 20),
