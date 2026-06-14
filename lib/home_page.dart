@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -21,6 +22,8 @@ import 'settings_page.dart';
 import 'lan_service.dart';
 import 'lan_page.dart';
 import 'dims_service.dart';
+import 'selection.dart';
+import 'media_actions.dart';
 
 enum ViewMode { all, dates, albums }
 
@@ -442,7 +445,8 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
-    return Scaffold(
+    return _SelPopScope(
+      child: Scaffold(
       backgroundColor: c.bg,
       body: SafeArea(
         child: Row(
@@ -508,10 +512,33 @@ class _HomePageState extends State<HomePage> {
                       onEdit: () => setState(() => _tagsPanelOpen = true),
                     ),
                   Expanded(
-                    child: ValueListenableBuilder<Set<String>>(
-                      valueListenable: Favorites.instance.notifier,
-                      builder: (_, __, ___) => _body(c),
-                    ),
+                    child: Stack(children: [
+                      ValueListenableBuilder<Set<String>>(
+                        valueListenable: Favorites.instance.notifier,
+                        builder: (_, __, ___) => _body(c),
+                      ),
+                      // панель массовых действий поверх сетки
+                      AnimatedBuilder(
+                        animation: Selection.instance,
+                        builder: (_, __) => Selection.instance.active
+                            ? Align(
+                                alignment: Alignment.topCenter,
+                                child: _SelectionBar(
+                                  count: Selection.instance.count,
+                                  onClose: () => Selection.instance.clear(),
+                                  onSelectAll: () => Selection.instance
+                                      .selectAll(_visiblePhotos),
+                                  onFavorite: _selFavorite,
+                                  onTags: _selTags,
+                                  onCopy: () => _selCopyMove(move: false),
+                                  onMove: () => _selCopyMove(move: true),
+                                  onShare: _selShare,
+                                  onDelete: _selDelete,
+                                ),
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                    ]),
                   ),
                 ],
               ),
@@ -519,7 +546,66 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
       ),
+    ),
     );
+  }
+
+  // ───────────────────── массовые действия над выделением ─────────────────────
+  List<PhotoItem> _selectedPhotos() {
+    final paths = Selection.instance.paths;
+    return _photos.where((p) => paths.contains(p.path)).toList();
+  }
+
+  Future<void> _selFavorite() async {
+    for (final ph in _selectedPhotos()) {
+      if (!Favorites.instance.contains(ph.path)) {
+        await Favorites.instance.toggle(ph.path);
+      }
+    }
+    Selection.instance.clear();
+  }
+
+  Future<void> _selTags() async {
+    final photos = _selectedPhotos();
+    final n = await MediaActions.addTags(context, photos);
+    if (!mounted) return;
+    if (n > 0) {
+      setState(() => _tagsRev++);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Теги добавлены к $n фото')));
+    }
+    Selection.instance.clear();
+  }
+
+  Future<void> _selShare() async {
+    final n = await MediaActions.share(_selectedPhotos());
+    if (n == 0 && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Нечего отправить')));
+    }
+    Selection.instance.clear();
+  }
+
+  Future<void> _selCopyMove({required bool move}) async {
+    final res = await MediaActions.copyOrMove(context, _selectedPhotos(),
+        move: move);
+    if (!mounted || res == null) return;
+    final verb = move ? 'Перемещено' : 'Скопировано';
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('$verb: ${res.ok}'
+            '${res.fail > 0 ? ', не удалось: ${res.fail}' : ''}')));
+    Selection.instance.clear();
+    if (move && res.ok > 0) await _rescan();
+  }
+
+  Future<void> _selDelete() async {
+    final n = await MediaActions.delete(context, _selectedPhotos());
+    if (n == -1) return; // отмена
+    Selection.instance.clear();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Удалено: $n')));
+    await _rescan();
   }
 
   Widget _body(AuroraColors c) {
@@ -703,6 +789,126 @@ class _Rail extends StatelessWidget {
           const SizedBox(height: 10),
         ],
       ),
+    );
+  }
+}
+
+// ── обёртка PopScope, реагирующая на режим выделения (Назад = снять выбор) ──
+class _SelPopScope extends StatefulWidget {
+  final Widget child;
+  const _SelPopScope({required this.child});
+  @override
+  State<_SelPopScope> createState() => _SelPopScopeState();
+}
+
+class _SelPopScopeState extends State<_SelPopScope> {
+  @override
+  void initState() {
+    super.initState();
+    Selection.instance.addListener(_u);
+  }
+
+  @override
+  void dispose() {
+    Selection.instance.removeListener(_u);
+    super.dispose();
+  }
+
+  void _u() => setState(() {});
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !Selection.instance.active,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) Selection.instance.clear();
+      },
+      child: widget.child, // тот же экземпляр — поддерево не пересобирается
+    );
+  }
+}
+
+// ───────────────────── панель массовых действий ─────────────────────
+class _SelectionBar extends StatelessWidget {
+  final int count;
+  final VoidCallback onClose;
+  final VoidCallback onSelectAll;
+  final VoidCallback onFavorite;
+  final VoidCallback onTags;
+  final VoidCallback onCopy;
+  final VoidCallback onMove;
+  final VoidCallback onShare;
+  final VoidCallback onDelete;
+  const _SelectionBar({
+    required this.count,
+    required this.onClose,
+    required this.onSelectAll,
+    required this.onFavorite,
+    required this.onTags,
+    required this.onCopy,
+    required this.onMove,
+    required this.onShare,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AuroraTheme.of(context).colors;
+    Widget act(IconData icon, String tip, VoidCallback onTap,
+            {Color? color}) =>
+        IconButton(
+          icon: Icon(icon, size: 21, color: color ?? c.text),
+          tooltip: tip,
+          onPressed: count == 0 ? null : onTap,
+        );
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: c.line),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(children: [
+        IconButton(
+          icon: Icon(Icons.close, color: c.text),
+          tooltip: 'Снять выделение',
+          onPressed: onClose,
+        ),
+        Text('$count',
+            style: TextStyle(
+                color: c.text, fontSize: 15, fontWeight: FontWeight.w800)),
+        const SizedBox(width: 2),
+        IconButton(
+          icon: Icon(Icons.select_all_rounded, size: 20, color: c.muted),
+          tooltip: 'Выбрать все',
+          onPressed: onSelectAll,
+        ),
+        const Spacer(),
+        Flexible(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            reverse: true,
+            child: Row(children: [
+              act(Icons.favorite_border_rounded, 'В избранное', onFavorite),
+              act(Icons.sell_outlined, 'Добавить теги', onTags),
+              act(Icons.copy_all_rounded, 'Копировать в папку', onCopy),
+              act(Icons.drive_file_move_outline, 'Переместить в папку', onMove),
+              act(Icons.ios_share_rounded, 'Отправить', onShare),
+              act(Icons.delete_outline_rounded, 'Удалить', onDelete,
+                  color: c.accent),
+            ]),
+          ),
+        ),
+      ]),
     );
   }
 }
@@ -1229,7 +1435,18 @@ class PhotoTile extends StatelessWidget {
   final PhotoItem photo;
   final double cell;
   final VoidCallback onTap;
-  const PhotoTile({super.key, required this.photo, required this.cell, required this.onTap});
+  // null — долгий тап обрабатывает сетка (для «паровозика»); иначе тут (даты)
+  final VoidCallback? onLongPress;
+  // false — выделение здесь отключено (например, внутри отдельной папки)
+  final bool selectable;
+  const PhotoTile({
+    super.key,
+    required this.photo,
+    required this.cell,
+    required this.onTap,
+    this.onLongPress,
+    this.selectable = true,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1237,94 +1454,252 @@ class PhotoTile extends StatelessWidget {
     final s = SettingsService.instance;
     final dpr = MediaQuery.of(context).devicePixelRatio;
     final cacheWidth = (cell * dpr).round().clamp(64, 512);
-    return GestureDetector(
-      onTap: onTap,
-      onLongPress: () => Favorites.instance.toggle(photo.path),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(s.gridRadius),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Container(color: c.surface2),
-            Image(
-              image: photo.thumb(cacheWidth),
-              fit: s.squareThumbs ? BoxFit.cover : BoxFit.contain,
-              gaplessPlayback: true,
-              filterQuality: FilterQuality.low,
-              frameBuilder: (ctx, child, frame, wasSync) {
-                if (wasSync || frame != null) return child;
-                return Container(color: c.surface2);
-              },
-              errorBuilder: (ctx, e, s) =>
-                  Icon(Icons.broken_image_outlined, color: c.muted, size: 18),
-            ),
-            if (photo.isGif && s.showGifBadge)
-              Positioned(
-                right: 5,
-                bottom: 5,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: const Text('GIF',
-                      style: TextStyle(color: Colors.white, fontSize: 10)),
+    return AnimatedBuilder(
+      animation: Selection.instance,
+      builder: (ctx, _) {
+        final sel = Selection.instance;
+        final selecting = selectable && sel.active;
+        final selected = selecting && sel.contains(photo.path);
+        return GestureDetector(
+          onTap: () {
+            if (selecting) {
+              sel.toggle(photo.path);
+            } else {
+              onTap();
+            }
+          },
+          onLongPress: selectable ? onLongPress : null,
+          // ПКМ на ПК — войти в выделение / переключить
+          onSecondaryTapDown:
+              selectable ? (_) => sel.toggle(photo.path) : null,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(s.gridRadius),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Container(color: c.surface2),
+                Image(
+                  image: photo.thumb(cacheWidth),
+                  fit: s.squareThumbs ? BoxFit.cover : BoxFit.contain,
+                  gaplessPlayback: true,
+                  filterQuality: FilterQuality.low,
+                  frameBuilder: (ctx, child, frame, wasSync) {
+                    if (wasSync || frame != null) return child;
+                    return Container(color: c.surface2);
+                  },
+                  errorBuilder: (ctx, e, s) =>
+                      Icon(Icons.broken_image_outlined, color: c.muted, size: 18),
                 ),
-              ),
-            if (s.showFavBadge)
-              ValueListenableBuilder<Set<String>>(
-                valueListenable: Favorites.instance.notifier,
-                builder: (ctx, favs, _) {
-                  if (!favs.contains(photo.path)) return const SizedBox.shrink();
-                  return Positioned(
+                if (photo.isGif && s.showGifBadge)
+                  Positioned(
+                    right: 5,
+                    bottom: 5,
+                    child: Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text('GIF',
+                          style: TextStyle(color: Colors.white, fontSize: 10)),
+                    ),
+                  ),
+                if (s.showFavBadge && !selecting)
+                  ValueListenableBuilder<Set<String>>(
+                    valueListenable: Favorites.instance.notifier,
+                    builder: (ctx, favs, _) {
+                      if (!favs.contains(photo.path)) {
+                        return const SizedBox.shrink();
+                      }
+                      return const Positioned(
+                        left: 5,
+                        top: 5,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                              color: Colors.black54, shape: BoxShape.circle),
+                          child: Padding(
+                            padding: EdgeInsets.all(3),
+                            child: Icon(Icons.favorite,
+                                color: Colors.white, size: 12),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                // подсветка выбранного + чекбокс в режиме выделения
+                if (selecting) ...[
+                  if (selected)
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: c.accent.withValues(alpha: 0.30),
+                          border: Border.all(color: c.accent, width: 3),
+                          borderRadius: BorderRadius.circular(s.gridRadius),
+                        ),
+                      ),
+                    ),
+                  Positioned(
                     left: 5,
                     top: 5,
                     child: Container(
-                      padding: const EdgeInsets.all(3),
-                      decoration: const BoxDecoration(
-                          color: Colors.black54, shape: BoxShape.circle),
-                      child: const Icon(Icons.favorite,
-                          color: Colors.white, size: 12),
+                      decoration: BoxDecoration(
+                        color: selected ? c.accent : Colors.black38,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1.5),
+                      ),
+                      padding: const EdgeInsets.all(2),
+                      child: Icon(
+                        selected ? Icons.check : Icons.circle_outlined,
+                        color: Colors.white,
+                        size: 14,
+                      ),
                     ),
-                  );
-                },
-              ),
-          ],
-        ),
-      ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
 
 // ───────────────────────── сетки ─────────────────────────
-class _AllGrid extends StatelessWidget {
+class _AllGrid extends StatefulWidget {
   final List<PhotoItem> photos;
   final double cell;
-  const _AllGrid({required this.photos, required this.cell});
+  final bool selectable; // включён ли «паровозик»/выделение
+  const _AllGrid({required this.photos, required this.cell, this.selectable = true});
+
+  @override
+  State<_AllGrid> createState() => _AllGridState();
+}
+
+class _AllGridState extends State<_AllGrid> {
+  final _scroll = ScrollController();
+  static const _pad = EdgeInsets.fromLTRB(16, 6, 16, 18);
+
+  // состояние «паровозика»
+  Timer? _autoScroll;
+  Offset _lastLocal = Offset.zero;
+  double _viewW = 0;
+  double _viewH = 0;
+
+  @override
+  void dispose() {
+    _autoScroll?.cancel();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  /// Геометрия сетки → сколько колонок и каков размер плитки (повторяет
+  /// формулу SliverGridDelegateWithMaxCrossAxisExtent).
+  ({int cols, double extent, double gap}) _geometry() {
+    final gap = SettingsService.instance.tileSpacing;
+    final crossExtent = _viewW - _pad.horizontal;
+    var cols = (crossExtent / (widget.cell + gap)).ceil();
+    if (cols < 1) cols = 1;
+    final usable = crossExtent - gap * (cols - 1);
+    final extent = usable / cols;
+    return (cols: cols, extent: extent, gap: gap);
+  }
+
+  /// Индекс плитки под точкой [local] (с учётом прокрутки). null — мимо.
+  int? _indexAt(Offset local) {
+    if (_viewW <= 0) return null;
+    final g = _geometry();
+    final dx = local.dx - _pad.left;
+    final dy = local.dy + _scroll.offset - _pad.top;
+    if (dx < 0 || dy < 0) return null;
+    var col = (dx / (g.extent + g.gap)).floor();
+    if (col >= g.cols) col = g.cols - 1;
+    if (col < 0) col = 0;
+    final row = (dy / (g.extent + g.gap)).floor();
+    final idx = row * g.cols + col;
+    if (idx < 0 || idx >= widget.photos.length) return null;
+    return idx;
+  }
+
+  void _onLongPressStart(LongPressStartDetails d) {
+    final idx = _indexAt(d.localPosition);
+    if (idx == null) return;
+    _lastLocal = d.localPosition;
+    Selection.instance.beginDrag(widget.photos, idx);
+    _startAutoScroll();
+  }
+
+  void _onLongPressMove(LongPressMoveUpdateDetails d) {
+    _lastLocal = d.localPosition;
+    final idx = _indexAt(d.localPosition);
+    if (idx != null) Selection.instance.updateDrag(widget.photos, idx);
+  }
+
+  void _onLongPressEnd(_) {
+    _autoScroll?.cancel();
+    _autoScroll = null;
+    Selection.instance.endDrag();
+  }
+
+  /// Автопрокрутка, пока палец/курсор у верхнего или нижнего края.
+  void _startAutoScroll() {
+    _autoScroll?.cancel();
+    _autoScroll = Timer.periodic(const Duration(milliseconds: 16), (_) {
+      const edge = 70.0;
+      double delta = 0;
+      if (_lastLocal.dy < edge) {
+        delta = -(edge - _lastLocal.dy) / edge * 18;
+      } else if (_lastLocal.dy > _viewH - edge) {
+        delta = (_lastLocal.dy - (_viewH - edge)) / edge * 18;
+      }
+      if (delta == 0) return;
+      final next = (_scroll.offset + delta)
+          .clamp(0.0, _scroll.position.maxScrollExtent);
+      if (next != _scroll.offset) {
+        _scroll.jumpTo(next);
+        final idx = _indexAt(_lastLocal);
+        if (idx != null) Selection.instance.updateDrag(widget.photos, idx);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final s = SettingsService.instance;
     if (s.gridLayout == GridLayout.mosaic) {
-      return _MosaicGrid(photos: photos, cell: cell);
+      return _MosaicGrid(photos: widget.photos, cell: widget.cell);
     }
     final gap = s.tileSpacing;
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 18),
-      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: cell,
-        mainAxisSpacing: gap,
-        crossAxisSpacing: gap,
-        childAspectRatio: 1,
-      ),
-      itemCount: photos.length,
-      itemBuilder: (ctx, i) => PhotoTile(
-        photo: photos[i],
-        cell: cell,
-        onTap: () => openViewer(ctx, photos, i),
-      ),
-    );
+    return LayoutBuilder(builder: (ctx, cns) {
+      _viewW = cns.maxWidth;
+      _viewH = cns.maxHeight;
+      final grid = GridView.builder(
+        controller: _scroll,
+        padding: _pad,
+        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: widget.cell,
+          mainAxisSpacing: gap,
+          crossAxisSpacing: gap,
+          childAspectRatio: 1,
+        ),
+        itemCount: widget.photos.length,
+        itemBuilder: (ctx, i) => PhotoTile(
+          photo: widget.photos[i],
+          cell: widget.cell,
+          selectable: widget.selectable,
+          onTap: () => openViewer(ctx, widget.photos, i),
+        ),
+      );
+      if (!widget.selectable) return grid;
+      return GestureDetector(
+        onLongPressStart: _onLongPressStart,
+        onLongPressMoveUpdate: _onLongPressMove,
+        onLongPressEnd: _onLongPressEnd,
+        onLongPressCancel: () => _onLongPressEnd(null),
+        child: grid,
+      );
+    });
   }
 }
 
@@ -1384,6 +1759,7 @@ class _MosaicGridState extends State<_MosaicGrid> {
               child: PhotoTile(
                 photo: photo,
                 cell: widget.cell,
+                onLongPress: () => Selection.instance.enter(photo.path),
                 onTap: () => openViewer(ctx, widget.photos, i),
               ),
             );
@@ -1438,6 +1814,7 @@ class _DatesView extends StatelessWidget {
             (ctx, i) => PhotoTile(
               photo: items[i],
               cell: cell,
+              onLongPress: () => Selection.instance.enter(items[i].path),
               onTap: () => openViewer(ctx, photos, photos.indexOf(items[i])),
             ),
             childCount: items.length,
@@ -1606,7 +1983,8 @@ class _FolderPage extends StatelessWidget {
                 ),
               ]),
             ),
-            Expanded(child: _AllGrid(photos: photos, cell: cell)),
+            Expanded(
+                child: _AllGrid(photos: photos, cell: cell, selectable: false)),
           ],
         ),
       ),
