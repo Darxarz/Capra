@@ -31,6 +31,8 @@ class SettingsService extends ChangeNotifier {
   static const _kStartSection = 'goat_start_section';
   static const _kShowFav = 'goat_show_fav_badge';
   static const _kShowGif = 'goat_show_gif_badge';
+  static const _kHiddenFolders = 'goat_hidden_folders';
+  static const _kShowHidden = 'goat_show_hidden';
 
   late SharedPreferences _p;
   bool _ready = false;
@@ -49,6 +51,8 @@ class SettingsService extends ChangeNotifier {
   StartSection startSection = StartSection.all;
   bool showFavBadge = true;
   bool showGifBadge = true;
+  Set<String> hiddenFolders = {}; // скрытые папки (секретные альбомы)
+  bool showHidden = false; // показывать ли скрытые папки в галерее
 
   bool get ready => _ready;
 
@@ -69,6 +73,8 @@ class SettingsService extends ChangeNotifier {
     startSection = _decodeStart(_p.getString(_kStartSection));
     showFavBadge = _p.getBool(_kShowFav) ?? showFavBadge;
     showGifBadge = _p.getBool(_kShowGif) ?? showGifBadge;
+    hiddenFolders = (_p.getStringList(_kHiddenFolders) ?? const []).toSet();
+    showHidden = _p.getBool(_kShowHidden) ?? showHidden;
     _ready = true;
     notifyListeners();
   }
@@ -149,6 +155,24 @@ class SettingsService extends ChangeNotifier {
   void setShowGifBadge(bool v) {
     showGifBadge = v;
     _p.setBool(_kShowGif, v);
+    notifyListeners();
+  }
+
+  void setShowHidden(bool v) {
+    showHidden = v;
+    _p.setBool(_kShowHidden, v);
+    notifyListeners();
+  }
+
+  bool isHidden(String folderPath) => hiddenFolders.contains(folderPath);
+
+  void setFolderHidden(String folderPath, bool hidden) {
+    if (hidden) {
+      hiddenFolders.add(folderPath);
+    } else {
+      hiddenFolders.remove(folderPath);
+    }
+    _p.setStringList(_kHiddenFolders, hiddenFolders.toList());
     notifyListeners();
   }
 

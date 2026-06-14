@@ -29,6 +29,9 @@ import 'media_actions.dart';
 
 enum ViewMode { all, dates, albums }
 
+/// Способ показа раздела «Альбомы»: сетка обложек / список / древо.
+enum FolderView { grid, list, tree }
+
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -40,8 +43,9 @@ class _HomePageState extends State<HomePage> {
   late ViewMode _mode = _modeFromSettings();
   // плотность сетки берётся из настроек (SettingsService.cellSize)
 
-  List<PhotoItem> _photos = [];
-  List<AlbumItem> _albums = [];
+  List<PhotoItem> _photos = []; // всё, что просканировано
+  List<PhotoItem> _shown = []; // с учётом скрытых папок
+  List<AlbumItem> _albums = []; // альбомы из _shown
   List<String> _folders = []; // папки библиотеки (можно несколько)
   bool _loading = false;
   UpdateInfo? _update; // доступное обновление (null = нет)
@@ -51,15 +55,43 @@ class _HomePageState extends State<HomePage> {
   Set<String> _filterPaths = const {}; // пути, подходящие под фильтр тегов
   bool _tagsPanelOpen = false; // открыта боковая панель тегов
   bool _favOnly = false; // показывать только избранное
-  bool _folderTree = false; // в разделе папок: древо вместо сетки
+  FolderView _folderView = FolderView.grid; // вид раздела «Альбомы»
   FolderNode? _treeCache; // построенное древо папок (кэш)
   int _tagsRev = 0; // счётчик для пересоздания панели тегов после импорта
   bool _mediaGranted = false; // на Android: есть доступ к фото устройства
   bool get _useDeviceMedia => Platform.isAndroid || Platform.isIOS;
 
+  /// Папка скрыта (сама или её родитель в списке скрытых)?
+  bool _isHiddenPath(String folderPath) {
+    final hidden = SettingsService.instance.hiddenFolders;
+    if (hidden.isEmpty) return false;
+    for (final h in hidden) {
+      if (folderPath == h ||
+          folderPath.startsWith('$h/') ||
+          folderPath.startsWith('$h\\')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Пересчитать показываемые фото/альбомы с учётом скрытых папок.
+  void _applyHidden() {
+    final s = SettingsService.instance;
+    if (s.showHidden || s.hiddenFolders.isEmpty) {
+      _shown = _photos;
+    } else {
+      _shown = _photos.where((p) => !_isHiddenPath(p.folderPath)).toList();
+    }
+    _albums = LibraryService.albums(_shown);
+    _treeCache = null;
+    // по сети раздаём только показываемое (секретные папки не уходят)
+    LanService.instance.setLibrary(_shown);
+  }
+
   /// Фото с учётом поиска и фильтра «только избранное».
   List<PhotoItem> get _visiblePhotos {
-    Iterable<PhotoItem> r = _photos;
+    Iterable<PhotoItem> r = _shown;
     if (_favOnly) {
       final favs = Favorites.instance.paths;
       r = r.where((p) => favs.contains(p.path));
@@ -78,7 +110,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   FolderNode _folderTreeNode() =>
-      _treeCache ??= buildForest(_photos, _folders);
+      _treeCache ??= buildForest(_shown, _folders);
 
   Widget _albumsGrid() {
     final q = _query.trim().toLowerCase();
@@ -86,7 +118,61 @@ class _HomePageState extends State<HomePage> {
         ? _albums
         : _albums.where((a) => a.name.toLowerCase().contains(q)).toList();
     if (albums.isEmpty) return const _NoResults(favOnly: false);
-    return _AlbumsView(albums: albums, photos: _photos, cell: SettingsService.instance.cellSize);
+    return _AlbumsView(
+      albums: albums,
+      photos: _shown,
+      cell: SettingsService.instance.cellSize,
+      onHideToggle: _toggleHideFolder,
+    );
+  }
+
+  Widget _albumsList() {
+    final q = _query.trim().toLowerCase();
+    final albums = q.isEmpty
+        ? _albums
+        : _albums.where((a) => a.name.toLowerCase().contains(q)).toList();
+    if (albums.isEmpty) return const _NoResults(favOnly: false);
+    return _AlbumsList(
+      albums: albums,
+      photos: _shown,
+      onOpen: (a) {
+        final inFolder =
+            _shown.where((p) => p.folderPath == a.folderPath).toList();
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => _FolderPage(
+              album: a,
+              photos: inFolder,
+              cell: SettingsService.instance.cellSize),
+        ));
+      },
+      onHideToggle: _toggleHideFolder,
+    );
+  }
+
+  /// Скрыть/показать папку: метка в настройках + .nomedia (чтобы другие
+  /// галереи её не сканировали). На Android .nomedia убирает папку из системного
+  /// индекса — поясняем это пользователю при скрытии.
+  Future<void> _toggleHideFolder(AlbumItem album) async {
+    final s = SettingsService.instance;
+    final nowHidden = !s.isHidden(album.folderPath);
+    s.setFolderHidden(album.folderPath, nowHidden);
+    // .nomedia — лучшее усилие, не критично при отказе
+    try {
+      final f = File(p.join(album.folderPath, '.nomedia'));
+      if (nowHidden) {
+        if (!f.existsSync()) f.createSync();
+      } else {
+        if (f.existsSync()) f.deleteSync();
+      }
+    } catch (_) {}
+    setState(_applyHidden);
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(SnackBar(
+      content: Text(nowHidden
+          ? 'Папка скрыта. Показать — в Настройках → «Показывать скрытые».'
+          : 'Папка снова видна.'),
+    ));
   }
 
   void _openTreeFolder(FolderNode node) {
@@ -133,7 +219,7 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  void _onSettings() => setState(() {});
+  void _onSettings() => setState(_applyHidden);
 
   ViewMode _modeFromSettings() {
     switch (SettingsService.instance.startSection) {
@@ -278,12 +364,9 @@ class _HomePageState extends State<HomePage> {
     try {
       TagService.instance.relink({for (final p in photos) p.path});
     } catch (_) {}
-    // отдать актуальную библиотеку раздаче по локальной сети
-    LanService.instance.setLibrary(photos);
     setState(() {
       _photos = photos;
-      _albums = LibraryService.albums(photos);
-      _treeCache = null; // папки изменились — пересоберём древо при показе
+      _applyHidden(); // считает _shown/_albums и отдаёт раздаче по сети
       _loading = false;
     });
   }
@@ -681,16 +764,18 @@ class _HomePageState extends State<HomePage> {
       return Column(
         children: [
           _FolderViewToggle(
-            tree: _folderTree,
-            onChanged: (v) => setState(() => _folderTree = v),
+            view: _folderView,
+            onChanged: (v) => setState(() => _folderView = v),
           ),
           Expanded(
-            child: _folderTree
-                ? TreeView(
-                    root: _folderTreeNode(),
-                    onOpenFolder: _openTreeFolder,
-                  )
-                : _albumsGrid(),
+            child: switch (_folderView) {
+              FolderView.tree => TreeView(
+                  root: _folderTreeNode(),
+                  onOpenFolder: _openTreeFolder,
+                ),
+              FolderView.list => _albumsList(),
+              FolderView.grid => _albumsGrid(),
+            },
           ),
         ],
       );
@@ -1164,9 +1249,9 @@ class _NoResults extends StatelessWidget {
 
 // ───────────── переключатель «Сетка / Дерево» в разделе папок ─────────────
 class _FolderViewToggle extends StatelessWidget {
-  final bool tree;
-  final ValueChanged<bool> onChanged;
-  const _FolderViewToggle({required this.tree, required this.onChanged});
+  final FolderView view;
+  final ValueChanged<FolderView> onChanged;
+  const _FolderViewToggle({required this.view, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -1207,9 +1292,12 @@ class _FolderViewToggle extends StatelessWidget {
             border: Border.all(color: c.line),
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            btn('Сетка', Icons.grid_view_rounded, !tree, () => onChanged(false)),
-            btn('Древо', Icons.account_tree_outlined, tree,
-                () => onChanged(true)),
+            btn('Сетка', Icons.grid_view_rounded, view == FolderView.grid,
+                () => onChanged(FolderView.grid)),
+            btn('Список', Icons.view_list_rounded, view == FolderView.list,
+                () => onChanged(FolderView.list)),
+            btn('Древо', Icons.account_tree_outlined, view == FolderView.tree,
+                () => onChanged(FolderView.tree)),
           ]),
         ),
       ]),
@@ -2078,10 +2166,12 @@ class _AlbumsView extends StatelessWidget {
   final List<AlbumItem> albums;
   final List<PhotoItem> photos;
   final double cell;
+  final ValueChanged<AlbumItem> onHideToggle;
   const _AlbumsView({
     required this.albums,
     required this.photos,
     required this.cell,
+    required this.onHideToggle,
   });
 
   @override
@@ -2099,6 +2189,7 @@ class _AlbumsView extends StatelessWidget {
         final a = albums[i];
         return _AlbumCard(
           album: a,
+          onHideToggle: () => onHideToggle(a),
           onTap: () {
             final inFolder =
                 photos.where((p) => p.folderPath == a.folderPath).toList();
@@ -2116,15 +2207,20 @@ class _AlbumsView extends StatelessWidget {
 class _AlbumCard extends StatelessWidget {
   final AlbumItem album;
   final VoidCallback onTap;
-  const _AlbumCard({required this.album, required this.onTap});
+  final VoidCallback onHideToggle;
+  const _AlbumCard(
+      {required this.album, required this.onTap, required this.onHideToggle});
 
   @override
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
     final dpr = MediaQuery.of(context).devicePixelRatio;
     final cover = album.cover;
+    final hidden = SettingsService.instance.isHidden(album.folderPath);
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onHideToggle,
+      onSecondaryTapDown: (_) => onHideToggle(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2165,6 +2261,20 @@ class _AlbumCard extends StatelessWidget {
                             const TextStyle(color: Colors.white, fontSize: 11)),
                   ),
                 ),
+                if (hidden)
+                  const Positioned(
+                    left: 8,
+                    top: 8,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                          color: Colors.black54, shape: BoxShape.circle),
+                      child: Padding(
+                        padding: EdgeInsets.all(4),
+                        child: Icon(Icons.visibility_off_rounded,
+                            color: Colors.white, size: 14),
+                      ),
+                    ),
+                  ),
               ]),
             ),
           ),
@@ -2177,6 +2287,130 @@ class _AlbumCard extends StatelessWidget {
           Text('${album.count} изображений',
               style: TextStyle(fontSize: 12, color: c.muted)),
         ],
+      ),
+    );
+  }
+}
+
+// ───────────── альбомы списком (миниатюра-фон + имя/путь поверх) ─────────────
+class _AlbumsList extends StatelessWidget {
+  final List<AlbumItem> albums;
+  final List<PhotoItem> photos;
+  final ValueChanged<AlbumItem> onOpen;
+  final ValueChanged<AlbumItem> onHideToggle;
+  const _AlbumsList({
+    required this.albums,
+    required this.photos,
+    required this.onOpen,
+    required this.onHideToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 18),
+      itemCount: albums.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (ctx, i) => _AlbumRow(
+        album: albums[i],
+        onTap: () => onOpen(albums[i]),
+        onHideToggle: () => onHideToggle(albums[i]),
+      ),
+    );
+  }
+}
+
+class _AlbumRow extends StatelessWidget {
+  final AlbumItem album;
+  final VoidCallback onTap;
+  final VoidCallback onHideToggle;
+  const _AlbumRow(
+      {required this.album, required this.onTap, required this.onHideToggle});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AuroraTheme.of(context).colors;
+    final dpr = MediaQuery.of(context).devicePixelRatio;
+    final cover = album.cover;
+    final hidden = SettingsService.instance.isHidden(album.folderPath);
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: onHideToggle,
+      onSecondaryTapDown: (_) => onHideToggle(),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: SizedBox(
+          height: 76,
+          child: Stack(fit: StackFit.expand, children: [
+            Container(color: c.surface2),
+            if (cover != null)
+              Image(
+                image: cover.thumb((180 * dpr).round().clamp(64, 512)),
+                fit: BoxFit.cover,
+                filterQuality: FilterQuality.low,
+                errorBuilder: (ctx, e, s) => const SizedBox.shrink(),
+              ),
+            // затемнение, чтобы текст читался поверх миниатюры
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [Colors.black87, Colors.black38],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Row(children: [
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        if (hidden) ...[
+                          const Icon(Icons.visibility_off_rounded,
+                              color: Colors.white70, size: 14),
+                          const SizedBox(width: 5),
+                        ],
+                        Flexible(
+                          child: Text(album.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700)),
+                        ),
+                      ]),
+                      const SizedBox(height: 2),
+                      Text(album.folderPath,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Colors.white70, fontSize: 11.5)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text('${album.count}',
+                      style:
+                          const TextStyle(color: Colors.white, fontSize: 12)),
+                ),
+                Icon(Icons.chevron_right_rounded,
+                    color: Colors.white.withValues(alpha: 0.8)),
+              ]),
+            ),
+          ]),
+        ),
       ),
     );
   }

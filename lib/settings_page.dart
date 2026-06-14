@@ -187,6 +187,28 @@ class _Sections extends StatelessWidget {
         ])),
         const SizedBox(height: 22),
 
+        const _SectionTitle('Приватность'),
+        _Card(c: c, child: Column(children: [
+          _SwitchRow(
+            title: 'Показывать скрытые папки',
+            subtitle: 'Секретные альбомы (помеченные .nomedia) станут видны '
+                'в галерее. Долгий тап / ПКМ по папке — скрыть или показать.',
+            value: s.showHidden,
+            onChanged: s.setShowHidden,
+            c: c,
+          ),
+          if (s.hiddenFolders.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Скрыто папок: ${s.hiddenFolders.length}',
+                    style: TextStyle(color: c.muted, fontSize: 12.5)),
+              ),
+            ),
+        ])),
+        const SizedBox(height: 22),
+
         const _SectionTitle('Теги'),
         _Card(c: c, child: Column(children: [
           _ActionRow(
