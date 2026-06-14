@@ -58,6 +58,16 @@ jobs:
             $perms = "    <uses-permission android:name=`"android.permission.INTERNET`"/>`n    <uses-permission android:name=`"android.permission.CAMERA`"/>`n    <uses-permission android:name=`"android.permission.READ_MEDIA_IMAGES`"/>`n    <uses-permission android:name=`"android.permission.READ_MEDIA_VISUAL_USER_SELECTED`"/>`n    <uses-permission android:name=`"android.permission.READ_EXTERNAL_STORAGE`" android:maxSdkVersion=`"32`"/>`n    "
             $mc = $mc -replace '(<manifest[^>]*>\s*)', "`$1$perms"
           }
+          # фоновый сервер раздачи: foreground-сервис типа dataSync (Android 14+
+          # требует и разрешение, и объявление сервиса с этим типом)
+          if ($mc -notmatch 'FOREGROUND_SERVICE_DATA_SYNC') {
+            $fperm = "    <uses-permission android:name=`"android.permission.FOREGROUND_SERVICE`"/>`n    <uses-permission android:name=`"android.permission.FOREGROUND_SERVICE_DATA_SYNC`"/>`n    <uses-permission android:name=`"android.permission.POST_NOTIFICATIONS`"/>`n    "
+            $mc = $mc -replace '(<manifest[^>]*>\s*)', "`$1$fperm"
+          }
+          if ($mc -notmatch 'flutter_foreground_task.service.ForegroundService') {
+            $svc = "`n        <service android:name=`"com.pravera.flutter_foreground_task.service.ForegroundService`" android:foregroundServiceType=`"dataSync`" android:exported=`"false`" android:stopWithTask=`"true`"/>`n    "
+            $mc = $mc -replace '(<application[^>]*>)', "`$1$svc"
+          }
           # raw-путь к медиа на Android 10 (dart:io читает файлы по пути)
           if ($mc -notmatch 'requestLegacyExternalStorage') {
             $mc = $mc -replace '(<application)', '$1 android:requestLegacyExternalStorage="true"'

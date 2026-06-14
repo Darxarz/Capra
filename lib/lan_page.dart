@@ -8,6 +8,7 @@ import 'model.dart';
 import 'lan_service.dart';
 import 'lan_client.dart';
 import 'lan_store.dart';
+import 'background_service.dart';
 import 'viewer_page.dart';
 import 'settings_service.dart';
 
@@ -150,9 +151,12 @@ class _HostViewState extends State<_HostView> {
     try {
       if (lan.isRunning) {
         await lan.stop();
+        await BackgroundService.stop();
         _addresses = const [];
       } else {
         _addresses = await lan.start();
+        // держим раздачу живой в фоне (Android foreground-сервис)
+        await BackgroundService.start();
       }
     } catch (e) {
       if (mounted) {
