@@ -88,6 +88,30 @@ jobs:
           Set-Content $m $mc
           Write-Host "app minSdk 24 / compileSdk 36 / доступ к фото (MediaStore) / label=GOAT"
 
+      # Постоянная подпись релиза: один ключ из секретов GitHub. Иначе каждая
+      # сборка подписывается случайным debug-ключом → новая версия не ставится
+      # поверх старой («приложение не установлено»). Ключ в код не попадает.
+      - name: Настроить подпись Android релиза
+        shell: pwsh
+        env:
+          KS_B64: ${{ secrets.GOAT_KEYSTORE_BASE64 }}
+        run: |
+          if (-not $env:KS_B64) { Write-Host "нет keystore — остаётся debug-подпись"; exit 0 }
+          [IO.File]::WriteAllBytes("android/app/goat-release.jks", [Convert]::FromBase64String($env:KS_B64))
+          $app = if (Test-Path 'android/app/build.gradle.kts') { 'android/app/build.gradle.kts' } else { 'android/app/build.gradle' }
+          $c = Get-Content $app -Raw
+          if ($app -like '*.kts') {
+            $sign = "`n    signingConfigs {`n        create(`"release`") {`n            storeFile = file(`"goat-release.jks`")`n            storePassword = System.getenv(`"GOAT_STORE_PW`")`n            keyAlias = System.getenv(`"GOAT_KEY_ALIAS`")`n            keyPassword = System.getenv(`"GOAT_KEY_PW`")`n        }`n    }`n"
+            if ($c -notmatch 'signingConfigs') { $c = $c -replace '(android\s*\{)', "`$1$sign" }
+            $c = $c -replace 'signingConfig\s*=\s*signingConfigs\.getByName\("debug"\)', 'signingConfig = signingConfigs.getByName("release")'
+          } else {
+            $sign = "`n    signingConfigs {`n        release {`n            storeFile file(`"goat-release.jks`")`n            storePassword System.getenv(`"GOAT_STORE_PW`")`n            keyAlias System.getenv(`"GOAT_KEY_ALIAS`")`n            keyPassword System.getenv(`"GOAT_KEY_PW`")`n        }`n    }`n"
+            if ($c -notmatch 'signingConfigs') { $c = $c -replace '(android\s*\{)', "`$1$sign" }
+            $c = $c -replace 'signingConfig\s+signingConfigs\.debug', 'signingConfig signingConfigs.release'
+          }
+          Set-Content $app $c
+          Write-Host "подпись релиза настроена (постоянный ключ)"
+
       # новый MSVC на раннере делает ошибкой устаревшие <experimental/coroutine>
       # в permission_handler_windows — глушим рекомендованным define;
       # заодно ставим видимое название окна = GOAT (exe собирается под
@@ -171,6 +195,10 @@ jobs:
 
       # ───────────────── Android ─────────────────
       - name: Собрать APK под Android
+        env:
+          GOAT_STORE_PW: ${{ secrets.GOAT_KEYSTORE_PASSWORD }}
+          GOAT_KEY_PW: ${{ secrets.GOAT_KEY_PASSWORD }}
+          GOAT_KEY_ALIAS: ${{ secrets.GOAT_KEY_ALIAS }}
         run: flutter build apk --release --dart-define=BUILD_NUMBER=${{ github.run_number }}
 
       - name: Переименовать APK
