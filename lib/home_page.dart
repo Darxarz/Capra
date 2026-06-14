@@ -316,6 +316,48 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _openTrash() {
+    // на Android удаление уходит в системную корзину галереи — своей у нас нет,
+    // а открыть «Недавно удалённые» нельзя (у каждого вендора своё). Поясняем.
+    if (Platform.isAndroid || Platform.isIOS) {
+      final c = AuroraTheme.of(context).colors;
+      showModalBottomSheet<void>(
+        context: context,
+        backgroundColor: c.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+        ),
+        builder: (ctx) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(22, 20, 22, 24),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.delete_outline_rounded, color: c.accent, size: 34),
+              const SizedBox(height: 12),
+              Text('Корзина — в галерее устройства',
+                  style: TextStyle(
+                      color: c.text, fontSize: 16, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              Text(
+                  'На Android удалённые фото попадают в системную корзину — '
+                  '«Недавно удалённые» в приложении Галерея/Фото устройства. '
+                  'Там их можно восстановить в течение ~30 дней. Открыть её '
+                  'из стороннего приложения система не позволяет.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: c.muted, fontSize: 13)),
+              const SizedBox(height: 18),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: c.accent,
+                  minimumSize: const Size.fromHeight(46),
+                ),
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Понятно'),
+              ),
+            ]),
+          ),
+        ),
+      );
+      return;
+    }
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => TrashPage(onChanged: _rescan),
     ));
@@ -1783,42 +1825,52 @@ class _MosaicGridState extends State<_MosaicGrid> {
     }
   }
 
-  /// Пропорция плитки (ширина/высота) из пропорции фото — три фикс-формы.
-  double _tileAspect(double? ratio) {
-    if (ratio == null) return 1.0; // ещё неизвестно — квадрат
-    if (ratio >= 1.4) return 1.5; // широкая (пейзаж)
-    if (ratio <= 0.71) return 0.66; // высокая (портрет)
-    return 1.0; // квадрат
-  }
+  static const _pad = EdgeInsets.fromLTRB(16, 6, 16, 18);
 
   @override
   Widget build(BuildContext context) {
     final gap = SettingsService.instance.tileSpacing;
-    return AnimatedBuilder(
-      animation: DimsService.instance,
-      builder: (ctx, _) {
-        return MasonryGridView.extent(
-          padding: const EdgeInsets.fromLTRB(16, 6, 16, 18),
-          maxCrossAxisExtent: widget.cell,
-          mainAxisSpacing: gap,
-          crossAxisSpacing: gap,
-          itemCount: widget.photos.length,
-          itemBuilder: (ctx, i) {
-            final photo = widget.photos[i];
-            final ratio = DimsService.instance.ratioOf(photo.path);
-            return AspectRatio(
-              aspectRatio: _tileAspect(ratio),
-              child: PhotoTile(
-                photo: photo,
-                cell: widget.cell,
-                onLongPress: () => Selection.instance.enter(photo.path),
-                onTap: () => openViewer(ctx, widget.photos, i),
-              ),
-            );
-          },
-        );
-      },
-    );
+    return LayoutBuilder(builder: (ctx, cns) {
+      // ширина одной колонки (как считает SliverSimpleGridDelegateWithMaxCrossAxisExtent)
+      final crossExtent = cns.maxWidth - _pad.horizontal;
+      var cols = (crossExtent / widget.cell).ceil();
+      if (cols < 1) cols = 1;
+      final childW = (crossExtent - (cols - 1) * gap) / cols;
+      // высота «в два квадрата» (ровно два ряда + зазор), aspect = ш/в
+      final tallAspect = childW / (2 * childW + gap);
+
+      // только две высоты: квадрат и «два квадрата» (портрет) — мозаика ровная
+      double aspectFor(double? ratio) {
+        if (ratio != null && ratio <= 0.8) return tallAspect; // портрет → 2 кв.
+        return 1.0; // квадрат и пейзаж
+      }
+
+      return AnimatedBuilder(
+        animation: DimsService.instance,
+        builder: (ctx2, _) {
+          return MasonryGridView.extent(
+            padding: _pad,
+            maxCrossAxisExtent: widget.cell,
+            mainAxisSpacing: gap,
+            crossAxisSpacing: gap,
+            itemCount: widget.photos.length,
+            itemBuilder: (ctx3, i) {
+              final photo = widget.photos[i];
+              final ratio = DimsService.instance.ratioOf(photo.path);
+              return AspectRatio(
+                aspectRatio: aspectFor(ratio),
+                child: PhotoTile(
+                  photo: photo,
+                  cell: widget.cell,
+                  onLongPress: () => Selection.instance.enter(photo.path),
+                  onTap: () => openViewer(ctx3, widget.photos, i),
+                ),
+              );
+            },
+          );
+        },
+      );
+    });
   }
 }
 
