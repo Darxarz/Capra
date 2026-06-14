@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'theme.dart';
 import 'model.dart';
+import 'editor_service.dart';
 import 'favorites.dart';
 import 'tag_service.dart';
 import 'tagger_service.dart';
@@ -247,6 +249,11 @@ class _InfoPanel extends StatelessWidget {
                 'в редакторе'),
           ),
         ],
+        // «Открыть в…» — найденные в системе редакторы (ПК)
+        if (!photo.isRemote && (Platform.isWindows || Platform.isLinux)) ...[
+          const SizedBox(height: 16),
+          _OpenInRow(photo: photo, colors: c),
+        ],
         const SizedBox(height: 18),
         _TagsSection(photo: photo, colors: c),
         const SizedBox(height: 20),
@@ -280,6 +287,87 @@ class _InfoPanel extends StatelessWidget {
         _MetaSection(photo: photo, colors: c),
       ]),
     );
+  }
+}
+
+// ───────────────────────── «Открыть в…» (редакторы) ─────────────────────────
+class _OpenInRow extends StatefulWidget {
+  final PhotoItem photo;
+  final AuroraColors colors;
+  const _OpenInRow({required this.photo, required this.colors});
+
+  @override
+  State<_OpenInRow> createState() => _OpenInRowState();
+}
+
+class _OpenInRowState extends State<_OpenInRow> {
+  List<EditorApp> _apps = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    EditorService.available().then((a) {
+      if (mounted) setState(() => _apps = a);
+    });
+  }
+
+  Widget _chip(IconData? icon, String? badge, String label, Color color,
+      VoidCallback onTap) {
+    final c = widget.colors;
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(13),
+          ),
+          alignment: Alignment.center,
+          child: icon != null
+              ? Icon(icon, color: Colors.white, size: 20)
+              : Text(badge ?? '',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800)),
+        ),
+        const SizedBox(height: 4),
+        SizedBox(
+          width: 56,
+          child: Text(label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: c.muted, fontSize: 10.5)),
+        ),
+      ]),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.colors;
+    final path = widget.photo.path;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('Открыть в…',
+          style: TextStyle(
+              color: c.muted, fontSize: 12.5, fontWeight: FontWeight.w600)),
+      const SizedBox(height: 10),
+      Wrap(spacing: 12, runSpacing: 12, children: [
+        for (final app in _apps)
+          _chip(null, app.badge, app.name, app.color,
+              () => EditorService.openIn(app, path)),
+        if (Platform.isWindows)
+          _chip(Icons.more_horiz_rounded, null, 'Другое…',
+              const Color(0xFF6B7280),
+              () => EditorService.openWithDialog(path)),
+      ]),
+      if (_apps.isEmpty && !Platform.isWindows)
+        Text('Редакторы не найдены.',
+            style: TextStyle(color: c.muted, fontSize: 12)),
+    ]);
   }
 }
 
