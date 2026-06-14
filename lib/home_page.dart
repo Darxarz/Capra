@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:path/path.dart' as p;
@@ -314,6 +315,12 @@ class _HomePageState extends State<HomePage> {
     ));
   }
 
+  void _openTrash() {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => TrashPage(onChanged: _rescan),
+    ));
+  }
+
   void _manageFolders() {
     final c = AuroraTheme.of(context).colors;
     // на Android папки не выбираются — показываем управление доступом к фото
@@ -460,6 +467,7 @@ class _HomePageState extends State<HomePage> {
               tagsOpen: _tagsPanelOpen,
               onDedup: _openDedup,
               onLan: _openLan,
+              onTrash: _openTrash,
               onSettings: _openSettings,
             ),
             if (_tagsPanelOpen)
@@ -716,6 +724,7 @@ class _Rail extends StatelessWidget {
   final bool tagsOpen;
   final VoidCallback onDedup;
   final VoidCallback onLan;
+  final VoidCallback onTrash;
   final VoidCallback onSettings;
   const _Rail({
     required this.mode,
@@ -726,6 +735,7 @@ class _Rail extends StatelessWidget {
     required this.tagsOpen,
     required this.onDedup,
     required this.onLan,
+    required this.onTrash,
     required this.onSettings,
   });
 
@@ -784,6 +794,7 @@ class _Rail extends StatelessWidget {
             builder: (_, __) => item(Icons.wifi_tethering_rounded, null,
                 onTap: onLan, active: LanService.instance.isRunning),
           ),
+          item(Icons.delete_outline_rounded, null, onTap: onTrash),
           const Spacer(),
           item(Icons.settings_outlined, null, onTap: onSettings),
           const SizedBox(height: 10),
@@ -1439,6 +1450,8 @@ class PhotoTile extends StatelessWidget {
   final VoidCallback? onLongPress;
   // false — выделение здесь отключено (например, внутри отдельной папки)
   final bool selectable;
+  // false — ПКМ обрабатывает сетка (Listener для «паровозика»), не плитка
+  final bool secondaryTapSelect;
   const PhotoTile({
     super.key,
     required this.photo,
@@ -1446,6 +1459,7 @@ class PhotoTile extends StatelessWidget {
     required this.onTap,
     this.onLongPress,
     this.selectable = true,
+    this.secondaryTapSelect = true,
   });
 
   @override
@@ -1469,9 +1483,11 @@ class PhotoTile extends StatelessWidget {
             }
           },
           onLongPress: selectable ? onLongPress : null,
-          // ПКМ на ПК — войти в выделение / переключить
-          onSecondaryTapDown:
-              selectable ? (_) => sel.toggle(photo.path) : null,
+          // ПКМ на ПК — войти в выделение / переключить (в _AllGrid отключено,
+          // там правую кнопку ведёт Listener для покраски диапазона)
+          onSecondaryTapDown: (selectable && secondaryTapSelect)
+              ? (_) => sel.toggle(photo.path)
+              : null,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(s.gridRadius),
             child: Stack(
@@ -1586,6 +1602,7 @@ class _AllGridState extends State<_AllGrid> {
   Offset _lastLocal = Offset.zero;
   double _viewW = 0;
   double _viewH = 0;
+  bool _painting = false; // идёт покраска правой кнопкой мыши (ПК)
 
   @override
   void dispose() {
@@ -1642,6 +1659,33 @@ class _AllGridState extends State<_AllGrid> {
     Selection.instance.endDrag();
   }
 
+  // ── ПК: покраска правой кнопкой мыши (не конфликтует с прокруткой ЛКМ) ──
+  void _onPointerDown(PointerDownEvent e) {
+    if (e.kind != PointerDeviceKind.mouse) return;
+    if ((e.buttons & kSecondaryMouseButton) == 0) return;
+    final idx = _indexAt(e.localPosition);
+    if (idx == null) return;
+    _painting = true;
+    _lastLocal = e.localPosition;
+    Selection.instance.beginDrag(widget.photos, idx);
+    _startAutoScroll();
+  }
+
+  void _onPointerMove(PointerMoveEvent e) {
+    if (!_painting) return;
+    _lastLocal = e.localPosition;
+    final idx = _indexAt(e.localPosition);
+    if (idx != null) Selection.instance.updateDrag(widget.photos, idx);
+  }
+
+  void _onPointerUp([PointerEvent? _]) {
+    if (!_painting) return;
+    _painting = false;
+    _autoScroll?.cancel();
+    _autoScroll = null;
+    Selection.instance.endDrag();
+  }
+
   /// Автопрокрутка, пока палец/курсор у верхнего или нижнего края.
   void _startAutoScroll() {
     _autoScroll?.cancel();
@@ -1688,16 +1732,24 @@ class _AllGridState extends State<_AllGrid> {
           photo: widget.photos[i],
           cell: widget.cell,
           selectable: widget.selectable,
+          secondaryTapSelect: false, // ПКМ ведёт Listener (покраска)
           onTap: () => openViewer(ctx, widget.photos, i),
         ),
       );
       if (!widget.selectable) return grid;
-      return GestureDetector(
-        onLongPressStart: _onLongPressStart,
-        onLongPressMoveUpdate: _onLongPressMove,
-        onLongPressEnd: _onLongPressEnd,
-        onLongPressCancel: () => _onLongPressEnd(null),
-        child: grid,
+      // телефон: «паровозик» долгим тапом; ПК: правой кнопкой мыши (Listener)
+      return Listener(
+        onPointerDown: _onPointerDown,
+        onPointerMove: _onPointerMove,
+        onPointerUp: _onPointerUp,
+        onPointerCancel: _onPointerUp,
+        child: GestureDetector(
+          onLongPressStart: _onLongPressStart,
+          onLongPressMoveUpdate: _onLongPressMove,
+          onLongPressEnd: _onLongPressEnd,
+          onLongPressCancel: () => _onLongPressEnd(null),
+          child: grid,
+        ),
       );
     });
   }
