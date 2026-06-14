@@ -38,6 +38,7 @@ class SettingsService extends ChangeNotifier {
   static const _kShowHidden = 'goat_show_hidden';
   static const _kGapStyle = 'goat_gap_style';
   static const _kGapColor = 'goat_gap_color';
+  static const _kPcScanMinDim = 'goat_pc_scan_min_dim';
 
   late SharedPreferences _p;
   bool _ready = false;
@@ -60,6 +61,7 @@ class SettingsService extends ChangeNotifier {
   bool showHidden = false; // показывать ли скрытые папки в галерее
   GapStyle gapStyle = GapStyle.none; // оформление зазоров
   int gapColorValue = 0xFFC96442; // цвет для GapStyle.color (ARGB)
+  int pcScanMinDim = 256; // мин. размер картинки (px) при поиске по ПК
 
   bool get ready => _ready;
 
@@ -86,6 +88,7 @@ class SettingsService extends ChangeNotifier {
         (e) => e.name == _p.getString(_kGapStyle),
         orElse: () => GapStyle.none);
     gapColorValue = _p.getInt(_kGapColor) ?? gapColorValue;
+    pcScanMinDim = _p.getInt(_kPcScanMinDim) ?? pcScanMinDim;
     _ready = true;
     notifyListeners();
   }
@@ -184,6 +187,12 @@ class SettingsService extends ChangeNotifier {
   void setGapColor(int argb) {
     gapColorValue = argb;
     _p.setInt(_kGapColor, argb);
+    notifyListeners();
+  }
+
+  void setPcScanMinDim(int v) {
+    pcScanMinDim = v;
+    _p.setInt(_kPcScanMinDim, v);
     notifyListeners();
   }
 

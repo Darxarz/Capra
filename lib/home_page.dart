@@ -638,7 +638,8 @@ class _HomePageState extends State<HomePage> {
   Future<void> _scanWholePc() async {
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _loading = true);
-    final photos = await LibraryService.scanWholePc();
+    final photos = await LibraryService.scanWholePc(
+        minDim: SettingsService.instance.pcScanMinDim);
     final folders = LibraryService.topFolders(
         {for (final ph in photos) ph.folderPath});
     await LibraryService.setFolders(folders);

@@ -220,6 +220,31 @@ class _Sections extends StatelessWidget {
         ])),
         const SizedBox(height: 22),
 
+        if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) ...[
+          const _SectionTitle('Поиск по компьютеру'),
+          _Card(c: c, child: Column(children: [
+            _SliderRow(
+              label: 'Игнорировать картинки меньше',
+              value: s.pcScanMinDim.toDouble(),
+              min: 0, max: 1024,
+              valueLabel: s.pcScanMinDim == 0
+                  ? 'не отсеивать'
+                  : '${s.pcScanMinDim} px',
+              onChanged: (v) => s.setPcScanMinDim((v / 32).round() * 32),
+              c: c,
+            ),
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                  'При «найти все картинки на ПК» отсеивает иконки и текстуры '
+                  '(мелкие картинки, файлы < 20 КБ и служебные папки).',
+                  style: TextStyle(color: c.muted, fontSize: 12)),
+            ),
+          ])),
+          const SizedBox(height: 22),
+        ],
+
         const _SectionTitle('Теги'),
         _Card(c: c, child: Column(children: [
           _ActionRow(
