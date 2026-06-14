@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:path/path.dart' as p;
 import 'package:photo_manager/photo_manager.dart';
 import 'theme.dart';
@@ -1827,50 +1828,191 @@ class _MosaicGridState extends State<_MosaicGrid> {
 
   static const _pad = EdgeInsets.fromLTRB(16, 6, 16, 18);
 
+  // кэш раскладки, чтобы не пересчитывать упаковку каждый кадр
+  _QuiltLayout? _layout;
+  String _sig = '';
+
   @override
   Widget build(BuildContext context) {
     final gap = SettingsService.instance.tileSpacing;
-    return LayoutBuilder(builder: (ctx, cns) {
-      // ширина одной колонки (как считает SliverSimpleGridDelegateWithMaxCrossAxisExtent)
-      final crossExtent = cns.maxWidth - _pad.horizontal;
-      var cols = (crossExtent / widget.cell).ceil();
-      if (cols < 1) cols = 1;
-      final childW = (crossExtent - (cols - 1) * gap) / cols;
-      // высота «в два квадрата» (ровно два ряда + зазор), aspect = ш/в
-      final tallAspect = childW / (2 * childW + gap);
+    return AnimatedBuilder(
+      animation: DimsService.instance,
+      builder: (ctx, _) {
+        return LayoutBuilder(builder: (ctx2, cns) {
+          final crossExtent = cns.maxWidth - _pad.horizontal;
+          var cols = (crossExtent / widget.cell).ceil();
+          if (cols < 1) cols = 1;
+          final cell = (crossExtent - (cols - 1) * gap) / cols; // ширина клетки
 
-      // только две высоты: квадрат и «два квадрата» (портрет) — мозаика ровная
-      double aspectFor(double? ratio) {
-        if (ratio != null && ratio <= 0.8) return tallAspect; // портрет → 2 кв.
-        return 1.0; // квадрат и пейзаж
-      }
+          // пересчитываем упаковку только при смене входных данных
+          final sig = '$cols|${widget.photos.length}|$gap|'
+              '${cell.toStringAsFixed(1)}|${DimsService.instance.rev}';
+          if (sig != _sig || _layout == null) {
+            _layout = _packQuilt(widget.photos, cols, cell, gap);
+            _sig = sig;
+          }
 
-      return AnimatedBuilder(
-        animation: DimsService.instance,
-        builder: (ctx2, _) {
-          return MasonryGridView.extent(
+          return GridView.custom(
             padding: _pad,
-            maxCrossAxisExtent: widget.cell,
-            mainAxisSpacing: gap,
-            crossAxisSpacing: gap,
-            itemCount: widget.photos.length,
-            itemBuilder: (ctx3, i) {
-              final photo = widget.photos[i];
-              final ratio = DimsService.instance.ratioOf(photo.path);
-              return AspectRatio(
-                aspectRatio: aspectFor(ratio),
-                child: PhotoTile(
-                  photo: photo,
-                  cell: widget.cell,
-                  onLongPress: () => Selection.instance.enter(photo.path),
-                  onTap: () => openViewer(ctx3, widget.photos, i),
-                ),
-              );
-            },
+            gridDelegate: _QuiltDelegate(_layout!),
+            childrenDelegate: SliverChildBuilderDelegate(
+              (ctx3, i) => PhotoTile(
+                photo: widget.photos[i],
+                cell: widget.cell,
+                onLongPress: () =>
+                    Selection.instance.enter(widget.photos[i].path),
+                onTap: () => openViewer(ctx3, widget.photos, i),
+              ),
+              childCount: widget.photos.length,
+            ),
           );
-        },
+        });
+      },
+    );
+  }
+}
+
+/// Жадная укладка мозаики без дыр. Каждая плитка кладётся в самую нижнюю-левую
+/// свободную клетку, поэтому пустых клеток не остаётся. Форма по пропорции
+/// фото: портрет → 1×2 (два квадрата по высоте), пейзаж → 2×1 (два по ширине,
+/// если рядом свободно), иначе квадрат. Минимум(высот колонок) монотонно
+/// растёт ⇒ mainAxisOffset не убывает по индексу ⇒ поиск видимых плиток ленив.
+_QuiltLayout _packQuilt(
+    List<PhotoItem> photos, int cols, double cell, double gap) {
+  final n = photos.length;
+  final mainOff = Float64List(n);
+  final crossOff = Float64List(n);
+  final mainExt = Float64List(n);
+  final crossExt = Float64List(n);
+  final colRow = List<int>.filled(cols, 0); // до какого ряда занята колонка
+  final step = cell + gap;
+  double span(int k) => k * cell + (k - 1) * gap; // экстент в k клеток
+
+  var maxScroll = 0.0;
+  for (var i = 0; i < n; i++) {
+    // самая нижняя клетка = минимальный ряд, самый левый столбец
+    var minRow = colRow[0];
+    for (var c = 1; c < cols; c++) {
+      if (colRow[c] < minRow) minRow = colRow[c];
+    }
+    var c0 = 0;
+    while (colRow[c0] != minRow) {
+      c0++;
+    }
+
+    final ratio = DimsService.instance.ratioOf(photos[i].path);
+    var wSpan = 1, hSpan = 1;
+    if (ratio != null && ratio <= 0.8) {
+      hSpan = 2; // портрет — два квадрата по высоте
+    } else if (ratio != null &&
+        ratio >= 1.3 &&
+        c0 + 1 < cols &&
+        colRow[c0 + 1] == minRow) {
+      wSpan = 2; // пейзаж — два квадрата по ширине (если сосед свободен)
+    }
+
+    crossOff[i] = c0 * step;
+    mainOff[i] = minRow * step;
+    crossExt[i] = span(wSpan);
+    mainExt[i] = span(hSpan);
+    for (var c = c0; c < c0 + wSpan; c++) {
+      colRow[c] = minRow + hSpan;
+    }
+    final bottom = mainOff[i] + mainExt[i];
+    if (bottom > maxScroll) maxScroll = bottom;
+  }
+
+  return _QuiltLayout(
+    mainOff: mainOff,
+    crossOff: crossOff,
+    mainExt: mainExt,
+    crossExt: crossExt,
+    maxScroll: maxScroll,
+    maxTileExt: 2 * cell + gap, // самая высокая плитка (для ленивого поиска)
+  );
+}
+
+/// Делегат, отдающий заранее посчитанную раскладку квилта.
+class _QuiltDelegate extends SliverGridDelegate {
+  final _QuiltLayout layout;
+  const _QuiltDelegate(this.layout);
+
+  @override
+  SliverGridLayout getLayout(SliverConstraints constraints) => layout;
+
+  @override
+  bool shouldRelayout(_QuiltDelegate old) => old.layout != layout;
+}
+
+/// Произвольная 2D-раскладка для [SliverGrid]: каждая плитка на своей позиции
+/// с произвольным размером. mainOff не убывает по индексу ⇒ бинарный поиск.
+class _QuiltLayout extends SliverGridLayout {
+  final Float64List mainOff;
+  final Float64List crossOff;
+  final Float64List mainExt;
+  final Float64List crossExt;
+  final double maxScroll;
+  final double maxTileExt;
+  const _QuiltLayout({
+    required this.mainOff,
+    required this.crossOff,
+    required this.mainExt,
+    required this.crossExt,
+    required this.maxScroll,
+    required this.maxTileExt,
+  });
+
+  @override
+  double computeMaxScrollOffset(int childCount) => maxScroll;
+
+  @override
+  SliverGridGeometry getGeometryForChildIndex(int index) => SliverGridGeometry(
+        scrollOffset: mainOff[index],
+        crossAxisOffset: crossOff[index],
+        mainAxisExtent: mainExt[index],
+        crossAxisExtent: crossExt[index],
       );
-    });
+
+  // первый индекс, чья плитка может попадать в видимую область сверху
+  @override
+  int getMinChildIndexForScrollOffset(double scrollOffset) =>
+      _lowerBound(scrollOffset - maxTileExt);
+
+  // последний индекс, начинающийся до конца видимой области
+  @override
+  int getMaxChildIndexForScrollOffset(double scrollOffset) {
+    final n = mainOff.length;
+    if (n == 0) return 0;
+    final i = _upperBound(scrollOffset);
+    return (i - 1).clamp(0, n - 1);
+  }
+
+  // первый индекс с mainOff >= target (mainOff неубывающий)
+  int _lowerBound(double target) {
+    var lo = 0, hi = mainOff.length;
+    while (lo < hi) {
+      final mid = (lo + hi) >> 1;
+      if (mainOff[mid] < target) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    return lo.clamp(0, mainOff.isEmpty ? 0 : mainOff.length - 1);
+  }
+
+  // первый индекс с mainOff > target
+  int _upperBound(double target) {
+    var lo = 0, hi = mainOff.length;
+    while (lo < hi) {
+      final mid = (lo + hi) >> 1;
+      if (mainOff[mid] <= target) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    return lo;
   }
 }
 

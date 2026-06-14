@@ -14,6 +14,10 @@ class DimsService extends ChangeNotifier {
   final Map<String, double> _ratio = {}; // path → width/height
   bool _loaded = false;
   bool _filling = false;
+  int _rev = 0;
+
+  /// Счётчик изменений (растёт при пополнении размеров) — для пересчёта мозаики.
+  int get rev => _rev;
 
   /// Пропорция (ширина/высота) или null, если ещё неизвестна.
   double? ratioOf(String path) => _ratio[path];
@@ -45,6 +49,7 @@ class DimsService extends ChangeNotifier {
       if (!_ratio.containsKey(ph.path)) todo.add(ph.path);
     }
     if (todo.isEmpty) {
+      _rev++;
       notifyListeners();
       return;
     }
@@ -71,6 +76,7 @@ class DimsService extends ChangeNotifier {
             _ratio[path] = 1.0;
           }
         }
+        _rev++;
         notifyListeners();
       }
     } finally {
