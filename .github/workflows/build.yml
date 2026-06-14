@@ -102,11 +102,11 @@ jobs:
           $c = Get-Content $app -Raw
           if ($app -like '*.kts') {
             $sign = "`n    signingConfigs {`n        create(`"release`") {`n            storeFile = file(`"goat-release.jks`")`n            storePassword = System.getenv(`"GOAT_STORE_PW`")`n            keyAlias = System.getenv(`"GOAT_KEY_ALIAS`")`n            keyPassword = System.getenv(`"GOAT_KEY_PW`")`n        }`n    }`n"
-            if ($c -notmatch 'signingConfigs') { $c = $c -replace '(android\s*\{)', "`$1$sign" }
+            if ($c -notmatch 'goat-release\.jks') { $c = $c -replace '(android\s*\{)', "`$1$sign" }
             $c = $c -replace 'signingConfig\s*=\s*signingConfigs\.getByName\("debug"\)', 'signingConfig = signingConfigs.getByName("release")'
           } else {
             $sign = "`n    signingConfigs {`n        release {`n            storeFile file(`"goat-release.jks`")`n            storePassword System.getenv(`"GOAT_STORE_PW`")`n            keyAlias System.getenv(`"GOAT_KEY_ALIAS`")`n            keyPassword System.getenv(`"GOAT_KEY_PW`")`n        }`n    }`n"
-            if ($c -notmatch 'signingConfigs') { $c = $c -replace '(android\s*\{)', "`$1$sign" }
+            if ($c -notmatch 'goat-release\.jks') { $c = $c -replace '(android\s*\{)', "`$1$sign" }
             $c = $c -replace 'signingConfig\s+signingConfigs\.debug', 'signingConfig signingConfigs.release'
           }
           Set-Content $app $c
