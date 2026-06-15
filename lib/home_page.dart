@@ -2663,6 +2663,8 @@ class _AllGridState extends State<_AllGrid> {
       final grid = GridView.builder(
         controller: _scroll,
         padding: _pad,
+        // слабое устройство: меньше плиток рендерим про запас → меньше декодов
+        cacheExtent: s.lowEndMode ? 120 : null,
         gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
           maxCrossAxisExtent: widget.cell,
           mainAxisSpacing: gap,

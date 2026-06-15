@@ -57,6 +57,7 @@ class SettingsService extends ChangeNotifier {
   static const _kAvoidCloudThumbDownloads = 'goat_avoid_cloud_thumb_downloads';
   static const _kSortMode = 'goat_sort_mode';
   static const _kSortSeed = 'goat_sort_seed';
+  static const _kLowEndMode = 'goat_low_end_mode';
 
   late SharedPreferences _p;
   bool _ready = false;
@@ -88,8 +89,12 @@ class SettingsService extends ChangeNotifier {
       true; // не скачивать облачные оригиналы ради сетки
   SortMode sortMode = SortMode.dateDesc; // порядок сортировки в сетке
   int sortSeed = 1; // зерно для случайного порядка (стабильное между кадрами)
+  bool lowEndMode = false; // режим слабого устройства (меньше нагрузки)
 
   bool get ready => _ready;
+
+  /// Анимации стоит отключить: либо вручную, либо в режиме слабого устройства.
+  bool get motionReduced => reduceMotion || lowEndMode;
 
   Future<void> load() async {
     _p = await SharedPreferences.getInstance();
@@ -130,7 +135,14 @@ class SettingsService extends ChangeNotifier {
         (e) => e.name == _p.getString(_kSortMode),
         orElse: () => SortMode.dateDesc);
     sortSeed = _p.getInt(_kSortSeed) ?? sortSeed;
+    lowEndMode = _p.getBool(_kLowEndMode) ?? lowEndMode;
     _ready = true;
+    notifyListeners();
+  }
+
+  void setLowEndMode(bool v) {
+    lowEndMode = v;
+    _p.setBool(_kLowEndMode, v);
     notifyListeners();
   }
 

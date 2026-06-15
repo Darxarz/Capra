@@ -155,7 +155,7 @@ class _ViewerPageState extends State<ViewerPage> {
       body: SafeArea(
         child: LayoutBuilder(builder: (ctx, cns) {
           final wide = cns.maxWidth > 720;
-          final dur = SettingsService.instance.reduceMotion
+          final dur = SettingsService.instance.motionReduced
               ? Duration.zero
               : const Duration(milliseconds: 220);
           // на ПК панель шириной 360, на телефоне — лист на 78% высоты
@@ -234,7 +234,7 @@ class _ZoomableImageState extends State<_ZoomableImage>
   @override
   void initState() {
     super.initState();
-    final fast = SettingsService.instance.reduceMotion;
+    final fast = SettingsService.instance.motionReduced;
     _anim = AnimationController(
       vsync: this,
       duration: Duration(milliseconds: fast ? 0 : 220),

@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
@@ -11,6 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:archive/archive.dart';
 import 'package:image/image.dart' as img;
 import 'package:win32/win32.dart' as win;
+import 'settings_service.dart';
 
 /// Извлечение и показ превью «проектных» форматов (KRA, PSD), которые Flutter
 /// сам декодировать не умеет. Внутри KRA лежит готовый PNG (mergedimage/preview),
@@ -89,10 +92,16 @@ class ThumbnailCacheService {
         if (_isCloudOffline(path)) return null;
       }
 
-      final generated = await compute(
-        _makeThumb,
-        _ThumbReq(path, cacheWidth),
-      );
+      // ограничиваем число одновременных декодов: каждый — это полный декод
+      // файла в отдельном изоляте; десятки параллельно (особенно при быстрой
+      // прокрутке) кладут слабый процессор. Очередь сглаживает нагрузку.
+      await _acquireThumbSlot();
+      Uint8List? generated;
+      try {
+        generated = await compute(_makeThumb, _ThumbReq(path, cacheWidth));
+      } finally {
+        _releaseThumbSlot();
+      }
       if (generated != null && generated.isNotEmpty) {
         _writeQuiet(cache, generated);
       }
@@ -100,6 +109,30 @@ class ThumbnailCacheService {
     } catch (_) {
       return null;
     }
+  }
+
+  // ─── ограничитель параллельной генерации миниатюр (семафор) ───
+  static int _activeThumbs = 0;
+  static final Queue<Completer<void>> _thumbWaiters = Queue();
+
+  /// Сколько миниатюр генерировать одновременно: в режиме слабого устройства —
+  /// одна, иначе половина ядер (но не больше 4), чтобы не забивать процессор.
+  static int get _maxThumbJobs => SettingsService.instance.lowEndMode
+      ? 1
+      : (Platform.numberOfProcessors ~/ 2).clamp(2, 4);
+
+  static Future<void> _acquireThumbSlot() async {
+    while (_activeThumbs >= _maxThumbJobs) {
+      final c = Completer<void>();
+      _thumbWaiters.add(c);
+      await c.future;
+    }
+    _activeThumbs++;
+  }
+
+  static void _releaseThumbSlot() {
+    _activeThumbs--;
+    if (_thumbWaiters.isNotEmpty) _thumbWaiters.removeFirst().complete();
   }
 
   static String _key(String path, int mtime, int cacheWidth) {

@@ -14,10 +14,20 @@ class GapBackground extends StatefulWidget {
 
 class _GapBackgroundState extends State<GapBackground>
     with SingleTickerProviderStateMixin {
+  // тикер запускаем ТОЛЬКО когда реально нужно мерцание — иначе он гонит
+  // весь интерфейс на 60 fps впустую (заметно на слабом железе и по батарее)
   late final AnimationController _ctl = AnimationController(
     vsync: this,
     duration: const Duration(seconds: 6),
-  )..repeat();
+  );
+
+  void _syncTicker(bool wantAnim) {
+    if (wantAnim && !_ctl.isAnimating) {
+      _ctl.repeat();
+    } else if (!wantAnim && _ctl.isAnimating) {
+      _ctl.stop();
+    }
+  }
 
   @override
   void dispose() {
@@ -47,6 +57,11 @@ class _GapBackgroundState extends State<GapBackground>
       builder: (context, _) {
         final s = SettingsService.instance;
         final style = s.gapStyle;
+        final shimmer = style == GapStyle.silver ||
+            style == GapStyle.gold ||
+            style == GapStyle.holographic;
+        // тикер крутим только при активном мерцающем стиле и без «тихого» режима
+        _syncTicker(shimmer && !s.motionReduced);
         if (style == GapStyle.none) return widget.child;
 
         Widget bg;
@@ -63,7 +78,7 @@ class _GapBackgroundState extends State<GapBackground>
                 : style == GapStyle.gold
                     ? _gold
                     : _holo;
-            bg = s.reduceMotion
+            bg = s.motionReduced
                 ? _gradientBox(colors, 0)
                 : AnimatedBuilder(
                     animation: _ctl,

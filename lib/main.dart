@@ -106,6 +106,10 @@ class _GoatAppState extends State<GoatApp> with WidgetsBindingObserver {
         title: 'GOAT',
         debugShowCheckedModeBanner: false,
         theme: colors.toThemeData(),
+        // не анимировать смену темы в «тихом» режиме / на слабом железе
+        themeAnimationDuration: SettingsService.instance.motionReduced
+            ? Duration.zero
+            : kThemeAnimationDuration,
         home: const HomePage(),
       ),
     );

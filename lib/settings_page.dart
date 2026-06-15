@@ -224,6 +224,24 @@ class _Sections extends StatelessWidget {
               ),
             ])),
         const SizedBox(height: 22),
+        _SectionTitle(tr('Производительность', 'Performance', 'Rendimiento')),
+        _Card(
+            c: c,
+            child: _SwitchRow(
+              title: tr('Режим слабого устройства', 'Low-end device mode',
+                  'Modo de dispositivo lento'),
+              subtitle: tr(
+                  'Отключает анимации, мерцание зазоров и ограничивает фоновую '
+                      'обработку миниатюр — плавнее на старых ПК и планшетах',
+                  'Disables animations and shimmer and limits background '
+                      'thumbnail work — smoother on old PCs and tablets',
+                  'Desactiva animaciones y brillos y limita el trabajo de '
+                      'miniaturas en segundo plano — más fluido en equipos antiguos'),
+              value: SettingsService.instance.lowEndMode,
+              onChanged: SettingsService.instance.setLowEndMode,
+              c: c,
+            )),
+        const SizedBox(height: 22),
         _SectionTitle(tr('Запуск', 'Startup')),
         _Card(
             c: c,
