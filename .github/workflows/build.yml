@@ -173,6 +173,38 @@ jobs:
             }
           }
 
+      # На Android пакет onnxruntime ВШИВАЕТ свою libonnxruntime.so (1.15.1) прямо
+      # в jniLibs — она не грузит модель тегов v3 (ai.onnx.ml opset 4). Подменяем .so
+      # на свежий из официального onnxruntime-android AAR (аналог подмены .dll на
+      # Windows). Пакет грузит ядро через C-API (FFI), java-обёртка не нужна.
+      - name: Обновить libonnxruntime.so (Android, для модели v3)
+        shell: pwsh
+        run: |
+          $ver = '1.20.0'
+          Invoke-WebRequest "https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/$ver/onnxruntime-android-$ver.aar" -OutFile ort-android.zip
+          Expand-Archive ort-android.zip -DestinationPath ort-android -Force
+          $roots = @($env:PUB_CACHE, "$env:LOCALAPPDATA\Pub\Cache", "$env:APPDATA\Pub\Cache") |
+            Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+          $patched = 0
+          foreach ($root in $roots) {
+            Get-ChildItem "$root\hosted\pub.dev" -Directory -Filter 'onnxruntime-*' -ErrorAction SilentlyContinue | ForEach-Object {
+              $jni = Join-Path $_.FullName 'android\src\main\jniLibs'
+              if (Test-Path $jni) {
+                Get-ChildItem $jni -Directory | ForEach-Object {
+                  $abi = $_.Name
+                  $src = "ort-android\jni\$abi\libonnxruntime.so"
+                  if (Test-Path $src) {
+                    Copy-Item $src (Join-Path $_.FullName 'libonnxruntime.so') -Force
+                    $patched++
+                    Write-Host "заменён .so для $abi"
+                  }
+                }
+              }
+            }
+          }
+          if ($patched -eq 0) { Write-Error "не нашёл jniLibs onnxruntime — .so не заменён"; exit 1 }
+          Write-Host "Android libonnxruntime.so -> $ver ($patched ABI)"
+
       # Иконка приложения (Android mipmap + Windows .ico) — flutter_launcher_icons
       # перезаписывает иконки в свежесозданных windows/android папках своей PNG.
       - name: Сгенерировать иконку приложения
