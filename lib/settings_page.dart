@@ -185,6 +185,16 @@ class _Sections extends StatelessWidget {
                 c: c,
               ),
               _SwitchRow(
+                title: tr('Не скачивать облако ради сетки',
+                    'Do not download cloud files for the grid'),
+                subtitle: tr(
+                    'GOAT сначала берёт свой кэш и готовые миниатюры системы',
+                    'GOAT uses its own cache and existing system thumbnails first'),
+                value: s.avoidCloudThumbnailDownloads,
+                onChanged: s.setAvoidCloudThumbnailDownloads,
+                c: c,
+              ),
+              _SwitchRow(
                 title: tr('Уменьшить анимации', 'Reduce motion'),
                 subtitle: tr(
                     'Меньше плавных переходов — быстрее ощущается интерфейс',

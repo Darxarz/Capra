@@ -2184,8 +2184,10 @@ class PhotoTile extends StatelessWidget {
                       if (wasSync || frame != null) return child;
                       return Container(color: c.surface2);
                     },
-                    errorBuilder: (ctx, e, s) => Icon(
-                        Icons.broken_image_outlined,
+                    errorBuilder: (ctx, e, st) => Icon(
+                        s.avoidCloudThumbnailDownloads
+                            ? Icons.cloud_off_outlined
+                            : Icons.broken_image_outlined,
                         color: c.muted,
                         size: 18),
                   ),

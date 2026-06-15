@@ -51,6 +51,7 @@ class SettingsService extends ChangeNotifier {
   static const _kAppLang = 'goat_app_lang';
   static const _kUiDensity = 'goat_ui_density';
   static const _kSectionNavPlacement = 'goat_section_nav_placement';
+  static const _kAvoidCloudThumbDownloads = 'goat_avoid_cloud_thumb_downloads';
 
   late SharedPreferences _p;
   bool _ready = false;
@@ -78,6 +79,8 @@ class SettingsService extends ChangeNotifier {
   UiDensity uiDensity = UiDensity.auto; // компактность главного экрана
   SectionNavPlacement sectionNavPlacement =
       SectionNavPlacement.both; // где показывать разделы
+  bool avoidCloudThumbnailDownloads =
+      true; // не скачивать облачные оригиналы ради сетки
 
   bool get ready => _ready;
 
@@ -114,6 +117,8 @@ class SettingsService extends ChangeNotifier {
     sectionNavPlacement = SectionNavPlacement.values.firstWhere(
         (e) => e.name == _p.getString(_kSectionNavPlacement),
         orElse: () => SectionNavPlacement.both);
+    avoidCloudThumbnailDownloads =
+        _p.getBool(_kAvoidCloudThumbDownloads) ?? avoidCloudThumbnailDownloads;
     _ready = true;
     notifyListeners();
   }
@@ -236,6 +241,12 @@ class SettingsService extends ChangeNotifier {
   void setSectionNavPlacement(SectionNavPlacement v) {
     sectionNavPlacement = v;
     _p.setString(_kSectionNavPlacement, v.name);
+    notifyListeners();
+  }
+
+  void setAvoidCloudThumbnailDownloads(bool v) {
+    avoidCloudThumbnailDownloads = v;
+    _p.setBool(_kAvoidCloudThumbDownloads, v);
     notifyListeners();
   }
 

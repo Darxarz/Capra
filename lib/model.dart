@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'preview_service.dart';
+import 'settings_service.dart';
 
 /// Расширения, которые считаем изображениями.
 const Set<String> kImageExtensions = {
@@ -102,8 +103,12 @@ class PhotoItem {
           full: false,
           cacheWidth: cacheWidth);
     }
-    return ResizeImage(FileImage(File(path)),
-        width: cacheWidth, allowUpscaling: false);
+    return CachedThumbImage(
+      path,
+      mtime: modified.millisecondsSinceEpoch,
+      cacheWidth: cacheWidth,
+      avoidCloudDownload: SettingsService.instance.avoidCloudThumbnailDownloads,
+    );
   }
 
   /// Полный размер — только для открытого на весь экран фото.
