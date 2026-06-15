@@ -19,6 +19,10 @@ enum AppLang { system, ru, en, es }
 /// Порядок сортировки фото в сетке.
 enum SortMode { dateDesc, dateAsc, nameAsc, sizeDesc, random }
 
+/// Режим производительности: авто (определять по плавности), всегда включён,
+/// всегда выключен.
+enum PerfMode { auto, on, off }
+
 /// Плотность основного интерфейса: авто выбирает компактный вид на телефонах.
 enum UiDensity { auto, compact, comfortable }
 
@@ -57,7 +61,8 @@ class SettingsService extends ChangeNotifier {
   static const _kAvoidCloudThumbDownloads = 'goat_avoid_cloud_thumb_downloads';
   static const _kSortMode = 'goat_sort_mode';
   static const _kSortSeed = 'goat_sort_seed';
-  static const _kLowEndMode = 'goat_low_end_mode';
+  static const _kPerfMode = 'goat_perf_mode';
+  static const _kAutoWeak = 'goat_auto_weak_detected';
 
   late SharedPreferences _p;
   bool _ready = false;
@@ -89,9 +94,17 @@ class SettingsService extends ChangeNotifier {
       true; // не скачивать облачные оригиналы ради сетки
   SortMode sortMode = SortMode.dateDesc; // порядок сортировки в сетке
   int sortSeed = 1; // зерно для случайного порядка (стабильное между кадрами)
-  bool lowEndMode = false; // режим слабого устройства (меньше нагрузки)
+  PerfMode perfMode = PerfMode.auto; // режим производительности
+  bool autoWeakDetected = false; // авто-детект определил слабое устройство
 
   bool get ready => _ready;
+
+  /// Эффективно ли включён режим слабого устройства (учитывая авто-детект).
+  bool get lowEndMode => switch (perfMode) {
+        PerfMode.on => true,
+        PerfMode.off => false,
+        PerfMode.auto => autoWeakDetected,
+      };
 
   /// Анимации стоит отключить: либо вручную, либо в режиме слабого устройства.
   bool get motionReduced => reduceMotion || lowEndMode;
@@ -135,14 +148,30 @@ class SettingsService extends ChangeNotifier {
         (e) => e.name == _p.getString(_kSortMode),
         orElse: () => SortMode.dateDesc);
     sortSeed = _p.getInt(_kSortSeed) ?? sortSeed;
-    lowEndMode = _p.getBool(_kLowEndMode) ?? lowEndMode;
+    perfMode = PerfMode.values.firstWhere(
+        (e) => e.name == _p.getString(_kPerfMode),
+        orElse: () => PerfMode.auto);
+    autoWeakDetected = _p.getBool(_kAutoWeak) ?? autoWeakDetected;
     _ready = true;
     notifyListeners();
   }
 
-  void setLowEndMode(bool v) {
-    lowEndMode = v;
-    _p.setBool(_kLowEndMode, v);
+  void setPerfMode(PerfMode v) {
+    perfMode = v;
+    _p.setString(_kPerfMode, v.name);
+    // при возврате к «авто» даём детектору решить заново
+    if (v == PerfMode.auto) {
+      autoWeakDetected = false;
+      _p.setBool(_kAutoWeak, false);
+    }
+    notifyListeners();
+  }
+
+  /// Вызывается авто-детектором, когда устройство стабильно не тянет плавность.
+  void markAutoWeak() {
+    if (autoWeakDetected) return;
+    autoWeakDetected = true;
+    _p.setBool(_kAutoWeak, true);
     notifyListeners();
   }
 

@@ -227,20 +227,27 @@ class _Sections extends StatelessWidget {
         _SectionTitle(tr('Производительность', 'Performance', 'Rendimiento')),
         _Card(
             c: c,
-            child: _SwitchRow(
-              title: tr('Режим слабого устройства', 'Low-end device mode',
-                  'Modo de dispositivo lento'),
-              subtitle: tr(
-                  'Отключает анимации, мерцание зазоров и ограничивает фоновую '
-                      'обработку миниатюр — плавнее на старых ПК и планшетах',
-                  'Disables animations and shimmer and limits background '
-                      'thumbnail work — smoother on old PCs and tablets',
-                  'Desactiva animaciones y brillos y limita el trabajo de '
-                      'miniaturas en segundo plano — más fluido en equipos antiguos'),
-              value: SettingsService.instance.lowEndMode,
-              onChanged: SettingsService.instance.setLowEndMode,
-              c: c,
-            )),
+            child: Column(children: [
+              _RowLabel(
+                  tr('Режим слабого устройства', 'Low-end device mode',
+                      'Modo de dispositivo lento'),
+                  c: c),
+              const SizedBox(height: 4),
+              Text(
+                  tr(
+                      '«Авто» сам включит экономию, если устройство не тянет '
+                          'плавность. Отключает анимации и ограничивает фоновую '
+                          'обработку миниатюр.',
+                      '“Auto” enables it automatically if the device can’t keep '
+                          'up. Disables animations and limits background '
+                          'thumbnail work.',
+                      '«Auto» lo activa solo si el dispositivo no va fluido. '
+                          'Desactiva animaciones y limita las miniaturas en '
+                          'segundo plano.'),
+                  style: TextStyle(color: c.muted, fontSize: 12)),
+              const SizedBox(height: 10),
+              const _PerfPicker(),
+            ])),
         const SizedBox(height: 22),
         _SectionTitle(tr('Запуск', 'Startup')),
         _Card(
@@ -767,6 +774,68 @@ class _ModePicker extends StatelessWidget {
       chip(tr('Светлая', 'Light'), Icons.light_mode_rounded,
           ThemeModeChoice.light),
       chip(tr('Тёмная', 'Dark'), Icons.dark_mode_rounded, ThemeModeChoice.dark),
+    ]);
+  }
+}
+
+// ───────────────────────── режим производительности ─────────────────────────
+class _PerfPicker extends StatelessWidget {
+  const _PerfPicker();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AuroraTheme.of(context).colors;
+    final s = SettingsService.instance;
+    final auto = s.perfMode == PerfMode.auto && s.autoWeakDetected;
+    Widget chip(String label, IconData icon, PerfMode v) {
+      final on = s.perfMode == v;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => s.setPerfMode(v),
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+            decoration: BoxDecoration(
+              color: on ? c.accentSoft : c.surface2,
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(color: on ? c.accent : c.line),
+            ),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Icon(icon, size: 18, color: on ? c.accentInk : c.muted),
+              const SizedBox(height: 4),
+              Text(label,
+                  style: TextStyle(
+                      color: on ? c.accentInk : c.text,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600)),
+            ]),
+          ),
+        ),
+      );
+    }
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        chip(tr('Авто', 'Auto', 'Auto'), Icons.auto_mode_rounded, PerfMode.auto),
+        chip(tr('Включить', 'On', 'Activado'), Icons.battery_saver_rounded,
+            PerfMode.on),
+        chip(tr('Выключить', 'Off', 'Desactivado'), Icons.flash_on_rounded,
+            PerfMode.off),
+      ]),
+      if (auto) ...[
+        const SizedBox(height: 8),
+        Row(children: [
+          Icon(Icons.check_circle_rounded, size: 15, color: c.accent),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+                tr('Авто-режим определил слабое устройство — экономия включена.',
+                    'Auto detected a slow device — saving is on.',
+                    'Auto detectó un dispositivo lento — el ahorro está activo.'),
+                style: TextStyle(color: c.muted, fontSize: 11.5)),
+          ),
+        ]),
+      ],
     ]);
   }
 }

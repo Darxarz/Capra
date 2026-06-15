@@ -8,6 +8,7 @@ import 'tag_service.dart';
 import 'settings_service.dart';
 import 'lan_store.dart';
 import 'error_log.dart';
+import 'perf_monitor.dart';
 
 Future<void> main() async {
   // Перехватываем все ошибки в файловый журнал — для диагностики крашей на
@@ -35,6 +36,7 @@ Future<void> main() async {
       // если база не открылась — приложение всё равно работает (без тегов)
       ErrorLog.recordError(e, s);
     }
+    PerfMonitor.instance.start(); // авто-детект слабого устройства по плавности
     runApp(const GoatApp());
   }, (error, stack) {
     ErrorLog.recordError(error, stack);

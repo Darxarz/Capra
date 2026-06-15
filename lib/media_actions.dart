@@ -8,6 +8,7 @@ import 'model.dart';
 import 'theme.dart';
 import 'trash_service.dart';
 import 'tag_service.dart';
+import 'i18n.dart';
 
 /// Действия над фото (одиночные и массовые): удаление, копирование,
 /// перемещение, отправка, добавление тегов. Используются и из контекстных
@@ -28,12 +29,15 @@ class MediaActions {
       } else if (Platform.isMacOS) {
         await Process.start('open', [photo.path]);
       } else {
-        messenger.showSnackBar(const SnackBar(
-            content: Text('Открытие в редакторе доступно на ПК')));
+        messenger.showSnackBar(SnackBar(
+            content: Text(tr('Открытие в редакторе доступно на ПК',
+                'Opening in an editor is available on desktop',
+                'Abrir en un editor está disponible en el escritorio'))));
       }
     } catch (e) {
-      messenger.showSnackBar(
-          SnackBar(content: Text('Не удалось открыть: $e')));
+      messenger.showSnackBar(SnackBar(
+          content: Text(tr('Не удалось открыть', 'Could not open',
+              'No se pudo abrir'))));
     }
   }
 
@@ -58,23 +62,33 @@ class MediaActions {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: c.surface,
-        title: Text(n == 1 ? 'Удалить фото?' : 'Удалить $n фото?',
+        title: Text(
+            n == 1
+                ? tr('Удалить фото?', 'Delete photo?', '¿Eliminar la foto?')
+                : tr('Удалить $n фото?', 'Delete $n photos?',
+                    '¿Eliminar $n fotos?'),
             style: TextStyle(color: c.text)),
         content: Text(
           Platform.isAndroid
-              ? 'Уйдут в системную корзину — можно вернуть из «Недавно удалённых».'
-              : 'Переедут в корзину GOAT — их можно вернуть.',
+              ? tr(
+                  'Уйдут в системную корзину — можно вернуть из «Недавно удалённых».',
+                  'They go to the system trash — recoverable from “Recently deleted”.',
+                  'Irán a la papelera del sistema — recuperables en «Eliminados recientemente».')
+              : tr('Переедут в корзину GOAT — их можно вернуть.',
+                  'They move to the GOAT trash — recoverable.',
+                  'Se mueven a la papelera de GOAT — recuperables.'),
           style: TextStyle(color: c.muted),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Отмена', style: TextStyle(color: c.muted)),
+            child: Text(tr('Отмена', 'Cancel', 'Cancelar'),
+                style: TextStyle(color: c.muted)),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: c.accent),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Удалить'),
+            child: Text(tr('Удалить', 'Delete', 'Eliminar')),
           ),
         ],
       ),
@@ -119,12 +133,18 @@ class MediaActions {
     final messenger = ScaffoldMessenger.of(context);
     // на Android произвольное перемещение файлов ограничено (scoped storage)
     if (Platform.isAndroid || Platform.isIOS) {
-      messenger.showSnackBar(const SnackBar(
-          content: Text('Копирование/перемещение пока доступно только на ПК')));
+      messenger.showSnackBar(SnackBar(
+          content: Text(tr(
+              'Копирование/перемещение пока доступно только на ПК',
+              'Copy/move is currently available on desktop only',
+              'Copiar/mover está disponible solo en el escritorio por ahora'))));
       return null;
     }
     final dest = await FilePicker.platform.getDirectoryPath(
-        dialogTitle: move ? 'Переместить в папку' : 'Скопировать в папку');
+        dialogTitle: move
+            ? tr('Переместить в папку', 'Move to folder', 'Mover a la carpeta')
+            : tr('Скопировать в папку', 'Copy to folder',
+                'Copiar a la carpeta'));
     if (dest == null) return null;
 
     var ok = 0, fail = 0;
@@ -164,10 +184,14 @@ class MediaActions {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: c.surface,
-        title: Text('Добавить теги', style: TextStyle(color: c.text)),
+        title: Text(tr('Добавить теги', 'Add tags', 'Añadir etiquetas'),
+            style: TextStyle(color: c.text)),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('Через запятую или пробел. Применится ко всем выбранным '
-              '(${photos.length}).',
+          Text(
+              tr(
+                  'Через запятую или пробел. Применится ко всем выбранным (${photos.length}).',
+                  'Comma- or space-separated. Applies to all selected (${photos.length}).',
+                  'Separadas por comas o espacios. Se aplica a todas las seleccionadas (${photos.length}).'),
               style: TextStyle(color: c.muted, fontSize: 12.5)),
           const SizedBox(height: 12),
           TextField(
@@ -175,18 +199,21 @@ class MediaActions {
             autofocus: true,
             cursorColor: c.accent,
             style: TextStyle(color: c.text),
-            decoration: const InputDecoration(hintText: 'например: лес, закат'),
+            decoration: InputDecoration(
+                hintText: tr('например: лес, закат', 'e.g. forest, sunset',
+                    'p. ej. bosque, atardecer')),
           ),
         ]),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('Отмена', style: TextStyle(color: c.muted)),
+            child: Text(tr('Отмена', 'Cancel', 'Cancelar'),
+                style: TextStyle(color: c.muted)),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: c.accent),
             onPressed: () => Navigator.pop(ctx, ctl.text),
-            child: const Text('Добавить'),
+            child: Text(tr('Добавить', 'Add', 'Añadir')),
           ),
         ],
       ),

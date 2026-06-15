@@ -1097,8 +1097,9 @@ class _HomePageState extends State<HomePage> {
     if (!mounted) return;
     if (n > 0) {
       setState(() => _tagsRev++);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Теги добавлены к $n фото')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(tr('Теги добавлены к $n фото', 'Tags added to $n photos',
+              'Etiquetas añadidas a $n fotos'))));
     }
     Selection.instance.clear();
   }
@@ -1106,8 +1107,9 @@ class _HomePageState extends State<HomePage> {
   Future<void> _selShare() async {
     final n = await MediaActions.share(_selectedPhotos());
     if (n == 0 && mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Нечего отправить')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(tr('Нечего отправить', 'Nothing to share',
+              'Nada para compartir'))));
     }
     Selection.instance.clear();
   }
@@ -1116,10 +1118,14 @@ class _HomePageState extends State<HomePage> {
     final res =
         await MediaActions.copyOrMove(context, _selectedPhotos(), move: move);
     if (!mounted || res == null) return;
-    final verb = move ? 'Перемещено' : 'Скопировано';
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('$verb: ${res.ok}'
-            '${res.fail > 0 ? ', не удалось: ${res.fail}' : ''}')));
+    final verb = move
+        ? tr('Перемещено', 'Moved', 'Movidas')
+        : tr('Скопировано', 'Copied', 'Copiadas');
+    final failTxt = res.fail > 0
+        ? ', ${tr('не удалось', 'failed', 'fallaron')}: ${res.fail}'
+        : '';
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('$verb: ${res.ok}$failTxt')));
     Selection.instance.clear();
     if (move && res.ok > 0) await _rescan();
   }
@@ -1129,8 +1135,8 @@ class _HomePageState extends State<HomePage> {
     if (n == -1) return; // отмена
     Selection.instance.clear();
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('Удалено: $n')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(tr('Удалено: $n', 'Deleted: $n', 'Eliminadas: $n'))));
     await _rescan();
   }
 
@@ -1140,7 +1146,8 @@ class _HomePageState extends State<HomePage> {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           CircularProgressIndicator(color: c.accent),
           const SizedBox(height: 14),
-          Text('Сканирую папку…', style: TextStyle(color: c.muted)),
+          Text(tr('Сканирую папку…', 'Scanning folder…', 'Escaneando carpeta…'),
+              style: TextStyle(color: c.muted)),
         ]),
       );
     }
@@ -1821,14 +1828,20 @@ class _NoResults extends StatelessWidget {
         Icon(favOnly ? Icons.favorite_border_rounded : Icons.search_off_rounded,
             size: 56, color: c.muted),
         const SizedBox(height: 14),
-        Text(favOnly ? 'В избранном пусто' : 'Ничего не найдено',
+        Text(
+            favOnly
+                ? tr('В избранном пусто', 'No favorites yet', 'Sin favoritos')
+                : tr('Ничего не найдено', 'Nothing found', 'Nada encontrado'),
             style: TextStyle(
                 fontSize: 16, fontWeight: FontWeight.w700, color: c.text)),
         const SizedBox(height: 4),
         Text(
             favOnly
-                ? 'Отмечай фото сердечком — они появятся здесь.'
-                : 'Попробуй изменить запрос.',
+                ? tr('Отмечай фото сердечком — они появятся здесь.',
+                    'Tap the heart on photos — they’ll show up here.',
+                    'Marca fotos con el corazón — aparecerán aquí.')
+                : tr('Попробуй изменить запрос.', 'Try changing your search.',
+                    'Prueba a cambiar la búsqueda.'),
             style: TextStyle(color: c.muted, fontSize: 13)),
       ]),
     );
