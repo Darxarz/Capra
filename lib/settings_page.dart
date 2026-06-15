@@ -91,206 +91,226 @@ class _Sections extends StatelessWidget {
         _Card(c: c, child: const _LangPicker()),
         const SizedBox(height: 22),
         _SectionTitle(tr('Внешний вид', 'Appearance')),
-        _Card(c: c, child: Column(children: [
-          _RowLabel(tr('Режим', 'Mode'), c: c),
-          const SizedBox(height: 8),
-          const _ModePicker(),
-          const SizedBox(height: 18),
-          if (s.themeMode != ThemeModeChoice.dark) ...[
-            _RowLabel(tr('Светлая палитра', 'Light palette'), c: c),
-            const SizedBox(height: 8),
-            _BasePicker(bases: kLightBases, currentId: s.lightBaseId,
-                onPick: s.setLightBase),
-            const SizedBox(height: 18),
-          ],
-          if (s.themeMode != ThemeModeChoice.light) ...[
-            _RowLabel(tr('Тёмная палитра', 'Dark palette'), c: c),
-            const SizedBox(height: 8),
-            _BasePicker(bases: kDarkBases, currentId: s.darkBaseId,
-                onPick: s.setDarkBase),
-            const SizedBox(height: 18),
-          ],
-          _RowLabel(tr('Акцент', 'Accent'), c: c),
-          const SizedBox(height: 8),
-          _AccentPicker(currentId: s.accentId, onPick: s.setAccent),
-        ])),
+        _Card(
+            c: c,
+            child: Column(children: [
+              _RowLabel(tr('Режим', 'Mode'), c: c),
+              const SizedBox(height: 8),
+              const _ModePicker(),
+              const SizedBox(height: 18),
+              if (s.themeMode != ThemeModeChoice.dark) ...[
+                _RowLabel(tr('Светлая палитра', 'Light palette'), c: c),
+                const SizedBox(height: 8),
+                _BasePicker(
+                    bases: kLightBases,
+                    currentId: s.lightBaseId,
+                    onPick: s.setLightBase),
+                const SizedBox(height: 18),
+              ],
+              if (s.themeMode != ThemeModeChoice.light) ...[
+                _RowLabel(tr('Тёмная палитра', 'Dark palette'), c: c),
+                const SizedBox(height: 8),
+                _BasePicker(
+                    bases: kDarkBases,
+                    currentId: s.darkBaseId,
+                    onPick: s.setDarkBase),
+                const SizedBox(height: 18),
+              ],
+              _RowLabel(tr('Акцент', 'Accent'), c: c),
+              const SizedBox(height: 8),
+              _AccentPicker(currentId: s.accentId, onPick: s.setAccent),
+              const SizedBox(height: 18),
+              _RowLabel(tr('Интерфейс', 'Interface'), c: c),
+              const SizedBox(height: 8),
+              const _DensityPicker(),
+            ])),
         const SizedBox(height: 22),
-
         _SectionTitle(tr('Сетка', 'Grid')),
-        _Card(c: c, child: Column(children: [
-          _SliderRow(
-            label: tr('Размер плиток по умолчанию', 'Default tile size'),
-            value: s.cellSize,
-            min: 70, max: 240,
-            valueLabel: '${s.cellSize.round()} px',
-            onChanged: s.setCellSize,
+        _Card(
             c: c,
-          ),
-          const SizedBox(height: 16),
-          _SliderRow(
-            label: tr('Скругление углов', 'Corner rounding'),
-            value: s.gridRadius,
-            min: 0, max: 18,
-            valueLabel: s.gridRadius < 0.5
-                ? tr('острые', 'sharp')
-                : '${s.gridRadius.round()} px',
-            onChanged: s.setGridRadius,
-            c: c,
-          ),
-          const SizedBox(height: 16),
-          _SliderRow(
-            label: tr('Зазор между плитками', 'Gap between tiles'),
-            value: s.tileSpacing,
-            min: 0, max: 10,
-            valueLabel: s.tileSpacing < 0.5
-                ? tr('без зазора', 'no gap')
-                : '${s.tileSpacing.round()} px',
-            onChanged: s.setTileSpacing,
-            c: c,
-          ),
-          const SizedBox(height: 18),
-          _RowLabel(tr('Раскладка', 'Layout'), c: c),
-          const SizedBox(height: 8),
-          const _LayoutPicker(),
-          const SizedBox(height: 18),
-          _RowLabel(tr('Зазоры', 'Gaps'), c: c),
-          const SizedBox(height: 8),
-          const _GapStylePicker(),
-          const SizedBox(height: 12),
-          _SwitchRow(
-            title: tr('Квадратные миниатюры', 'Square thumbnails'),
-            subtitle: tr(
-                'Если выключить — плитка показывает фото целиком, без обрезки',
-                'Off — tiles show the whole photo without cropping'),
-            value: s.squareThumbs,
-            onChanged: s.setSquareThumbs,
-            c: c,
-          ),
-          _SwitchRow(
-            title: tr('Уменьшить анимации', 'Reduce motion'),
-            subtitle: tr('Меньше плавных переходов — быстрее ощущается интерфейс',
-                'Fewer transitions — the UI feels snappier'),
-            value: s.reduceMotion,
-            onChanged: s.setReduceMotion,
-            c: c,
-          ),
-          _SwitchRow(
-            title: tr('Метка GIF на анимациях', 'GIF badge on animations'),
-            subtitle: tr('Маленький значок «GIF» в углу миниатюры',
-                'Small "GIF" mark in the tile corner'),
-            value: s.showGifBadge,
-            onChanged: s.setShowGifBadge,
-            c: c,
-          ),
-          _SwitchRow(
-            title: tr('Сердечко на избранных', 'Heart on favorites'),
-            subtitle: tr('Метка избранного в углу миниатюры',
-                'Favorite mark in the tile corner'),
-            value: s.showFavBadge,
-            onChanged: s.setShowFavBadge,
-            c: c,
-          ),
-        ])),
-        const SizedBox(height: 22),
-
-        _SectionTitle(tr('Запуск', 'Startup')),
-        _Card(c: c, child: Column(children: [
-          _RowLabel(tr('Стартовый раздел', 'Start section'), c: c),
-          const SizedBox(height: 8),
-          const _StartPicker(),
-        ])),
-        const SizedBox(height: 22),
-
-        _SectionTitle(tr('Приватность', 'Privacy')),
-        _Card(c: c, child: Column(children: [
-          _SwitchRow(
-            title: tr('Показывать скрытые папки', 'Show hidden folders'),
-            subtitle: tr(
-                'Секретные альбомы (помеченные .nomedia) станут видны '
-                    'в галерее. Долгий тап / ПКМ по папке — скрыть или показать.',
-                'Secret albums (marked with .nomedia) become visible. '
-                    'Long-press / right-click a folder to hide or show it.'),
-            value: s.showHidden,
-            onChanged: s.setShowHidden,
-            c: c,
-          ),
-          if (s.hiddenFolders.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                    '${tr('Скрыто папок', 'Hidden folders')}: ${s.hiddenFolders.length}',
-                    style: TextStyle(color: c.muted, fontSize: 12.5)),
+            child: Column(children: [
+              _SliderRow(
+                label: tr('Размер плиток по умолчанию', 'Default tile size'),
+                value: s.cellSize,
+                min: 70,
+                max: 240,
+                valueLabel: '${s.cellSize.round()} px',
+                onChanged: s.setCellSize,
+                c: c,
               ),
-            ),
-          // на Android секретные .nomedia-папки видны только с «доступом ко
-          // всем файлам» (их прячет MediaStore) — отдельный опт-ин
-          if (Platform.isAndroid) ...[
-            const SizedBox(height: 10),
-            const _AllFilesTile(),
-          ],
-        ])),
+              const SizedBox(height: 16),
+              _SliderRow(
+                label: tr('Скругление углов', 'Corner rounding'),
+                value: s.gridRadius,
+                min: 0,
+                max: 18,
+                valueLabel: s.gridRadius < 0.5
+                    ? tr('острые', 'sharp')
+                    : '${s.gridRadius.round()} px',
+                onChanged: s.setGridRadius,
+                c: c,
+              ),
+              const SizedBox(height: 16),
+              _SliderRow(
+                label: tr('Зазор между плитками', 'Gap between tiles'),
+                value: s.tileSpacing,
+                min: 0,
+                max: 10,
+                valueLabel: s.tileSpacing < 0.5
+                    ? tr('без зазора', 'no gap')
+                    : '${s.tileSpacing.round()} px',
+                onChanged: s.setTileSpacing,
+                c: c,
+              ),
+              const SizedBox(height: 18),
+              _RowLabel(tr('Раскладка', 'Layout'), c: c),
+              const SizedBox(height: 8),
+              const _LayoutPicker(),
+              const SizedBox(height: 18),
+              _RowLabel(tr('Зазоры', 'Gaps'), c: c),
+              const SizedBox(height: 8),
+              const _GapStylePicker(),
+              const SizedBox(height: 12),
+              _SwitchRow(
+                title: tr('Квадратные миниатюры', 'Square thumbnails'),
+                subtitle: tr(
+                    'Если выключить — плитка показывает фото целиком, без обрезки',
+                    'Off — tiles show the whole photo without cropping'),
+                value: s.squareThumbs,
+                onChanged: s.setSquareThumbs,
+                c: c,
+              ),
+              _SwitchRow(
+                title: tr('Уменьшить анимации', 'Reduce motion'),
+                subtitle: tr(
+                    'Меньше плавных переходов — быстрее ощущается интерфейс',
+                    'Fewer transitions — the UI feels snappier'),
+                value: s.reduceMotion,
+                onChanged: s.setReduceMotion,
+                c: c,
+              ),
+              _SwitchRow(
+                title: tr('Метка GIF на анимациях', 'GIF badge on animations'),
+                subtitle: tr('Маленький значок «GIF» в углу миниатюры',
+                    'Small "GIF" mark in the tile corner'),
+                value: s.showGifBadge,
+                onChanged: s.setShowGifBadge,
+                c: c,
+              ),
+              _SwitchRow(
+                title: tr('Сердечко на избранных', 'Heart on favorites'),
+                subtitle: tr('Метка избранного в углу миниатюры',
+                    'Favorite mark in the tile corner'),
+                value: s.showFavBadge,
+                onChanged: s.setShowFavBadge,
+                c: c,
+              ),
+            ])),
         const SizedBox(height: 22),
-
+        _SectionTitle(tr('Запуск', 'Startup')),
+        _Card(
+            c: c,
+            child: Column(children: [
+              _RowLabel(tr('Стартовый раздел', 'Start section'), c: c),
+              const SizedBox(height: 8),
+              const _StartPicker(),
+            ])),
+        const SizedBox(height: 22),
+        _SectionTitle(tr('Приватность', 'Privacy')),
+        _Card(
+            c: c,
+            child: Column(children: [
+              _SwitchRow(
+                title: tr('Показывать скрытые папки', 'Show hidden folders'),
+                subtitle: tr(
+                    'Секретные альбомы (помеченные .nomedia) станут видны '
+                        'в галерее. Долгий тап / ПКМ по папке — скрыть или показать.',
+                    'Secret albums (marked with .nomedia) become visible. '
+                        'Long-press / right-click a folder to hide or show it.'),
+                value: s.showHidden,
+                onChanged: s.setShowHidden,
+                c: c,
+              ),
+              if (s.hiddenFolders.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                        '${tr('Скрыто папок', 'Hidden folders')}: ${s.hiddenFolders.length}',
+                        style: TextStyle(color: c.muted, fontSize: 12.5)),
+                  ),
+                ),
+              // на Android секретные .nomedia-папки видны только с «доступом ко
+              // всем файлам» (их прячет MediaStore) — отдельный опт-ин
+              if (Platform.isAndroid) ...[
+                const SizedBox(height: 10),
+                const _AllFilesTile(),
+              ],
+            ])),
+        const SizedBox(height: 22),
         if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) ...[
           _SectionTitle(tr('Поиск по компьютеру', 'Search the computer')),
-          _Card(c: c, child: Column(children: [
-            _SliderRow(
-              label: tr('Игнорировать картинки меньше', 'Ignore images smaller than'),
-              value: s.pcScanMinDim.toDouble(),
-              min: 0, max: 1024,
-              valueLabel: s.pcScanMinDim == 0
-                  ? tr('не отсеивать', 'no filter')
-                  : '${s.pcScanMinDim} px',
-              onChanged: (v) => s.setPcScanMinDim((v / 32).round() * 32),
+          _Card(
               c: c,
-            ),
-            const SizedBox(height: 4),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                  tr(
-                      'При «найти все картинки на ПК» отсеивает иконки и текстуры '
-                          '(мелкие картинки, файлы < 20 КБ и служебные папки).',
-                      'When using "find all images on PC" it filters out icons '
-                          'and textures (small images, files < 20 KB, system folders).'),
-                  style: TextStyle(color: c.muted, fontSize: 12)),
-            ),
-          ])),
+              child: Column(children: [
+                _SliderRow(
+                  label: tr('Игнорировать картинки меньше',
+                      'Ignore images smaller than'),
+                  value: s.pcScanMinDim.toDouble(),
+                  min: 0,
+                  max: 1024,
+                  valueLabel: s.pcScanMinDim == 0
+                      ? tr('не отсеивать', 'no filter')
+                      : '${s.pcScanMinDim} px',
+                  onChanged: (v) => s.setPcScanMinDim((v / 32).round() * 32),
+                  c: c,
+                ),
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                      tr(
+                          'При «найти все картинки на ПК» отсеивает иконки и текстуры '
+                              '(мелкие картинки, файлы < 20 КБ и служебные папки).',
+                          'When using "find all images on PC" it filters out icons '
+                              'and textures (small images, files < 20 KB, system folders).'),
+                      style: TextStyle(color: c.muted, fontSize: 12)),
+                ),
+              ])),
           const SizedBox(height: 22),
         ],
-
         _SectionTitle(tr('Теги', 'Tags')),
-        _Card(c: c, child: Column(children: [
-          _ActionRow(
-            icon: Icons.upload_file_outlined,
-            title: tr('Экспорт тегов', 'Export tags'),
-            subtitle: tr('Сохранить базу тегов в JSON (бэкап/перенос)',
-                'Save the tag database to JSON (backup/transfer)'),
-            onTap: () => _exportTags(context),
+        _Card(
             c: c,
-          ),
-          _ActionRow(
-            icon: Icons.download_outlined,
-            title: tr('Импорт тегов', 'Import tags'),
-            subtitle: tr('Загрузить теги из ранее сохранённого JSON',
-                'Load tags from a previously saved JSON'),
-            onTap: () => _importTags(context),
-            c: c,
-          ),
-          _ActionRow(
-            icon: Icons.link_outlined,
-            title: tr('Перепривязать теги', 'Relink tags'),
-            subtitle: tr(
-                'Найти теги переименованных/перемещённых файлов по содержимому',
-                'Find tags of renamed/moved files by their content'),
-            onTap: () => _relinkTags(context),
-            c: c,
-          ),
-        ])),
+            child: Column(children: [
+              _ActionRow(
+                icon: Icons.upload_file_outlined,
+                title: tr('Экспорт тегов', 'Export tags'),
+                subtitle: tr('Сохранить базу тегов в JSON (бэкап/перенос)',
+                    'Save the tag database to JSON (backup/transfer)'),
+                onTap: () => _exportTags(context),
+                c: c,
+              ),
+              _ActionRow(
+                icon: Icons.download_outlined,
+                title: tr('Импорт тегов', 'Import tags'),
+                subtitle: tr('Загрузить теги из ранее сохранённого JSON',
+                    'Load tags from a previously saved JSON'),
+                onTap: () => _importTags(context),
+                c: c,
+              ),
+              _ActionRow(
+                icon: Icons.link_outlined,
+                title: tr('Перепривязать теги', 'Relink tags'),
+                subtitle: tr(
+                    'Найти теги переименованных/перемещённых файлов по содержимому',
+                    'Find tags of renamed/moved files by their content'),
+                onTap: () => _relinkTags(context),
+                c: c,
+              ),
+            ])),
         const SizedBox(height: 22),
-
         _SectionTitle(tr('О приложении', 'About')),
         _Card(c: c, child: const _About()),
         const SizedBox(height: 12),
@@ -306,14 +326,15 @@ class _Sections extends StatelessWidget {
           'goat-tags-${DateTime.now().toIso8601String().substring(0, 10)}.json';
       String? dest;
       if (!Platform.isAndroid) {
-        dest = await FilePicker.platform.saveFile(
-            dialogTitle: 'Сохранить теги', fileName: name);
+        dest = await FilePicker.platform
+            .saveFile(dialogTitle: 'Сохранить теги', fileName: name);
       }
       dest ??= p.join((await getApplicationDocumentsDirectory()).path, name);
       await File(dest).writeAsString(json);
       messenger.showSnackBar(SnackBar(content: Text('Теги сохранены: $dest')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Не удалось сохранить: $e')));
+      messenger
+          .showSnackBar(SnackBar(content: Text('Не удалось сохранить: $e')));
     }
   }
 
@@ -328,9 +349,11 @@ class _Sections extends StatelessWidget {
       if (path == null) return;
       final n = TagService.instance.importJson(await File(path).readAsString());
       parent.widget.onTagsImported?.call();
-      messenger.showSnackBar(SnackBar(content: Text('Импортировано тегов: $n')));
+      messenger
+          .showSnackBar(SnackBar(content: Text('Импортировано тегов: $n')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Не удалось импортировать: $e')));
+      messenger.showSnackBar(
+          SnackBar(content: Text('Не удалось импортировать: $e')));
     }
   }
 
@@ -433,8 +456,7 @@ class _SliderRow extends StatelessWidget {
               style: TextStyle(
                   color: c.text, fontSize: 14, fontWeight: FontWeight.w600)),
         ),
-        Text(valueLabel,
-            style: TextStyle(color: c.muted, fontSize: 12.5)),
+        Text(valueLabel, style: TextStyle(color: c.muted, fontSize: 12.5)),
       ]),
       SliderTheme(
         data: SliderTheme.of(context).copyWith(
@@ -468,13 +490,13 @@ class _SwitchRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(title,
                 style: TextStyle(
                     color: c.text, fontSize: 14, fontWeight: FontWeight.w600)),
             const SizedBox(height: 2),
-            Text(subtitle,
-                style: TextStyle(color: c.muted, fontSize: 12.5)),
+            Text(subtitle, style: TextStyle(color: c.muted, fontSize: 12.5)),
           ]),
         ),
         Switch(
@@ -512,13 +534,15 @@ class _ActionRow extends StatelessWidget {
           Icon(icon, color: c.text, size: 22),
           const SizedBox(width: 14),
           Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(title,
                   style: TextStyle(
-                      color: c.text, fontSize: 14, fontWeight: FontWeight.w600)),
+                      color: c.text,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600)),
               const SizedBox(height: 2),
-              Text(subtitle,
-                  style: TextStyle(color: c.muted, fontSize: 12.5)),
+              Text(subtitle, style: TextStyle(color: c.muted, fontSize: 12.5)),
             ]),
           ),
           Icon(Icons.chevron_right_rounded, color: c.muted, size: 22),
@@ -585,7 +609,8 @@ class _AllFilesTileState extends State<_AllFilesTile> {
           onPressed: _busy ? null : _request,
           child: _busy
               ? const SizedBox(
-                  width: 16, height: 16,
+                  width: 16,
+                  height: 16,
                   child: CircularProgressIndicator(
                       strokeWidth: 2, color: Colors.white))
               : const Text('Включить'),
@@ -674,8 +699,65 @@ class _ModePicker extends StatelessWidget {
     return Row(children: [
       chip(tr('Как в системе', 'System'), Icons.brightness_auto_rounded,
           ThemeModeChoice.system),
-      chip(tr('Светлая', 'Light'), Icons.light_mode_rounded, ThemeModeChoice.light),
+      chip(tr('Светлая', 'Light'), Icons.light_mode_rounded,
+          ThemeModeChoice.light),
       chip(tr('Тёмная', 'Dark'), Icons.dark_mode_rounded, ThemeModeChoice.dark),
+    ]);
+  }
+}
+
+// ───────────────────────── плотность интерфейса ─────────────────────────
+class _DensityPicker extends StatelessWidget {
+  const _DensityPicker();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AuroraTheme.of(context).colors;
+    final s = SettingsService.instance;
+    Widget chip(String label, String sub, IconData icon, UiDensity v) {
+      final on = s.uiDensity == v;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => s.setUiDensity(v),
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+            decoration: BoxDecoration(
+              color: on ? c.accentSoft : c.surface2,
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(color: on ? c.accent : c.line),
+            ),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Icon(icon, size: 18, color: on ? c.accentInk : c.muted),
+              const SizedBox(height: 4),
+              Text(label,
+                  style: TextStyle(
+                      color: on ? c.accentInk : c.text,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(height: 2),
+              Text(sub,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: c.muted, fontSize: 10.5)),
+            ]),
+          ),
+        ),
+      );
+    }
+
+    return Row(children: [
+      chip(tr('Авто', 'Auto'), tr('телефон компактнее', 'compact on phone'),
+          Icons.auto_awesome_rounded, UiDensity.auto),
+      chip(
+          tr('Компактно', 'Compact'),
+          tr('больше места фото', 'more room for photos'),
+          Icons.fit_screen_rounded,
+          UiDensity.compact),
+      chip(
+          tr('Просторно', 'Roomy'),
+          tr('как на ПК/планшете', 'desktop/tablet style'),
+          Icons.space_dashboard_rounded,
+          UiDensity.comfortable),
     ]);
   }
 }
@@ -694,8 +776,15 @@ class _GapStylePicker extends StatelessWidget {
   ];
 
   static const _palette = [
-    0xFFC96442, 0xFFD08F3A, 0xFF3F7D54, 0xFF3E8C8C, 0xFF3D7AB8,
-    0xFF8C5FB8, 0xFFC7508B, 0xFF2B2620, 0xFFFAFAF7,
+    0xFFC96442,
+    0xFFD08F3A,
+    0xFF3F7D54,
+    0xFF3E8C8C,
+    0xFF3D7AB8,
+    0xFF8C5FB8,
+    0xFFC7508B,
+    0xFF2B2620,
+    0xFFFAFAF7,
   ];
 
   BoxDecoration _swatch(GapStyle st, int colorValue) {
@@ -715,12 +804,17 @@ class _GapStylePicker extends StatelessWidget {
             border: Border.all(color: const Color(0x33000000)),
             borderRadius: BorderRadius.circular(8));
       case GapStyle.silver:
-        return _grad(const [Color(0xFF8E8E8E), Color(0xFFFFFFFF), Color(0xFF9C9C9C)]);
+        return _grad(
+            const [Color(0xFF8E8E8E), Color(0xFFFFFFFF), Color(0xFF9C9C9C)]);
       case GapStyle.gold:
-        return _grad(const [Color(0xFF7C5A1E), Color(0xFFFFF0C0), Color(0xFF8A6A24)]);
+        return _grad(
+            const [Color(0xFF7C5A1E), Color(0xFFFFF0C0), Color(0xFF8A6A24)]);
       case GapStyle.holographic:
         return _grad(const [
-          Color(0xFFFF5D8F), Color(0xFFFFF35D), Color(0xFF5DD8FF), Color(0xFF8A5DFF)
+          Color(0xFFFF5D8F),
+          Color(0xFFFFF35D),
+          Color(0xFF5DD8FF),
+          Color(0xFF8A5DFF)
         ]);
     }
   }
@@ -830,11 +924,15 @@ class _LayoutPicker extends StatelessWidget {
         ),
       );
     }
+
     return Row(children: [
       chip(tr('Квадраты', 'Squares'), tr('ровная сетка', 'even grid'),
           Icons.grid_view_rounded, GridLayout.square),
-      chip(tr('Мозаика', 'Mosaic'), tr('разные формы, видно больше', 'varied shapes, see more'),
-          Icons.dashboard_rounded, GridLayout.mosaic),
+      chip(
+          tr('Мозаика', 'Mosaic'),
+          tr('разные формы, видно больше', 'varied shapes, see more'),
+          Icons.dashboard_rounded,
+          GridLayout.mosaic),
     ]);
   }
 }
@@ -872,9 +970,11 @@ class _StartPicker extends StatelessWidget {
         ),
       );
     }
+
     return Row(children: [
       chip(tr('Все', 'All'), Icons.grid_view_rounded, StartSection.all),
-      chip(tr('По датам', 'By date'), Icons.calendar_today_rounded, StartSection.dates),
+      chip(tr('По датам', 'By date'), Icons.calendar_today_rounded,
+          StartSection.dates),
       chip(tr('Альбомы', 'Albums'), Icons.folder_rounded, StartSection.albums),
     ]);
   }
@@ -909,51 +1009,56 @@ class _BasePicker extends StatelessWidget {
                 width: b.id == currentId ? 2 : 1,
               ),
             ),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              // мини-превью базы: bg + два surface уровня
-              Container(
-                height: 36,
-                decoration: BoxDecoration(
-                  color: b.bg,
-                  borderRadius: BorderRadius.circular(7),
-                  border: Border.all(color: b.line),
-                ),
-                child: Row(children: [
-                  const SizedBox(width: 6),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // мини-превью базы: bg + два surface уровня
                   Container(
-                    width: 18, height: 22,
+                    height: 36,
                     decoration: BoxDecoration(
-                      color: b.surface,
-                      borderRadius: BorderRadius.circular(4),
+                      color: b.bg,
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(color: b.line),
                     ),
+                    child: Row(children: [
+                      const SizedBox(width: 6),
+                      Container(
+                        width: 18,
+                        height: 22,
+                        decoration: BoxDecoration(
+                          color: b.surface,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Container(
+                        width: 18,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: b.surface2,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const Spacer(),
+                      Container(
+                        margin: const EdgeInsets.only(right: 6),
+                        width: 16,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: b.text,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ]),
                   ),
-                  const SizedBox(width: 4),
-                  Container(
-                    width: 18, height: 14,
-                    decoration: BoxDecoration(
-                      color: b.surface2,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                  const Spacer(),
-                  Container(
-                    margin: const EdgeInsets.only(right: 6),
-                    width: 16, height: 4,
-                    decoration: BoxDecoration(
-                      color: b.text,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
+                  const SizedBox(height: 6),
+                  Text(b.name,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          color: c.text,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600)),
                 ]),
-              ),
-              const SizedBox(height: 6),
-              Text(b.name,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      color: c.text,
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600)),
-            ]),
           ),
         ),
     ]);
@@ -976,7 +1081,8 @@ class _AccentPicker extends StatelessWidget {
           child: GestureDetector(
             onTap: () => onPick(a.id),
             child: Container(
-              width: 36, height: 36,
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
                 color: a.base,
                 shape: BoxShape.circle,
@@ -1005,17 +1111,19 @@ class _About extends StatelessWidget {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         Container(
-          width: 44, height: 44,
+          width: 44,
+          height: 44,
           decoration: BoxDecoration(
             color: c.accent,
             borderRadius: BorderRadius.circular(12),
           ),
-          child:
-              const Icon(Icons.auto_awesome_mosaic, color: Colors.white, size: 22),
+          child: const Icon(Icons.auto_awesome_mosaic,
+              color: Colors.white, size: 22),
         ),
         const SizedBox(width: 14),
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('GOAT',
                 style: TextStyle(
                     color: c.text,

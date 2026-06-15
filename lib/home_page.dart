@@ -62,8 +62,17 @@ class _HomePageState extends State<HomePage> {
   FolderNode? _treeCache; // построенное древо папок (кэш)
   int _tagsRev = 0; // счётчик для пересоздания панели тегов после импорта
   bool _mediaGranted = false; // на Android: есть доступ к фото устройства
-  bool _allFiles = false; // на Android: «доступ ко всем файлам» (секретные папки)
+  bool _allFiles =
+      false; // на Android: «доступ ко всем файлам» (секретные папки)
   bool get _useDeviceMedia => Platform.isAndroid || Platform.isIOS;
+
+  bool _compactUi(BuildContext context) {
+    final pref = SettingsService.instance.uiDensity;
+    if (pref == UiDensity.compact) return true;
+    if (pref == UiDensity.comfortable) return false;
+    final size = MediaQuery.sizeOf(context);
+    return size.shortestSide < 600;
+  }
 
   /// Папка скрыта (сама или её родитель в списке скрытых)?
   bool _isHiddenPath(String folderPath) {
@@ -119,8 +128,7 @@ class _HomePageState extends State<HomePage> {
     return r.toList();
   }
 
-  FolderNode _folderTreeNode() =>
-      _treeCache ??= buildForest(_shown, _folders);
+  FolderNode _folderTreeNode() => _treeCache ??= buildForest(_shown, _folders);
 
   Widget _albumsGrid() {
     final q = _query.trim().toLowerCase();
@@ -217,16 +225,18 @@ class _HomePageState extends State<HomePage> {
       cover: node.cover,
     );
     Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => _FolderPage(album: album, photos: photos, cell: SettingsService.instance.cellSize),
+      builder: (_) => _FolderPage(
+          album: album,
+          photos: photos,
+          cell: SettingsService.instance.cellSize),
     ));
   }
 
   void _setFilterTags(Set<String> tags) {
     setState(() {
       _filterTags = tags;
-      _filterPaths = tags.isEmpty
-          ? const {}
-          : TagService.instance.pathsWithAllTags(tags);
+      _filterPaths =
+          tags.isEmpty ? const {} : TagService.instance.pathsWithAllTags(tags);
     });
   }
 
@@ -405,8 +415,8 @@ class _HomePageState extends State<HomePage> {
     setState(() => _folders = const []);
     await _rescan();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Список папок очищен')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Список папок очищен')));
   }
 
   Future<void> _rescan() async {
@@ -464,6 +474,106 @@ class _HomePageState extends State<HomePage> {
     ));
   }
 
+  Future<void> _openTagsSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final c = AuroraTheme.of(ctx).colors;
+        return FractionallySizedBox(
+          heightFactor: 0.92,
+          child: ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+            child: ColoredBox(
+              color: c.surface,
+              child: SafeArea(
+                top: false,
+                child: TagsPanel(
+                  key: ValueKey('sheet-$_tagsRev'),
+                  width: double.infinity,
+                  selected: _filterTags,
+                  onToggle: _toggleFilterTag,
+                  onClear: () => _setFilterTags({}),
+                  onClose: () => Navigator.of(ctx).pop(),
+                  onStartBatch: () => BatchTagger.instance.start(_photos),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    if (mounted) setState(() => _tagsRev++);
+  }
+
+  void _shiftMode(int delta) {
+    if (Selection.instance.active) return;
+    final modes = _projectsOnly
+        ? const [ViewMode.all]
+        : const [ViewMode.all, ViewMode.dates, ViewMode.albums];
+    final i = modes.indexOf(_mode);
+    if (i < 0) return;
+    final next = (i + delta).clamp(0, modes.length - 1);
+    if (next != i) setState(() => _mode = modes[next]);
+  }
+
+  void _openMobileTools() {
+    final c = AuroraTheme.of(context).colors;
+    Widget tile(IconData icon, String text, VoidCallback onTap,
+        {bool on = false}) {
+      return ListTile(
+        leading: Icon(icon, color: on ? c.accentInk : c.text),
+        title: Text(text,
+            style: TextStyle(
+                color: on ? c.accentInk : c.text,
+                fontWeight: on ? FontWeight.w700 : FontWeight.w500)),
+        onTap: () {
+          Navigator.pop(context);
+          onTap();
+        },
+      );
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: c.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (_) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          tile(Icons.folder_open, tr('Папки библиотеки', 'Library folders'),
+              _manageFolders),
+          tile(
+              _favOnly ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+              tr('Только избранное', 'Favorites only'),
+              () => setState(() => _favOnly = !_favOnly),
+              on: _favOnly),
+          tile(
+              Icons.brush_outlined,
+              tr('Проекты KRA/PSD', 'KRA/PSD projects'),
+              () => setState(() {
+                    _projectsOnly = !_projectsOnly;
+                    if (_projectsOnly) _mode = ViewMode.all;
+                  }),
+              on: _projectsOnly),
+          tile(Icons.sell_outlined, tr('Теги', 'Tags'), _openTagsSheet,
+              on: _filterTags.isNotEmpty),
+          tile(Icons.content_copy_outlined, tr('Дубликаты', 'Duplicates'),
+              _openDedup),
+          tile(Icons.wifi_tethering_rounded,
+              tr('Локальная сеть', 'Local network'), _openLan,
+              on: LanService.instance.isRunning),
+          tile(
+              Icons.delete_outline_rounded, tr('Корзина', 'Trash'), _openTrash),
+          tile(Icons.settings_outlined, tr('Настройки', 'Settings'),
+              _openSettings),
+        ]),
+      ),
+    );
+  }
+
   void _openDedup() {
     if (_photos.isEmpty) return;
     Navigator.of(context).push(MaterialPageRoute(
@@ -496,7 +606,9 @@ class _HomePageState extends State<HomePage> {
               const SizedBox(height: 12),
               Text('Корзина — в галерее устройства',
                   style: TextStyle(
-                      color: c.text, fontSize: 16, fontWeight: FontWeight.w700)),
+                      color: c.text,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               Text(
                   'На Android удалённые фото попадают в системную корзину — '
@@ -559,9 +671,10 @@ class _HomePageState extends State<HomePage> {
                   style: TextStyle(color: c.muted, fontSize: 13)),
             ),
             ListTile(
-              leading: Icon(Icons.photo_size_select_actual_outlined,
-                  color: c.text),
-              title: Text(_mediaGranted ? 'Выбрать, какие фото видны' : 'Дать доступ',
+              leading:
+                  Icon(Icons.photo_size_select_actual_outlined, color: c.text),
+              title: Text(
+                  _mediaGranted ? 'Выбрать, какие фото видны' : 'Дать доступ',
                   style: TextStyle(color: c.text)),
               onTap: () async {
                 Navigator.pop(ctx);
@@ -682,7 +795,8 @@ class _HomePageState extends State<HomePage> {
                     await _scanWholePc();
                   },
                   icon: const Icon(Icons.travel_explore_rounded),
-                  label: Text(tr('Найти все картинки на ПК', 'Find all images on PC')),
+                  label: Text(
+                      tr('Найти все картинки на ПК', 'Find all images on PC')),
                 ),
               ),
           ]),
@@ -699,8 +813,8 @@ class _HomePageState extends State<HomePage> {
     setState(() => _loading = true);
     final photos = await LibraryService.scanWholePc(
         minDim: SettingsService.instance.pcScanMinDim);
-    final folders = LibraryService.topFolders(
-        {for (final ph in photos) ph.folderPath});
+    final folders =
+        LibraryService.topFolders({for (final ph in photos) ph.folderPath});
     await LibraryService.setFolders(folders);
     if (!mounted) return;
     try {
@@ -720,114 +834,152 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
+    final compact = _compactUi(context);
     return _SelPopScope(
       child: Scaffold(
-      backgroundColor: c.bg,
-      body: SafeArea(
-        child: Row(
-          children: [
-            _Rail(
-              mode: _mode,
-              onMode: (m) => setState(() => _mode = m),
-              favOnly: _favOnly,
-              onFav: () => setState(() => _favOnly = !_favOnly),
-              projectsOnly: _projectsOnly,
-              onProjects: () => setState(() {
-                _projectsOnly = !_projectsOnly;
-                if (_projectsOnly) _mode = ViewMode.all;
-              }),
-              onTags: () => setState(() => _tagsPanelOpen = !_tagsPanelOpen),
-              tagsOpen: _tagsPanelOpen,
-              onDedup: _openDedup,
-              onLan: _openLan,
-              onTrash: _openTrash,
-              onSettings: _openSettings,
-            ),
-            if (_tagsPanelOpen)
-              TagsPanel(
-                key: ValueKey(_tagsRev),
-                selected: _filterTags,
-                onToggle: _toggleFilterTag,
-                onClear: () => _setFilterTags({}),
-                onClose: () => setState(() => _tagsPanelOpen = false),
-                onStartBatch: () => BatchTagger.instance.start(_photos),
-              ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _TopBar(
-                    mode: _mode,
-                    cell: SettingsService.instance.cellSize,
-                    query: _query,
-                    onSearch: (q) => setState(() {
-                      _query = q;
-                      _tagMatchPaths = q.trim().isEmpty
-                          ? const {}
-                          : TagService.instance.pathsMatchingTag(q);
-                    }),
-                    onMode: (m) => setState(() => _mode = m),
-                    onCell: SettingsService.instance.setCellSize,
-                    onPickFolder: _manageFolders,
-                    update: _update,
-                    onUpdate: _startUpdate,
-                  ),
-                  _CountBar(
-                    mode: _mode,
-                    total: _visiblePhotos.length,
-                    albums: _albums.length,
-                    folder: _folders.isNotEmpty
-                        ? (_folders.length == 1
-                            ? _folders.first
-                            : '${_folders.length} ${tr('папок', 'folders')}')
-                        : (_useDeviceMedia && _mediaGranted
-                            ? tr('все фото устройства', 'all device photos')
-                            : null),
-                  ),
-                  if (_filterTags.isNotEmpty)
-                    _TagFilterBar(
-                      tags: _filterTags,
-                      onRemove: (t) =>
-                          _setFilterTags({..._filterTags}..remove(t)),
-                      onClear: () => _setFilterTags({}),
-                      onEdit: () => setState(() => _tagsPanelOpen = true),
-                    ),
-                  Expanded(
-                    child: Stack(children: [
-                      ValueListenableBuilder<Set<String>>(
-                        valueListenable: Favorites.instance.notifier,
-                        builder: (_, __, ___) => _body(c),
-                      ),
-                      // панель массовых действий поверх сетки
-                      AnimatedBuilder(
-                        animation: Selection.instance,
-                        builder: (_, __) => Selection.instance.active
-                            ? Align(
-                                alignment: Alignment.topCenter,
-                                child: _SelectionBar(
-                                  count: Selection.instance.count,
-                                  onClose: () => Selection.instance.clear(),
-                                  onSelectAll: () => Selection.instance
-                                      .selectAll(_visiblePhotos),
-                                  onFavorite: _selFavorite,
-                                  onTags: _selTags,
-                                  onCopy: () => _selCopyMove(move: false),
-                                  onMove: () => _selCopyMove(move: true),
-                                  onShare: _selShare,
-                                  onDelete: _selDelete,
-                                ),
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    ]),
-                  ),
-                ],
-              ),
-            ),
-          ],
+        backgroundColor: c.bg,
+        body: SafeArea(
+          child: compact ? _compactShell(c) : _wideShell(c),
         ),
       ),
-    ),
+    );
+  }
+
+  Widget _mainColumn(AuroraColors c, {required bool compact}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _TopBar(
+          mode: _mode,
+          cell: SettingsService.instance.cellSize,
+          query: _query,
+          compact: compact,
+          onSearch: (q) => setState(() {
+            _query = q;
+            _tagMatchPaths = q.trim().isEmpty
+                ? const {}
+                : TagService.instance.pathsMatchingTag(q);
+          }),
+          onMode: (m) => setState(() => _mode = m),
+          onCell: SettingsService.instance.setCellSize,
+          onPickFolder: _manageFolders,
+          update: _update,
+          onUpdate: _startUpdate,
+          onMore: _openMobileTools,
+        ),
+        _CountBar(
+          mode: _mode,
+          total: _visiblePhotos.length,
+          albums: _albums.length,
+          compact: compact,
+          folder: _folders.isNotEmpty
+              ? (_folders.length == 1
+                  ? _folders.first
+                  : '${_folders.length} ${tr('папок', 'folders')}')
+              : (_useDeviceMedia && _mediaGranted
+                  ? tr('все фото устройства', 'all device photos')
+                  : null),
+        ),
+        if (_filterTags.isNotEmpty)
+          _TagFilterBar(
+            tags: _filterTags,
+            onRemove: (t) => _setFilterTags({..._filterTags}..remove(t)),
+            onClear: () => _setFilterTags({}),
+            onEdit: compact
+                ? _openTagsSheet
+                : () => setState(() => _tagsPanelOpen = true),
+          ),
+        Expanded(
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onHorizontalDragEnd: compact
+                ? (d) {
+                    final v = d.primaryVelocity ?? 0;
+                    if (v < -350) _shiftMode(1);
+                    if (v > 350) _shiftMode(-1);
+                  }
+                : null,
+            child: Stack(children: [
+              ValueListenableBuilder<Set<String>>(
+                valueListenable: Favorites.instance.notifier,
+                builder: (_, __, ___) => _body(c),
+              ),
+              AnimatedBuilder(
+                animation: Selection.instance,
+                builder: (_, __) => Selection.instance.active
+                    ? Align(
+                        alignment: Alignment.topCenter,
+                        child: _SelectionBar(
+                          count: Selection.instance.count,
+                          onClose: () => Selection.instance.clear(),
+                          onSelectAll: () =>
+                              Selection.instance.selectAll(_visiblePhotos),
+                          onFavorite: _selFavorite,
+                          onTags: _selTags,
+                          onCopy: () => _selCopyMove(move: false),
+                          onMove: () => _selCopyMove(move: true),
+                          onShare: _selShare,
+                          onDelete: _selDelete,
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ]),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _wideShell(AuroraColors c) {
+    return Row(
+      children: [
+        _Rail(
+          mode: _mode,
+          onMode: (m) => setState(() => _mode = m),
+          favOnly: _favOnly,
+          onFav: () => setState(() => _favOnly = !_favOnly),
+          projectsOnly: _projectsOnly,
+          onProjects: () => setState(() {
+            _projectsOnly = !_projectsOnly;
+            if (_projectsOnly) _mode = ViewMode.all;
+          }),
+          onTags: () => setState(() => _tagsPanelOpen = !_tagsPanelOpen),
+          tagsOpen: _tagsPanelOpen,
+          onDedup: _openDedup,
+          onLan: _openLan,
+          onTrash: _openTrash,
+          onSettings: _openSettings,
+        ),
+        if (_tagsPanelOpen)
+          TagsPanel(
+            key: ValueKey(_tagsRev),
+            selected: _filterTags,
+            onToggle: _toggleFilterTag,
+            onClear: () => _setFilterTags({}),
+            onClose: () => setState(() => _tagsPanelOpen = false),
+            onStartBatch: () => BatchTagger.instance.start(_photos),
+          ),
+        Expanded(child: _mainColumn(c, compact: false)),
+      ],
+    );
+  }
+
+  Widget _compactShell(AuroraColors c) {
+    if (_tagsPanelOpen) _tagsPanelOpen = false;
+    return Column(
+      children: [
+        Expanded(child: _mainColumn(c, compact: true)),
+        _BottomNav(
+          mode: _mode,
+          favOnly: _favOnly,
+          tagFiltered: _filterTags.isNotEmpty,
+          onMode: (m) => setState(() => _mode = m),
+          onFav: () => setState(() => _favOnly = !_favOnly),
+          onTags: _openTagsSheet,
+          onMore: _openMobileTools,
+        ),
+      ],
     );
   }
 
@@ -861,15 +1013,15 @@ class _HomePageState extends State<HomePage> {
   Future<void> _selShare() async {
     final n = await MediaActions.share(_selectedPhotos());
     if (n == 0 && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Нечего отправить')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Нечего отправить')));
     }
     Selection.instance.clear();
   }
 
   Future<void> _selCopyMove({required bool move}) async {
-    final res = await MediaActions.copyOrMove(context, _selectedPhotos(),
-        move: move);
+    final res =
+        await MediaActions.copyOrMove(context, _selectedPhotos(), move: move);
     if (!mounted || res == null) return;
     final verb = move ? 'Перемещено' : 'Скопировано';
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -932,9 +1084,11 @@ class _HomePageState extends State<HomePage> {
     if (visible.isEmpty) return _NoResults(favOnly: _favOnly);
     switch (_mode) {
       case ViewMode.all:
-        return _AllGrid(photos: visible, cell: SettingsService.instance.cellSize);
+        return _AllGrid(
+            photos: visible, cell: SettingsService.instance.cellSize);
       case ViewMode.dates:
-        return _DatesView(photos: visible, cell: SettingsService.instance.cellSize);
+        return _DatesView(
+            photos: visible, cell: SettingsService.instance.cellSize);
       case ViewMode.albums:
         return const SizedBox.shrink(); // обработано выше
     }
@@ -959,7 +1113,8 @@ class _EmptyState extends StatelessWidget {
     final needAccess = deviceMedia && !granted;
     final subtitle = deviceMedia
         ? (granted
-            ? tr('Фото на устройстве не найдены.', 'No photos found on the device.')
+            ? tr('Фото на устройстве не найдены.',
+                'No photos found on the device.')
             : tr('Дай доступ к фото — GOAT покажет все изображения устройства.',
                 'Grant photo access — GOAT will show all images on the device.'))
         : tr('Выбери папку с фотографиями — GOAT покажет их здесь.',
@@ -978,8 +1133,7 @@ class _EmptyState extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32),
           child: Text(subtitle,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: c.muted)),
+              textAlign: TextAlign.center, style: TextStyle(color: c.muted)),
         ),
         const SizedBox(height: 18),
         if (!(deviceMedia && granted))
@@ -1028,7 +1182,8 @@ class _Rail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
-    Widget item(IconData icon, ViewMode? m, {VoidCallback? onTap, bool active = false}) {
+    Widget item(IconData icon, ViewMode? m,
+        {VoidCallback? onTap, bool active = false}) {
       final on = active || (m != null && m == mode);
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 3),
@@ -1064,14 +1219,16 @@ class _Rail extends StatelessWidget {
               color: c.accent,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.auto_awesome_mosaic, size: 18, color: Colors.white),
+            child: const Icon(Icons.auto_awesome_mosaic,
+                size: 18, color: Colors.white),
           ),
           const SizedBox(height: 14),
           item(Icons.grid_view_rounded, ViewMode.all),
           item(Icons.calendar_today_rounded, ViewMode.dates),
           item(Icons.folder_rounded, ViewMode.albums),
           item(favOnly ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-              null, onTap: onFav, active: favOnly),
+              null,
+              onTap: onFav, active: favOnly),
           item(Icons.brush_outlined, null,
               onTap: onProjects, active: projectsOnly),
           item(Icons.sell_outlined, null, onTap: onTags, active: tagsOpen),
@@ -1088,6 +1245,71 @@ class _Rail extends StatelessWidget {
           const SizedBox(height: 10),
         ],
       ),
+    );
+  }
+}
+
+// ───────────────────────── нижняя панель для телефонов ─────────────────────────
+class _BottomNav extends StatelessWidget {
+  final ViewMode mode;
+  final bool favOnly;
+  final bool tagFiltered;
+  final ValueChanged<ViewMode> onMode;
+  final VoidCallback onFav;
+  final VoidCallback onTags;
+  final VoidCallback onMore;
+  const _BottomNav({
+    required this.mode,
+    required this.favOnly,
+    required this.tagFiltered,
+    required this.onMode,
+    required this.onFav,
+    required this.onTags,
+    required this.onMore,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AuroraTheme.of(context).colors;
+    Widget item(IconData icon, String label, bool on, VoidCallback tap) {
+      return Expanded(
+        child: InkWell(
+          onTap: tap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 7),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Icon(icon, size: 21, color: on ? c.accentInk : c.muted),
+              const SizedBox(height: 2),
+              Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: on ? c.accentInk : c.muted,
+                      fontSize: 10.5,
+                      fontWeight: on ? FontWeight.w700 : FontWeight.w600)),
+            ]),
+          ),
+        ),
+      );
+    }
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border(top: BorderSide(color: c.line)),
+      ),
+      child: Row(children: [
+        item(Icons.grid_view_rounded, tr('Все', 'All'), mode == ViewMode.all,
+            () => onMode(ViewMode.all)),
+        item(Icons.calendar_today_rounded, tr('Даты', 'Dates'),
+            mode == ViewMode.dates, () => onMode(ViewMode.dates)),
+        item(Icons.folder_rounded, tr('Альбомы', 'Albums'),
+            mode == ViewMode.albums, () => onMode(ViewMode.albums)),
+        item(favOnly ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+            tr('Избр.', 'Favs'), favOnly, onFav),
+        item(Icons.sell_outlined, tr('Теги', 'Tags'), tagFiltered, onTags),
+        item(Icons.more_horiz_rounded, tr('Ещё', 'More'), false, onMore),
+      ]),
     );
   }
 }
@@ -1153,8 +1375,7 @@ class _SelectionBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
-    Widget act(IconData icon, String tip, VoidCallback onTap,
-            {Color? color}) =>
+    Widget act(IconData icon, String tip, VoidCallback onTap, {Color? color}) =>
         IconButton(
           icon: Icon(icon, size: 21, color: color ?? c.text),
           tooltip: tip,
@@ -1217,59 +1438,76 @@ class _TopBar extends StatelessWidget {
   final ViewMode mode;
   final double cell;
   final String query;
+  final bool compact;
   final ValueChanged<String> onSearch;
   final ValueChanged<ViewMode> onMode;
   final ValueChanged<double> onCell;
   final VoidCallback onPickFolder;
   final UpdateInfo? update;
   final VoidCallback onUpdate;
+  final VoidCallback onMore;
   const _TopBar({
     required this.mode,
     required this.cell,
     required this.query,
+    required this.compact,
     required this.onSearch,
     required this.onMode,
     required this.onCell,
     required this.onPickFolder,
     required this.update,
     required this.onUpdate,
+    required this.onMore,
   });
 
   @override
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+      padding: compact
+          ? const EdgeInsets.fromLTRB(10, 7, 8, 7)
+          : const EdgeInsets.fromLTRB(16, 12, 16, 10),
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: c.line)),
       ),
       child: Row(
         children: [
           Expanded(child: _SearchField(initial: query, onSearch: onSearch)),
-          const SizedBox(width: 10),
+          SizedBox(width: compact ? 4 : 10),
           IconButton(
             onPressed: onPickFolder,
             icon: Icon(Icons.folder_open, color: c.muted),
             tooltip: 'Папки библиотеки',
+            visualDensity: compact ? VisualDensity.compact : null,
           ),
-          const SizedBox(width: 4),
-          _Tabs(mode: mode, onMode: onMode),
-          const SizedBox(width: 8),
+          if (!compact) ...[
+            const SizedBox(width: 4),
+            _Tabs(mode: mode, onMode: onMode),
+            const SizedBox(width: 8),
+          ],
           const _LayoutToggle(),
-          const SizedBox(width: 4),
-          Icon(Icons.grid_view, size: 16, color: c.muted),
-          SizedBox(
-            width: 110,
-            child: Slider(
-              value: cell,
-              min: 70,
-              max: 220,
-              activeColor: c.accent,
-              onChanged: onCell,
+          if (!compact) ...[
+            const SizedBox(width: 4),
+            Icon(Icons.grid_view, size: 16, color: c.muted),
+            SizedBox(
+              width: 110,
+              child: Slider(
+                value: cell,
+                min: 70,
+                max: 220,
+                activeColor: c.accent,
+                onChanged: onCell,
+              ),
             ),
-          ),
+          ] else
+            IconButton(
+              onPressed: onMore,
+              icon: Icon(Icons.more_horiz_rounded, color: c.muted),
+              tooltip: tr('Ещё', 'More'),
+              visualDensity: VisualDensity.compact,
+            ),
           if (update != null) ...[
-            const SizedBox(width: 6),
+            SizedBox(width: compact ? 2 : 6),
             _UpdateButton(buildNo: update!.build, onTap: onUpdate),
           ],
         ],
@@ -1290,7 +1528,9 @@ class _LayoutToggle extends StatelessWidget {
       builder: (ctx, _) {
         final mosaic = SettingsService.instance.gridLayout == GridLayout.mosaic;
         return Tooltip(
-          message: mosaic ? tr('Мозаика', 'Mosaic') : tr('Ровные квадраты', 'Even squares'),
+          message: mosaic
+              ? tr('Мозаика', 'Mosaic')
+              : tr('Ровные квадраты', 'Even squares'),
           child: Material(
             color: mosaic ? c.accentSoft : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
@@ -1500,8 +1740,8 @@ class _TagFilterBar extends StatelessWidget {
                   ),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
                     Text(t,
-                        style:
-                            const TextStyle(color: Colors.white, fontSize: 12.5)),
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 12.5)),
                     const SizedBox(width: 4),
                     const Icon(Icons.close, size: 13, color: Colors.white),
                   ]),
@@ -1517,7 +1757,8 @@ class _TagFilterBar extends StatelessWidget {
         const SizedBox(width: 12),
         GestureDetector(
           onTap: onClear,
-          child: Text('Сброс', style: TextStyle(color: c.muted, fontSize: 12.5)),
+          child:
+              Text('Сброс', style: TextStyle(color: c.muted, fontSize: 12.5)),
         ),
       ]),
     );
@@ -1546,7 +1787,8 @@ class _UpdateButton extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.system_update_alt_rounded, size: 16, color: Colors.white),
+                Icon(Icons.system_update_alt_rounded,
+                    size: 16, color: Colors.white),
                 SizedBox(width: 6),
                 Text('Обновить',
                     style: TextStyle(
@@ -1694,11 +1936,13 @@ class _CountBar extends StatelessWidget {
   final int total;
   final int albums;
   final String? folder;
+  final bool compact;
   const _CountBar({
     required this.mode,
     required this.total,
     required this.albums,
     required this.folder,
+    this.compact = false,
   });
 
   @override
@@ -1710,7 +1954,9 @@ class _CountBar extends StatelessWidget {
       ViewMode.albums => '$albums ${tr('папок', 'folders')}',
     };
     return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 8, 18, 6),
+      padding: compact
+          ? const EdgeInsets.fromLTRB(12, 5, 12, 4)
+          : const EdgeInsets.fromLTRB(18, 8, 18, 6),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -1720,7 +1966,9 @@ class _CountBar extends StatelessWidget {
                 TextSpan(
                     text: '$total ',
                     style: TextStyle(
-                        color: c.text, fontWeight: FontWeight.w600, fontSize: 12)),
+                        color: c.text,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12)),
                 TextSpan(
                     text: folder == null
                         ? tr('изображений', 'images')
@@ -1731,8 +1979,10 @@ class _CountBar extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          const SizedBox(width: 12),
-          Text(right, style: TextStyle(color: c.muted, fontSize: 12)),
+          if (!compact) ...[
+            const SizedBox(width: 12),
+            Text(right, style: TextStyle(color: c.muted, fontSize: 12)),
+          ],
         ],
       ),
     );
@@ -1801,16 +2051,16 @@ class PhotoTile extends StatelessWidget {
                     if (wasSync || frame != null) return child;
                     return Container(color: c.surface2);
                   },
-                  errorBuilder: (ctx, e, s) =>
-                      Icon(Icons.broken_image_outlined, color: c.muted, size: 18),
+                  errorBuilder: (ctx, e, s) => Icon(Icons.broken_image_outlined,
+                      color: c.muted, size: 18),
                 ),
                 if (photo.isGif && s.showGifBadge)
                   Positioned(
                     right: 5,
                     bottom: 5,
                     child: Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 1),
                       decoration: BoxDecoration(
                         color: Colors.black54,
                         borderRadius: BorderRadius.circular(6),
@@ -1885,7 +2135,8 @@ class _AllGrid extends StatefulWidget {
   final List<PhotoItem> photos;
   final double cell;
   final bool selectable; // включён ли «паровозик»/выделение
-  const _AllGrid({required this.photos, required this.cell, this.selectable = true});
+  const _AllGrid(
+      {required this.photos, required this.cell, this.selectable = true});
 
   @override
   State<_AllGrid> createState() => _AllGridState();
@@ -1996,8 +2247,8 @@ class _AllGridState extends State<_AllGrid> {
         delta = (_lastLocal.dy - (_viewH - edge)) / edge * 18;
       }
       if (delta == 0) return;
-      final next = (_scroll.offset + delta)
-          .clamp(0.0, _scroll.position.maxScrollExtent);
+      final next =
+          (_scroll.offset + delta).clamp(0.0, _scroll.position.maxScrollExtent);
       if (next != _scroll.offset) {
         _scroll.jumpTo(next);
         final idx = _indexAt(_lastLocal);
@@ -2297,7 +2548,9 @@ class _DatesView extends StatelessWidget {
               children: [
                 Text(date,
                     style: TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w700, color: c.text)),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: c.text)),
                 const SizedBox(width: 10),
                 Text('${items.length} фото',
                     style: TextStyle(fontSize: 12, color: c.muted)),
@@ -2405,7 +2658,9 @@ class _AlbumCard extends StatelessWidget {
                     fit: BoxFit.cover,
                     filterQuality: FilterQuality.low,
                     errorBuilder: (ctx, e, s) => Icon(
-                        Icons.broken_image_outlined, color: c.muted, size: 22),
+                        Icons.broken_image_outlined,
+                        color: c.muted,
+                        size: 22),
                   ),
                 const DecoratedBox(
                   decoration: BoxDecoration(

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,7 +12,8 @@ class LibraryService {
   static const _foldersKey = 'aurora_folders'; // список папок библиотеки
 
   /// Рекурсивно собирает все изображения из папки [root] (один корень).
-  static Future<List<PhotoItem>> scan(String root) => compute(_scanFolder, root);
+  static Future<List<PhotoItem>> scan(String root) =>
+      compute(_scanFolder, root);
 
   /// Сканирует несколько корней и объединяет (без дублей), в фоне.
   static Future<List<PhotoItem>> scanAll(List<String> roots) =>
@@ -68,10 +70,11 @@ class LibraryService {
     final albums = await PhotoManager.getAssetPathList(
       onlyAll: true,
       type: RequestType.image,
-    );
+    ).timeout(const Duration(seconds: 20), onTimeout: () => const []);
     if (albums.isEmpty) return const [];
     final all = albums.first;
-    final count = await all.assetCountAsync;
+    final count = await all.assetCountAsync
+        .timeout(const Duration(seconds: 20), onTimeout: () => 0);
     if (count == 0) return const [];
 
     // 1) перечисляем ассеты постранично, восстанавливаем путь из relativePath+title
@@ -79,7 +82,10 @@ class LibraryService {
     final candidates = <String, AssetEntity>{}; // путь → ассет
     final unresolved = <AssetEntity>[];
     for (var pg = 0; pg * page < count; pg++) {
-      final assets = await all.getAssetListPaged(page: pg, size: page);
+      final assets = await all
+          .getAssetListPaged(page: pg, size: page)
+          .timeout(const Duration(seconds: 20), onTimeout: () => const []);
+      if (assets.isEmpty) break;
       for (final a in assets) {
         final path = _reconstructPath(a);
         if (path != null) {
@@ -106,16 +112,32 @@ class LibraryService {
     }
 
     // 3) то, что не удалось восстановить путём (например, SD) — через originFile
-    for (final a in unresolved) {
-      try {
-        final f = await a.originFile;
-        if (f != null && f.existsSync()) {
-          final st = f.statSync();
-          out.add(_makePhoto(
-              f.path, st.size, st.modified.millisecondsSinceEpoch,
-              assetId: a.id));
-        }
-      } catch (_) {}
+    // На части телефонов этот вызов может зависать на отдельных файлах, поэтому
+    // берём его маленькими порциями и с лимитом времени.
+    final fallbackTimer = Stopwatch()..start();
+    var emptyFallbackChunks = 0;
+    for (var i = 0; i < unresolved.length; i += 24) {
+      if (fallbackTimer.elapsed > const Duration(seconds: 60) ||
+          emptyFallbackChunks >= 3) {
+        break;
+      }
+      final chunk = unresolved.skip(i).take(24).toList();
+      final files = await Future.wait(chunk.map(_assetFileFast));
+      var foundInChunk = 0;
+      for (var j = 0; j < chunk.length; j++) {
+        final f = files[j];
+        if (f == null) continue;
+        try {
+          if (f.existsSync()) {
+            foundInChunk++;
+            final st = f.statSync();
+            out.add(_makePhoto(
+                f.path, st.size, st.modified.millisecondsSinceEpoch,
+                assetId: chunk[j].id));
+          }
+        } catch (_) {}
+      }
+      emptyFallbackChunks = foundInChunk == 0 ? emptyFallbackChunks + 1 : 0;
     }
 
     out.sort((a, b) => b.modified.compareTo(a.modified));
@@ -161,7 +183,6 @@ class LibraryService {
     list.sort((a, b) => b.count.compareTo(a.count));
     return list;
   }
-
 }
 
 /// Собрать абсолютный путь к ассету из relativePath + title (внутренняя память).
@@ -170,16 +191,40 @@ String? _reconstructPath(AssetEntity a) {
   final title = a.title;
   final rel = a.relativePath;
   if (title == null || title.isEmpty || rel == null) return null;
-  final r = rel.endsWith('/') ? rel : '$rel/';
+  var r = rel.replaceAll('\\', '/').trim();
+  if (r.isEmpty || r.startsWith('content://')) return null;
+  if (!r.endsWith('/')) r = '$r/';
+  if (r.startsWith('file://')) r = r.substring(7);
+  if (r.startsWith('/storage/') || r.startsWith('/sdcard/')) {
+    return '$r$title';
+  }
+  if (r.startsWith('/')) r = r.substring(1);
   return '/storage/emulated/0/$r$title';
+}
+
+Future<File?> _assetFileFast(AssetEntity a) async {
+  try {
+    final f =
+        await a.originFile.timeout(const Duration(seconds: 3), onTimeout: () {
+      throw TimeoutException('originFile timeout');
+    });
+    return f;
+  } catch (_) {
+    try {
+      return await a.file.timeout(const Duration(seconds: 3), onTimeout: () {
+        throw TimeoutException('file timeout');
+      });
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 PhotoItem _makePhoto(String path, int size, int mtimeMs, {String? assetId}) {
   const sep = '/';
   final cut = path.lastIndexOf(sep);
   final folderPath = cut >= 0 ? path.substring(0, cut) : path;
-  final segs =
-      folderPath.split(sep).where((s) => s.isNotEmpty).toList();
+  final segs = folderPath.split(sep).where((s) => s.isNotEmpty).toList();
   final lower = path.toLowerCase();
   return PhotoItem(
     path: path,
@@ -311,8 +356,7 @@ List<PhotoItem> _scanWholePc(PcScanConfig cfg) {
           }
         }
         final folderPath = ent.parent.path;
-        final segs =
-            folderPath.split(sep).where((s) => s.isNotEmpty).toList();
+        final segs = folderPath.split(sep).where((s) => s.isNotEmpty).toList();
         out.add(PhotoItem(
           path: ent.path,
           isGif: lower.endsWith('.gif'),

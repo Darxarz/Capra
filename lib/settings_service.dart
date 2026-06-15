@@ -16,6 +16,9 @@ enum GapStyle { none, color, silver, gold, holographic, polaroid }
 /// Язык интерфейса.
 enum AppLang { system, ru, en }
 
+/// Плотность основного интерфейса: авто выбирает компактный вид на телефонах.
+enum UiDensity { auto, compact, comfortable }
+
 /// Единый сервис настроек пользователя: палитра, плотность сетки, поведение
 /// при старте, мелкие визуальные предпочтения. Все значения сохраняются
 /// в shared_preferences и рассылаются подписчикам через ChangeNotifier.
@@ -43,6 +46,7 @@ class SettingsService extends ChangeNotifier {
   static const _kGapColor = 'goat_gap_color';
   static const _kPcScanMinDim = 'goat_pc_scan_min_dim';
   static const _kAppLang = 'goat_app_lang';
+  static const _kUiDensity = 'goat_ui_density';
 
   late SharedPreferences _p;
   bool _ready = false;
@@ -67,6 +71,7 @@ class SettingsService extends ChangeNotifier {
   int gapColorValue = 0xFFC96442; // цвет для GapStyle.color (ARGB)
   int pcScanMinDim = 256; // мин. размер картинки (px) при поиске по ПК
   AppLang appLang = AppLang.system; // язык интерфейса
+  UiDensity uiDensity = UiDensity.auto; // компактность главного экрана
 
   bool get ready => _ready;
 
@@ -94,8 +99,12 @@ class SettingsService extends ChangeNotifier {
         orElse: () => GapStyle.none);
     gapColorValue = _p.getInt(_kGapColor) ?? gapColorValue;
     pcScanMinDim = _p.getInt(_kPcScanMinDim) ?? pcScanMinDim;
-    appLang = AppLang.values.firstWhere((e) => e.name == _p.getString(_kAppLang),
+    appLang = AppLang.values.firstWhere(
+        (e) => e.name == _p.getString(_kAppLang),
         orElse: () => AppLang.system);
+    uiDensity = UiDensity.values.firstWhere(
+        (e) => e.name == _p.getString(_kUiDensity),
+        orElse: () => UiDensity.auto);
     _ready = true;
     notifyListeners();
   }
@@ -206,6 +215,12 @@ class SettingsService extends ChangeNotifier {
   void setAppLang(AppLang v) {
     appLang = v;
     _p.setString(_kAppLang, v.name);
+    notifyListeners();
+  }
+
+  void setUiDensity(UiDensity v) {
+    uiDensity = v;
+    _p.setString(_kUiDensity, v.name);
     notifyListeners();
   }
 

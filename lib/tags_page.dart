@@ -11,6 +11,7 @@ class TagsPanel extends StatefulWidget {
   final VoidCallback onClear;
   final VoidCallback onClose;
   final VoidCallback onStartBatch;
+  final double? width;
   const TagsPanel({
     super.key,
     required this.selected,
@@ -18,6 +19,7 @@ class TagsPanel extends StatefulWidget {
     required this.onClear,
     required this.onClose,
     required this.onStartBatch,
+    this.width,
   });
 
   @override
@@ -73,7 +75,8 @@ class _TagsPanelState extends State<TagsPanel> {
     if (b.downloading) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text('Скачивание модели… ${(b.downloadProgress * 100).round()}%',
               style: TextStyle(
                   color: c.text, fontSize: 12.5, fontWeight: FontWeight.w600)),
@@ -93,7 +96,8 @@ class _TagsPanelState extends State<TagsPanel> {
     if (b.running) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Row(children: [
             Expanded(
               child: Text('Тегирую: ${b.done} / ${b.total}',
@@ -108,14 +112,15 @@ class _TagsPanelState extends State<TagsPanel> {
                 setState(() {});
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
                 decoration: BoxDecoration(
                   color: c.surface2,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: c.line),
                 ),
-                child: Text('Стоп',
-                    style: TextStyle(color: c.text, fontSize: 12)),
+                child:
+                    Text('Стоп', style: TextStyle(color: c.text, fontSize: 12)),
               ),
             ),
           ]),
@@ -189,7 +194,7 @@ class _TagsPanelState extends State<TagsPanel> {
     ];
 
     return Container(
-      width: 290,
+      width: widget.width ?? 290,
       decoration: BoxDecoration(
         color: c.surface,
         border: Border(right: BorderSide(color: c.line)),
@@ -205,7 +210,9 @@ class _TagsPanelState extends State<TagsPanel> {
               const SizedBox(width: 8),
               Text('Теги',
                   style: TextStyle(
-                      color: c.text, fontSize: 16, fontWeight: FontWeight.w800)),
+                      color: c.text,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800)),
               const Spacer(),
               _SortToggle(
                 byCount: _byCount,
