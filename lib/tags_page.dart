@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'theme.dart';
 import 'tag_service.dart';
 import 'batch_tagger.dart';
+import 'i18n.dart';
 
 /// Боковая панель тегов: поиск, сортировка, группировка по категориям.
 /// Тап по тегу мгновенно включает/выключает его в фильтре (живая фильтрация).
@@ -63,11 +64,11 @@ class _TagsPanelState extends State<TagsPanel> {
   }
 
   String _catLabel(String c) => switch (c) {
-        'type' => 'Тип',
-        'rating' => 'Рейтинг',
-        'character' => 'Персонажи',
-        'manual' => 'Вручную',
-        _ => 'Общие',
+        'type' => tr('Тип', 'Type', 'Tipo'),
+        'rating' => tr('Рейтинг', 'Rating', 'Clasificación'),
+        'character' => tr('Персонажи', 'Characters', 'Personajes'),
+        'manual' => tr('Вручную', 'Manual', 'Manual'),
+        _ => tr('Общие', 'General', 'Generales'),
       };
 
   Widget _batchBar(AuroraColors c) {
@@ -77,7 +78,8 @@ class _TagsPanelState extends State<TagsPanel> {
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text('Скачивание модели… ${(b.downloadProgress * 100).round()}%',
+          Text(
+              '${tr('Скачивание модели…', 'Downloading model…', 'Descargando modelo…')} ${(b.downloadProgress * 100).round()}%',
               style: TextStyle(
                   color: c.text, fontSize: 12.5, fontWeight: FontWeight.w600)),
           const SizedBox(height: 7),
@@ -100,7 +102,8 @@ class _TagsPanelState extends State<TagsPanel> {
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Row(children: [
             Expanded(
-              child: Text('Тегирую: ${b.done} / ${b.total}',
+              child: Text(
+                  '${tr('Тегирую', 'Tagging', 'Etiquetando')}: ${b.done} / ${b.total}',
                   style: TextStyle(
                       color: c.text,
                       fontSize: 12.5,
@@ -119,8 +122,8 @@ class _TagsPanelState extends State<TagsPanel> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: c.line),
                 ),
-                child:
-                    Text('Стоп', style: TextStyle(color: c.text, fontSize: 12)),
+                child: Text(tr('Стоп', 'Stop', 'Parar'),
+                    style: TextStyle(color: c.text, fontSize: 12)),
               ),
             ),
           ]),
@@ -148,17 +151,15 @@ class _TagsPanelState extends State<TagsPanel> {
               color: c.accent,
               borderRadius: BorderRadius.circular(11),
             ),
-            child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.auto_awesome, size: 16, color: Colors.white),
-                  SizedBox(width: 8),
-                  Text('Тегировать всё',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600)),
-                ]),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const Icon(Icons.auto_awesome, size: 16, color: Colors.white),
+              const SizedBox(width: 8),
+              Text(tr('Тегировать всё', 'Tag everything', 'Etiquetar todo'),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600)),
+            ]),
           ),
         ),
         if (b.error != null)
@@ -170,7 +171,8 @@ class _TagsPanelState extends State<TagsPanel> {
         if (b.error == null && b.done > 0)
           Padding(
             padding: const EdgeInsets.only(top: 6),
-            child: Text('Готово: отмечено ${b.tagged} из ${b.done}',
+            child: Text(
+                '${tr('Готово', 'Done', 'Listo')}: ${tr('отмечено', 'tagged', 'etiquetadas')} ${b.tagged} ${tr('из', 'of', 'de')} ${b.done}',
                 style: TextStyle(color: c.muted, fontSize: 11.5)),
           ),
       ]),
@@ -208,7 +210,7 @@ class _TagsPanelState extends State<TagsPanel> {
             child: Row(children: [
               Icon(Icons.sell_outlined, size: 17, color: c.accent),
               const SizedBox(width: 8),
-              Text('Теги',
+              Text(tr('Теги', 'Tags', 'Etiquetas'),
                   style: TextStyle(
                       color: c.text,
                       fontSize: 16,
@@ -224,7 +226,7 @@ class _TagsPanelState extends State<TagsPanel> {
               IconButton(
                 onPressed: widget.onClose,
                 icon: Icon(Icons.close, size: 18, color: c.muted),
-                tooltip: 'Скрыть панель',
+                tooltip: tr('Скрыть панель', 'Hide panel', 'Ocultar panel'),
               ),
             ]),
           ),
@@ -250,7 +252,8 @@ class _TagsPanelState extends State<TagsPanel> {
                     decoration: InputDecoration(
                       isDense: true,
                       border: InputBorder.none,
-                      hintText: 'Поиск тега…',
+                      hintText: tr(
+                          'Поиск тега…', 'Search tags…', 'Buscar etiquetas…'),
                       hintStyle: TextStyle(color: c.muted, fontSize: 13.5),
                     ),
                   ),
@@ -263,12 +266,13 @@ class _TagsPanelState extends State<TagsPanel> {
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 0, 12, 6),
               child: Row(children: [
-                Text('Выбрано: ${widget.selected.length}',
+                Text(
+                    '${tr('Выбрано', 'Selected', 'Seleccionado')}: ${widget.selected.length}',
                     style: TextStyle(color: c.muted, fontSize: 12)),
                 const Spacer(),
                 GestureDetector(
                   onTap: widget.onClear,
-                  child: Text('Сброс',
+                  child: Text(tr('Сброс', 'Reset', 'Restablecer'),
                       style: TextStyle(
                           color: c.muted,
                           fontSize: 12,
@@ -283,7 +287,10 @@ class _TagsPanelState extends State<TagsPanel> {
                     child: Padding(
                       padding: const EdgeInsets.all(20),
                       child: Text(
-                          'Тегов пока нет.\nОтметь фото или запусти авто-тегирование.',
+                          tr(
+                              'Тегов пока нет.\nОтметь фото или запусти авто-тегирование.',
+                              'No tags yet.\nTag a photo or start auto-tagging.',
+                              'Todavía no hay etiquetas.\nEtiqueta una foto o inicia el auto-etiquetado.'),
                           textAlign: TextAlign.center,
                           style: TextStyle(color: c.muted, fontSize: 13)),
                     ),
@@ -351,7 +358,7 @@ class _SortToggle extends StatelessWidget {
         border: Border.all(color: c.line),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        b('Кол-во', byCount, () => onChanged(true)),
+        b(tr('Кол-во', 'Count', 'Cantidad'), byCount, () => onChanged(true)),
         b('А-Я', !byCount, () => onChanged(false)),
       ]),
     );

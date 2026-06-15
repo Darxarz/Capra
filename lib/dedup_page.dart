@@ -5,13 +5,15 @@ import 'theme.dart';
 import 'model.dart';
 import 'integrity_service.dart';
 import 'trash_service.dart';
+import 'i18n.dart';
 
 /// Экран менеджера дубликатов: поиск точных/похожих дублей, проверка
 /// целостности, группировка с разбивкой по папкам и удаление в корзину.
 class DupPage extends StatefulWidget {
   final List<PhotoItem> photos;
   final VoidCallback onLibraryChanged;
-  const DupPage({super.key, required this.photos, required this.onLibraryChanged});
+  const DupPage(
+      {super.key, required this.photos, required this.onLibraryChanged});
 
   @override
   State<DupPage> createState() => _DupPageState();
@@ -106,15 +108,18 @@ class _DupPageState extends State<DupPage> {
     final c = AuroraTheme.of(context).colors;
     final n = _selected.length;
     final desc = Platform.isAndroid
-        ? 'Файлы уйдут в системную корзину — их можно вернуть из «Недавно удалённых». '
-            'Освободится ${prettySize(_selectedBytes)}.'
-        : 'Файлы переедут в корзину GOAT — их можно вернуть. '
-            'Освободится ${prettySize(_selectedBytes)}.';
+        ? '${tr('Файлы уйдут в системную корзину — их можно вернуть из «Недавно удалённых».', 'Files will go to the system trash — you can restore them from Recently Deleted.', 'Los archivos irán a la papelera del sistema; puedes restaurarlos desde Eliminados recientemente.')} '
+            '${tr('Освободится', 'Will free', 'Se liberarán')} ${prettySize(_selectedBytes)}.'
+        : '${tr('Файлы переедут в корзину GOAT — их можно вернуть.', 'Files will move to the GOAT trash — you can restore them.', 'Los archivos irán a la papelera de GOAT; puedes restaurarlos.')} '
+            '${tr('Освободится', 'Will free', 'Se liberarán')} ${prettySize(_selectedBytes)}.';
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: c.surface,
-        title: Text('Удалить $n файлов?', style: TextStyle(color: c.text)),
+        title: Text(
+            tr('Удалить $n файлов?', 'Delete $n files?',
+                '¿Eliminar $n archivos?'),
+            style: TextStyle(color: c.text)),
         content: Text(
           desc,
           style: TextStyle(color: c.muted),
@@ -122,12 +127,13 @@ class _DupPageState extends State<DupPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Отмена', style: TextStyle(color: c.muted)),
+            child: Text(tr('Отмена', 'Cancel', 'Cancelar'),
+                style: TextStyle(color: c.muted)),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: c.accent),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('В корзину'),
+            child: Text(tr('В корзину', 'To trash', 'A la papelera')),
           ),
         ],
       ),
@@ -145,8 +151,7 @@ class _DupPageState extends State<DupPage> {
           groups.add(DupGroup(exact: g.exact, files: remain));
         }
       }
-      final corrupt =
-          r.corrupt.where((f) => !gone.contains(f.path)).toList();
+      final corrupt = r.corrupt.where((f) => !gone.contains(f.path)).toList();
       _scanner.result = DupResult(groups: groups, corrupt: corrupt);
     }
     _selected.clear();
@@ -154,7 +159,9 @@ class _DupPageState extends State<DupPage> {
     if (mounted) {
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Перемещено в корзину: $moved')),
+        SnackBar(
+            content: Text(
+                '${tr('Перемещено в корзину', 'Moved to trash', 'Movido a la papelera')}: $moved')),
       );
     }
   }
@@ -185,7 +192,7 @@ class _DupPageState extends State<DupPage> {
             icon: Icon(Icons.arrow_back, color: c.text),
           ),
           const SizedBox(width: 4),
-          Text('Дубликаты',
+          Text(tr('Дубликаты', 'Duplicates', 'Duplicados'),
               style: TextStyle(
                   fontSize: 18, fontWeight: FontWeight.w800, color: c.text)),
           const Spacer(),
@@ -208,7 +215,8 @@ class _DupPageState extends State<DupPage> {
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   Icon(Icons.delete_outline, size: 17, color: c.text),
                   const SizedBox(width: 6),
-                  Text('Корзина ${TrashService.instance.count}',
+                  Text(
+                      '${tr('Корзина', 'Trash', 'Papelera')} ${TrashService.instance.count}',
                       style: TextStyle(color: c.text, fontSize: 13)),
                 ]),
               ),
@@ -269,15 +277,28 @@ class _DupPageState extends State<DupPage> {
       const SizedBox(height: 14),
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 18),
-        child: Text('Найдём повторы и повреждённые файлы среди ${widget.photos.length} изображений.',
+        child: Text(
+            tr(
+                'Найдём повторы и повреждённые файлы среди ${widget.photos.length} изображений.',
+                'We’ll find duplicates and damaged files among ${widget.photos.length} images.',
+                'Buscaremos duplicados y archivos dañados entre ${widget.photos.length} imágenes.'),
             style: TextStyle(color: c.muted, fontSize: 13)),
       ),
       const SizedBox(height: 8),
-      card('Точные дубликаты', 'Побайтово одинаковые файлы. Быстро.',
-          Icons.content_copy_outlined, false),
       card(
-          'Похожие изображения',
-          'Пережатые, уменьшенные, «зашакаленные» копии + проверка целостности. Медленнее.',
+          tr('Точные дубликаты', 'Exact duplicates', 'Duplicados exactos'),
+          tr(
+              'Побайтово одинаковые файлы. Быстро.',
+              'Byte-for-byte identical files. Fast.',
+              'Archivos idénticos byte a byte. Rápido.'),
+          Icons.content_copy_outlined,
+          false),
+      card(
+          tr('Похожие изображения', 'Similar images', 'Imágenes similares'),
+          tr(
+              'Пережатые, уменьшенные, «зашакаленные» копии + проверка целостности. Медленнее.',
+              'Recompressed, resized or messy copies + integrity check. Slower.',
+              'Copias recomprimidas, reducidas o degradadas + revisión de integridad. Más lento.'),
           Icons.auto_awesome_motion_outlined,
           true),
     ]);
@@ -306,7 +327,8 @@ class _DupPageState extends State<DupPage> {
             const SizedBox(height: 18),
             OutlinedButton(
               onPressed: () => _scanner.stop(),
-              child: Text('Остановить', style: TextStyle(color: c.text)),
+              child: Text(tr('Остановить', 'Stop', 'Detener'),
+                  style: TextStyle(color: c.text)),
             ),
           ]),
         ),
@@ -318,13 +340,16 @@ class _DupPageState extends State<DupPage> {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Icon(Icons.verified_outlined, size: 54, color: c.accent),
           const SizedBox(height: 12),
-          Text('Дубликатов не найдено',
+          Text(
+              tr('Дубликатов не найдено', 'No duplicates found',
+                  'No se encontraron duplicados'),
               style: TextStyle(
                   color: c.text, fontSize: 16, fontWeight: FontWeight.w700)),
           const SizedBox(height: 14),
           TextButton(
             onPressed: () => setState(() => _scanner.result = null),
-            child: Text('Новый поиск', style: TextStyle(color: c.accent)),
+            child: Text(tr('Новый поиск', 'New scan', 'Nueva búsqueda'),
+                style: TextStyle(color: c.accent)),
           ),
         ]),
       );
@@ -344,13 +369,14 @@ class _DupPageState extends State<DupPage> {
         child: Row(children: [
           Expanded(
             child: Text(
-                '${r.groups.length} групп · ${r.totalDuplicates} лишних · можно освободить ${prettySize(r.reclaimableBytes)}'
-                '${r.corrupt.isNotEmpty ? ' · повреждённых ${r.corrupt.length}' : ''}',
+                '${r.groups.length} ${tr('групп', 'groups', 'grupos')} · ${r.totalDuplicates} ${tr('лишних', 'extra', 'sobrantes')} · ${tr('можно освободить', 'can free', 'se pueden liberar')} ${prettySize(r.reclaimableBytes)}'
+                '${r.corrupt.isNotEmpty ? ' · ${tr('повреждённых', 'damaged', 'dañados')} ${r.corrupt.length}' : ''}',
                 style: TextStyle(color: c.muted, fontSize: 12.5)),
           ),
           TextButton(
             onPressed: () => setState(() => _scanner.result = null),
-            child: Text('Заново', style: TextStyle(color: c.accent)),
+            child: Text(tr('Заново', 'Again', 'Otra vez'),
+                style: TextStyle(color: c.accent)),
           ),
         ]),
       );
@@ -375,11 +401,15 @@ class _DupPageState extends State<DupPage> {
           Icon(g.exact ? Icons.content_copy : Icons.auto_awesome_motion,
               size: 15, color: c.accent),
           const SizedBox(width: 7),
-          Text(g.exact ? 'Точные · ${g.files.length}' : 'Похожие · ${g.files.length}',
+          Text(
+              g.exact
+                  ? '${tr('Точные', 'Exact', 'Exactos')} · ${g.files.length}'
+                  : '${tr('Похожие', 'Similar', 'Similares')} · ${g.files.length}',
               style: TextStyle(
                   color: c.text, fontSize: 13.5, fontWeight: FontWeight.w700)),
           const Spacer(),
-          Text('освободить ${prettySize(g.reclaimable)}',
+          Text(
+              '${tr('освободить', 'free', 'liberar')} ${prettySize(g.reclaimable)}',
               style: TextStyle(color: c.muted, fontSize: 11.5)),
         ]),
         for (final entry in byFolder.entries) ...[
@@ -435,9 +465,12 @@ class _DupPageState extends State<DupPage> {
             const Icon(Icons.warning_amber_rounded,
                 size: 16, color: Colors.redAccent),
             const SizedBox(width: 7),
-            Text('Повреждённые · ${corrupt.length}',
+            Text(
+                '${tr('Повреждённые', 'Damaged', 'Dañados')} · ${corrupt.length}',
                 style: TextStyle(
-                    color: c.text, fontSize: 13.5, fontWeight: FontWeight.w700)),
+                    color: c.text,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700)),
             const Spacer(),
             GestureDetector(
               onTap: () => setState(() {
@@ -450,7 +483,7 @@ class _DupPageState extends State<DupPage> {
                   }
                 }
               }),
-              child: Text('Выбрать все',
+              child: Text(tr('Выбрать все', 'Select all', 'Seleccionar todo'),
                   style: TextStyle(color: c.accent, fontSize: 12)),
             ),
           ]),
@@ -483,19 +516,20 @@ class _DupPageState extends State<DupPage> {
         child: Row(children: [
           Expanded(
             child: Text(
-                'Выбрано ${_selected.length} · ${prettySize(_selectedBytes)}',
+                '${tr('Выбрано', 'Selected', 'Seleccionado')}: ${_selected.length} · ${prettySize(_selectedBytes)}',
                 style: TextStyle(color: c.text, fontSize: 13)),
           ),
           TextButton(
             onPressed: () => setState(() => _selected.clear()),
-            child: Text('Снять', style: TextStyle(color: c.muted)),
+            child: Text(tr('Снять', 'Clear', 'Quitar'),
+                style: TextStyle(color: c.muted)),
           ),
           const SizedBox(width: 6),
           FilledButton.icon(
             style: FilledButton.styleFrom(backgroundColor: c.accent),
             onPressed: _trashSelected,
             icon: const Icon(Icons.delete_outline, size: 18),
-            label: const Text('В корзину'),
+            label: Text(tr('В корзину', 'To trash', 'A la papelera')),
           ),
         ]),
       );
@@ -536,7 +570,8 @@ class _DupThumb extends StatelessWidget {
                 height: side,
                 color: c.surface2,
                 child: file.status == kBroken
-                    ? Icon(Icons.broken_image_outlined, color: c.muted, size: 26)
+                    ? Icon(Icons.broken_image_outlined,
+                        color: c.muted, size: 26)
                     : Image(
                         image: ResizeImage(FileImage(File(file.path)),
                             width: cw, allowUpscaling: false),
@@ -588,13 +623,15 @@ class _DupThumb extends StatelessWidget {
                 left: 4,
                 top: 4,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                   decoration: BoxDecoration(
                     color: Colors.green.shade600,
                     borderRadius: BorderRadius.circular(7),
                   ),
-                  child: const Text('лучший',
-                      style: TextStyle(color: Colors.white, fontSize: 10)),
+                  child: Text(tr('лучший', 'best', 'mejor'),
+                      style:
+                          const TextStyle(color: Colors.white, fontSize: 10)),
                 ),
               ),
             // бейдж повреждения
@@ -603,13 +640,18 @@ class _DupThumb extends StatelessWidget {
                 left: 4,
                 bottom: 4,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                   decoration: BoxDecoration(
                     color: Colors.redAccent,
                     borderRadius: BorderRadius.circular(7),
                   ),
-                  child: Text(file.status == kBroken ? 'битый' : 'обрезан',
-                      style: const TextStyle(color: Colors.white, fontSize: 10)),
+                  child: Text(
+                      file.status == kBroken
+                          ? tr('битый', 'broken', 'dañado')
+                          : tr('обрезан', 'truncated', 'incompleto'),
+                      style:
+                          const TextStyle(color: Colors.white, fontSize: 10)),
                 ),
               ),
           ]),
@@ -662,7 +704,8 @@ class _TrashPageState extends State<TrashPage> {
     return Scaffold(
       backgroundColor: c.bg,
       body: SafeArea(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 8, 14, 8),
             child: Row(children: [
@@ -670,9 +713,11 @@ class _TrashPageState extends State<TrashPage> {
                 onPressed: () => Navigator.pop(context),
                 icon: Icon(Icons.arrow_back, color: c.text),
               ),
-              Text('Корзина',
+              Text(tr('Корзина', 'Trash', 'Papelera'),
                   style: TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.w800, color: c.text)),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: c.text)),
               const Spacer(),
               if (_entries.isNotEmpty)
                 TextButton(
@@ -681,22 +726,26 @@ class _TrashPageState extends State<TrashPage> {
                       context: context,
                       builder: (ctx) => AlertDialog(
                         backgroundColor: c.surface,
-                        title: Text('Очистить корзину?',
+                        title: Text(
+                            tr('Очистить корзину?', 'Empty trash?',
+                                '¿Vaciar la papelera?'),
                             style: TextStyle(color: c.text)),
                         content: Text(
-                            'Безвозвратно удалит ${_entries.length} файлов '
-                            '(${prettySize(TrashService.instance.totalBytes)}).',
+                            tr(
+                                'Безвозвратно удалит ${_entries.length} файлов (${prettySize(TrashService.instance.totalBytes)}).',
+                                'This will permanently delete ${_entries.length} files (${prettySize(TrashService.instance.totalBytes)}).',
+                                'Esto eliminará definitivamente ${_entries.length} archivos (${prettySize(TrashService.instance.totalBytes)}).'),
                             style: TextStyle(color: c.muted)),
                         actions: [
                           TextButton(
                               onPressed: () => Navigator.pop(ctx, false),
-                              child: Text('Отмена',
+                              child: Text(tr('Отмена', 'Cancel', 'Cancelar'),
                                   style: TextStyle(color: c.muted))),
                           FilledButton(
-                            style:
-                                FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+                            style: FilledButton.styleFrom(
+                                backgroundColor: Colors.redAccent),
                             onPressed: () => Navigator.pop(ctx, true),
-                            child: const Text('Очистить'),
+                            child: Text(tr('Очистить', 'Empty', 'Vaciar')),
                           ),
                         ],
                       ),
@@ -706,8 +755,8 @@ class _TrashPageState extends State<TrashPage> {
                       await _load();
                     }
                   },
-                  child: const Text('Очистить всё',
-                      style: TextStyle(color: Colors.redAccent)),
+                  child: Text(tr('Очистить всё', 'Empty all', 'Vaciar todo'),
+                      style: const TextStyle(color: Colors.redAccent)),
                 ),
             ]),
           ),
@@ -716,10 +765,13 @@ class _TrashPageState extends State<TrashPage> {
                 ? Center(child: CircularProgressIndicator(color: c.accent))
                 : _entries.isEmpty
                     ? Center(
-                        child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        child:
+                            Column(mainAxisSize: MainAxisSize.min, children: [
                           Icon(Icons.delete_outline, size: 52, color: c.muted),
                           const SizedBox(height: 12),
-                          Text('Корзина пуста',
+                          Text(
+                              tr('Корзина пуста', 'Trash is empty',
+                                  'La papelera está vacía'),
                               style: TextStyle(color: c.muted, fontSize: 15)),
                         ]),
                       )
@@ -738,8 +790,7 @@ class _TrashPageState extends State<TrashPage> {
                                 width: 46,
                                 height: 46,
                                 child: Image(
-                                  image: ResizeImage(
-                                      FileImage(File(e.stored)),
+                                  image: ResizeImage(FileImage(File(e.stored)),
                                       width: 96),
                                   fit: BoxFit.cover,
                                   errorBuilder: (_, __, ___) => Container(
@@ -752,15 +803,18 @@ class _TrashPageState extends State<TrashPage> {
                             title: Text(e.fileName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: TextStyle(color: c.text, fontSize: 13.5)),
+                                style:
+                                    TextStyle(color: c.text, fontSize: 13.5)),
                             subtitle: Text(
                                 '${prettySize(e.size)} · ${e.original}',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: TextStyle(color: c.muted, fontSize: 11.5)),
+                                style:
+                                    TextStyle(color: c.muted, fontSize: 11.5)),
                             trailing: IconButton(
                               icon: Icon(Icons.restore, color: c.accent),
-                              tooltip: 'Восстановить',
+                              tooltip:
+                                  tr('Восстановить', 'Restore', 'Restaurar'),
                               onPressed: () async {
                                 final messenger = ScaffoldMessenger.of(context);
                                 final ok =
@@ -769,9 +823,11 @@ class _TrashPageState extends State<TrashPage> {
                                 await _load();
                                 if (!ok) {
                                   messenger.showSnackBar(
-                                    const SnackBar(
-                                        content: Text(
-                                            'Не удалось восстановить (файл на месте занят?)')),
+                                    SnackBar(
+                                        content: Text(tr(
+                                            'Не удалось восстановить (файл на месте занят?)',
+                                            'Could not restore (is the destination busy?)',
+                                            'No se pudo restaurar (¿el destino está ocupado?)'))),
                                   );
                                 }
                               },

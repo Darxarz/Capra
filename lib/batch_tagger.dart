@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'model.dart';
 import 'tag_service.dart';
 import 'tagger_service.dart';
+import 'i18n.dart';
 
 /// Пакетное тегирование библиотеки: проходит все фото, пропуская уже
 /// отмеченные. Инференс и декод — в фоновых изолятах (UI не подвисает).
@@ -51,7 +52,8 @@ class BatchTagger extends ChangeNotifier {
       } catch (e) {
         downloading = false;
         running = false;
-        error = 'Не удалось скачать модель: $e';
+        error =
+            '${tr('Не удалось скачать модель', 'Could not download model', 'No se pudo descargar el modelo')}: $e';
         notifyListeners();
         return;
       }
@@ -63,7 +65,8 @@ class BatchTagger extends ChangeNotifier {
       await Tagger.instance.load();
     } catch (e) {
       running = false;
-      error = 'Не удалось загрузить модель: $e';
+      error =
+          '${tr('Не удалось загрузить модель', 'Could not load model', 'No se pudo cargar el modelo')}: $e';
       notifyListeners();
       return;
     }

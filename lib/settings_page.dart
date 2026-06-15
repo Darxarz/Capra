@@ -66,10 +66,10 @@ class _Header extends StatelessWidget {
         IconButton(
           onPressed: onBack,
           icon: Icon(Icons.arrow_back, color: c.text),
-          tooltip: 'Назад',
+          tooltip: tr('Назад', 'Back', 'Atrás'),
         ),
         const SizedBox(width: 4),
-        Text(tr('Настройки', 'Settings'),
+        Text(tr('Настройки', 'Settings', 'Ajustes'),
             style: TextStyle(
                 color: c.text, fontSize: 18, fontWeight: FontWeight.w800)),
       ]),
@@ -90,19 +90,21 @@ class _Sections extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
       children: [
-        _SectionTitle(tr('Язык', 'Language')),
+        _SectionTitle(tr('Язык', 'Language', 'Idioma')),
         _Card(c: c, child: const _LangPicker()),
         const SizedBox(height: 22),
-        _SectionTitle(tr('Внешний вид', 'Appearance')),
+        _SectionTitle(tr('Внешний вид', 'Appearance', 'Apariencia')),
         _Card(
             c: c,
             child: Column(children: [
-              _RowLabel(tr('Режим', 'Mode'), c: c),
+              _RowLabel(tr('Режим', 'Mode', 'Modo'), c: c),
               const SizedBox(height: 8),
               const _ModePicker(),
               const SizedBox(height: 18),
               if (s.themeMode != ThemeModeChoice.dark) ...[
-                _RowLabel(tr('Светлая палитра', 'Light palette'), c: c),
+                _RowLabel(
+                    tr('Светлая палитра', 'Light palette', 'Paleta clara'),
+                    c: c),
                 const SizedBox(height: 8),
                 _BasePicker(
                     bases: kLightBases,
@@ -111,7 +113,8 @@ class _Sections extends StatelessWidget {
                 const SizedBox(height: 18),
               ],
               if (s.themeMode != ThemeModeChoice.light) ...[
-                _RowLabel(tr('Тёмная палитра', 'Dark palette'), c: c),
+                _RowLabel(tr('Тёмная палитра', 'Dark palette', 'Paleta oscura'),
+                    c: c),
                 const SizedBox(height: 8),
                 _BasePicker(
                     bases: kDarkBases,
@@ -119,25 +122,29 @@ class _Sections extends StatelessWidget {
                     onPick: s.setDarkBase),
                 const SizedBox(height: 18),
               ],
-              _RowLabel(tr('Акцент', 'Accent'), c: c),
+              _RowLabel(tr('Акцент', 'Accent', 'Acento'), c: c),
               const SizedBox(height: 8),
               _AccentPicker(currentId: s.accentId, onPick: s.setAccent),
               const SizedBox(height: 18),
-              _RowLabel(tr('Интерфейс', 'Interface'), c: c),
+              _RowLabel(tr('Интерфейс', 'Interface', 'Interfaz'), c: c),
               const SizedBox(height: 8),
               const _DensityPicker(),
               const SizedBox(height: 18),
-              _RowLabel(tr('Кнопки разделов', 'Section buttons'), c: c),
+              _RowLabel(
+                  tr('Кнопки разделов', 'Section buttons',
+                      'Botones de secciones'),
+                  c: c),
               const SizedBox(height: 8),
               const _SectionNavPicker(),
             ])),
         const SizedBox(height: 22),
-        _SectionTitle(tr('Сетка', 'Grid')),
+        _SectionTitle(tr('Сетка', 'Grid', 'Cuadrícula')),
         _Card(
             c: c,
             child: Column(children: [
               _SliderRow(
-                label: tr('Размер плиток по умолчанию', 'Default tile size'),
+                label: tr('Размер плиток по умолчанию', 'Default tile size',
+                    'Tamaño predeterminado de las miniaturas'),
                 value: s.cellSize,
                 min: 70,
                 max: 240,
@@ -147,77 +154,92 @@ class _Sections extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               _SliderRow(
-                label: tr('Скругление углов', 'Corner rounding'),
+                label: tr('Скругление углов', 'Corner rounding',
+                    'Esquinas redondeadas'),
                 value: s.gridRadius,
                 min: 0,
                 max: 18,
                 valueLabel: s.gridRadius < 0.5
-                    ? tr('острые', 'sharp')
+                    ? tr('острые', 'sharp', 'sin redondeo')
                     : '${s.gridRadius.round()} px',
                 onChanged: s.setGridRadius,
                 c: c,
               ),
               const SizedBox(height: 16),
               _SliderRow(
-                label: tr('Зазор между плитками', 'Gap between tiles'),
+                label: tr('Зазор между плитками', 'Gap between tiles',
+                    'Espacio entre miniaturas'),
                 value: s.tileSpacing,
                 min: 0,
                 max: 10,
                 valueLabel: s.tileSpacing < 0.5
-                    ? tr('без зазора', 'no gap')
+                    ? tr('без зазора', 'no gap', 'sin espacio')
                     : '${s.tileSpacing.round()} px',
                 onChanged: s.setTileSpacing,
                 c: c,
               ),
               const SizedBox(height: 18),
-              _RowLabel(tr('Раскладка', 'Layout'), c: c),
+              _RowLabel(tr('Раскладка', 'Layout', 'Diseño'), c: c),
               const SizedBox(height: 8),
               const _LayoutPicker(),
               const SizedBox(height: 18),
-              _RowLabel(tr('Зазоры', 'Gaps'), c: c),
+              _RowLabel(tr('Зазоры', 'Gaps', 'Separación'), c: c),
               const SizedBox(height: 8),
               const _GapStylePicker(),
               const SizedBox(height: 12),
               _SwitchRow(
-                title: tr('Квадратные миниатюры', 'Square thumbnails'),
+                title: tr('Квадратные миниатюры', 'Square thumbnails',
+                    'Miniaturas cuadradas'),
                 subtitle: tr(
                     'Если выключить — плитка показывает фото целиком, без обрезки',
-                    'Off — tiles show the whole photo without cropping'),
+                    'Off — tiles show the whole photo without cropping',
+                    'Desactivado: las miniaturas muestran la foto completa, sin recorte'),
                 value: s.squareThumbs,
                 onChanged: s.setSquareThumbs,
                 c: c,
               ),
               _SwitchRow(
-                title: tr('Не скачивать облако ради сетки',
-                    'Do not download cloud files for the grid'),
+                title: tr(
+                    'Не скачивать облако ради сетки',
+                    'Do not download cloud files for the grid',
+                    'No descargar archivos en la nube para la cuadrícula'),
                 subtitle: tr(
                     'GOAT сначала берёт свой кэш и готовые миниатюры системы',
-                    'GOAT uses its own cache and existing system thumbnails first'),
+                    'GOAT uses its own cache and existing system thumbnails first',
+                    'GOAT usa primero su caché y las miniaturas listas del sistema'),
                 value: s.avoidCloudThumbnailDownloads,
                 onChanged: s.setAvoidCloudThumbnailDownloads,
                 c: c,
               ),
               _SwitchRow(
-                title: tr('Уменьшить анимации', 'Reduce motion'),
+                title: tr('Уменьшить анимации', 'Reduce motion',
+                    'Reducir animaciones'),
                 subtitle: tr(
                     'Меньше плавных переходов — быстрее ощущается интерфейс',
-                    'Fewer transitions — the UI feels snappier'),
+                    'Fewer transitions — the UI feels snappier',
+                    'Menos transiciones: la interfaz se siente más ágil'),
                 value: s.reduceMotion,
                 onChanged: s.setReduceMotion,
                 c: c,
               ),
               _SwitchRow(
-                title: tr('Метка GIF на анимациях', 'GIF badge on animations'),
-                subtitle: tr('Маленький значок «GIF» в углу миниатюры',
-                    'Small "GIF" mark in the tile corner'),
+                title: tr('Метка GIF на анимациях', 'GIF badge on animations',
+                    'Insignia GIF en animaciones'),
+                subtitle: tr(
+                    'Маленький значок «GIF» в углу миниатюры',
+                    'Small "GIF" mark in the tile corner',
+                    'Pequeña etiqueta "GIF" en la esquina de la miniatura'),
                 value: s.showGifBadge,
                 onChanged: s.setShowGifBadge,
                 c: c,
               ),
               _SwitchRow(
-                title: tr('Сердечко на избранных', 'Heart on favorites'),
-                subtitle: tr('Метка избранного в углу миниатюры',
-                    'Favorite mark in the tile corner'),
+                title: tr('Сердечко на избранных', 'Heart on favorites',
+                    'Corazón en favoritos'),
+                subtitle: tr(
+                    'Метка избранного в углу миниатюры',
+                    'Favorite mark in the tile corner',
+                    'Marca de favorito en la esquina de la miniatura'),
                 value: s.showFavBadge,
                 onChanged: s.setShowFavBadge,
                 c: c,
@@ -249,26 +271,30 @@ class _Sections extends StatelessWidget {
               const _PerfPicker(),
             ])),
         const SizedBox(height: 22),
-        _SectionTitle(tr('Запуск', 'Startup')),
+        _SectionTitle(tr('Запуск', 'Startup', 'Inicio')),
         _Card(
             c: c,
             child: Column(children: [
-              _RowLabel(tr('Стартовый раздел', 'Start section'), c: c),
+              _RowLabel(
+                  tr('Стартовый раздел', 'Start section', 'Sección inicial'),
+                  c: c),
               const SizedBox(height: 8),
               const _StartPicker(),
             ])),
         const SizedBox(height: 22),
-        _SectionTitle(tr('Приватность', 'Privacy')),
+        _SectionTitle(tr('Приватность', 'Privacy', 'Privacidad')),
         _Card(
             c: c,
             child: Column(children: [
               _SwitchRow(
-                title: tr('Показывать скрытые папки', 'Show hidden folders'),
+                title: tr('Показывать скрытые папки', 'Show hidden folders',
+                    'Mostrar carpetas ocultas'),
                 subtitle: tr(
                     'Секретные альбомы (помеченные .nomedia) станут видны '
                         'в галерее. Долгий тап / ПКМ по папке — скрыть или показать.',
                     'Secret albums (marked with .nomedia) become visible. '
-                        'Long-press / right-click a folder to hide or show it.'),
+                        'Long-press / right-click a folder to hide or show it.',
+                    'Los álbumes secretos (marcados con .nomedia) se mostrarán en la galería. Mantén pulsado / clic derecho en una carpeta para ocultarla o mostrarla.'),
                 value: s.showHidden,
                 onChanged: s.setShowHidden,
                 c: c,
@@ -279,7 +305,7 @@ class _Sections extends StatelessWidget {
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                        '${tr('Скрыто папок', 'Hidden folders')}: ${s.hiddenFolders.length}',
+                        '${tr('Скрыто папок', 'Hidden folders', 'Carpetas ocultas')}: ${s.hiddenFolders.length}',
                         style: TextStyle(color: c.muted, fontSize: 12.5)),
                   ),
                 ),
@@ -292,18 +318,21 @@ class _Sections extends StatelessWidget {
             ])),
         const SizedBox(height: 22),
         if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) ...[
-          _SectionTitle(tr('Поиск по компьютеру', 'Search the computer')),
+          _SectionTitle(tr(
+              'Поиск по компьютеру', 'Search the computer', 'Buscar en el PC')),
           _Card(
               c: c,
               child: Column(children: [
                 _SliderRow(
-                  label: tr('Игнорировать картинки меньше',
-                      'Ignore images smaller than'),
+                  label: tr(
+                      'Игнорировать картинки меньше',
+                      'Ignore images smaller than',
+                      'Ignorar imágenes menores que'),
                   value: s.pcScanMinDim.toDouble(),
                   min: 0,
                   max: 1024,
                   valueLabel: s.pcScanMinDim == 0
-                      ? tr('не отсеивать', 'no filter')
+                      ? tr('не отсеивать', 'no filter', 'sin filtro')
                       : '${s.pcScanMinDim} px',
                   onChanged: (v) => s.setPcScanMinDim((v / 32).round() * 32),
                   c: c,
@@ -316,57 +345,66 @@ class _Sections extends StatelessWidget {
                           'При «найти все картинки на ПК» отсеивает иконки и текстуры '
                               '(мелкие картинки, файлы < 20 КБ и служебные папки).',
                           'When using "find all images on PC" it filters out icons '
-                              'and textures (small images, files < 20 KB, system folders).'),
+                              'and textures (small images, files < 20 KB, system folders).',
+                          'Al usar "buscar todas las imágenes en el PC", filtra iconos y texturas (imágenes pequeñas, archivos < 20 KB y carpetas del sistema).'),
                       style: TextStyle(color: c.muted, fontSize: 12)),
                 ),
               ])),
           const SizedBox(height: 22),
         ],
-        _SectionTitle(tr('Теги', 'Tags')),
+        _SectionTitle(tr('Теги', 'Tags', 'Etiquetas')),
         _Card(
             c: c,
             child: Column(children: [
               _ActionRow(
                 icon: Icons.upload_file_outlined,
-                title: tr('Экспорт тегов', 'Export tags'),
-                subtitle: tr('Сохранить базу тегов в JSON (бэкап/перенос)',
-                    'Save the tag database to JSON (backup/transfer)'),
+                title: tr('Экспорт тегов', 'Export tags', 'Exportar etiquetas'),
+                subtitle: tr(
+                    'Сохранить базу тегов в JSON (бэкап/перенос)',
+                    'Save the tag database to JSON (backup/transfer)',
+                    'Guardar la base de etiquetas en JSON (copia de seguridad/traslado)'),
                 onTap: () => _exportTags(context),
                 c: c,
               ),
               _ActionRow(
                 icon: Icons.download_outlined,
-                title: tr('Импорт тегов', 'Import tags'),
-                subtitle: tr('Загрузить теги из ранее сохранённого JSON',
-                    'Load tags from a previously saved JSON'),
+                title: tr('Импорт тегов', 'Import tags', 'Importar etiquetas'),
+                subtitle: tr(
+                    'Загрузить теги из ранее сохранённого JSON',
+                    'Load tags from a previously saved JSON',
+                    'Cargar etiquetas desde un JSON guardado'),
                 onTap: () => _importTags(context),
                 c: c,
               ),
               _ActionRow(
                 icon: Icons.link_outlined,
-                title: tr('Перепривязать теги', 'Relink tags'),
+                title: tr('Перепривязать теги', 'Relink tags',
+                    'Revincular etiquetas'),
                 subtitle: tr(
                     'Найти теги переименованных/перемещённых файлов по содержимому',
-                    'Find tags of renamed/moved files by their content'),
+                    'Find tags of renamed/moved files by their content',
+                    'Encontrar etiquetas de archivos renombrados o movidos por su contenido'),
                 onTap: () => _relinkTags(context),
                 c: c,
               ),
             ])),
         const SizedBox(height: 22),
-        _SectionTitle(tr('Диагностика', 'Diagnostics')),
+        _SectionTitle(tr('Диагностика', 'Diagnostics', 'Diagnóstico')),
         _Card(
             c: c,
             child: _ActionRow(
               icon: Icons.bug_report_outlined,
-              title: tr('Поделиться журналом', 'Share log'),
+              title:
+                  tr('Поделиться журналом', 'Share log', 'Compartir registro'),
               subtitle: tr(
                   'Отправить файл журнала ошибок — поможет найти причину сбоев',
-                  'Send the error log file — helps diagnose crashes'),
+                  'Send the error log file — helps diagnose crashes',
+                  'Enviar el registro de errores; ayuda a diagnosticar fallos'),
               onTap: () => _shareLog(context),
               c: c,
             )),
         const SizedBox(height: 22),
-        _SectionTitle(tr('О приложении', 'About')),
+        _SectionTitle(tr('О приложении', 'About', 'Acerca de')),
         _Card(c: c, child: const _About()),
         const SizedBox(height: 12),
       ],
@@ -378,13 +416,13 @@ class _Sections extends StatelessWidget {
     final content = await ErrorLog.readAll();
     final path = ErrorLog.path;
     if (Platform.isAndroid && path != null) {
-      await SharePlus.instance.share(
-          ShareParams(files: [XFile(path)], text: 'GOAT log'));
+      await SharePlus.instance
+          .share(ShareParams(files: [XFile(path)], text: 'GOAT log'));
     } else {
       await Clipboard.setData(ClipboardData(text: content));
       messenger.showSnackBar(SnackBar(
           content: Text(tr('Журнал скопирован в буфер обмена',
-              'Log copied to clipboard'))));
+              'Log copied to clipboard', 'Registro copiado al portapapeles'))));
     }
   }
 
@@ -396,15 +434,19 @@ class _Sections extends StatelessWidget {
           'goat-tags-${DateTime.now().toIso8601String().substring(0, 10)}.json';
       String? dest;
       if (!Platform.isAndroid) {
-        dest = await FilePicker.platform
-            .saveFile(dialogTitle: 'Сохранить теги', fileName: name);
+        dest = await FilePicker.platform.saveFile(
+            dialogTitle: tr('Сохранить теги', 'Save tags', 'Guardar etiquetas'),
+            fileName: name);
       }
       dest ??= p.join((await getApplicationDocumentsDirectory()).path, name);
       await File(dest).writeAsString(json);
-      messenger.showSnackBar(SnackBar(content: Text('Теги сохранены: $dest')));
+      messenger.showSnackBar(SnackBar(
+          content: Text(
+              '${tr('Теги сохранены', 'Tags saved', 'Etiquetas guardadas')}: $dest')));
     } catch (e) {
-      messenger
-          .showSnackBar(SnackBar(content: Text('Не удалось сохранить: $e')));
+      messenger.showSnackBar(SnackBar(
+          content: Text(
+              '${tr('Не удалось сохранить', 'Could not save', 'No se pudo guardar')}: $e')));
     }
   }
 
@@ -419,11 +461,13 @@ class _Sections extends StatelessWidget {
       if (path == null) return;
       final n = TagService.instance.importJson(await File(path).readAsString());
       parent.widget.onTagsImported?.call();
-      messenger
-          .showSnackBar(SnackBar(content: Text('Импортировано тегов: $n')));
+      messenger.showSnackBar(SnackBar(
+          content: Text(
+              '${tr('Импортировано тегов', 'Tags imported', 'Etiquetas importadas')}: $n')));
     } catch (e) {
-      messenger.showSnackBar(
-          SnackBar(content: Text('Не удалось импортировать: $e')));
+      messenger.showSnackBar(SnackBar(
+          content: Text(
+              '${tr('Не удалось импортировать', 'Could not import', 'No se pudo importar')}: $e')));
     }
   }
 
@@ -431,15 +475,21 @@ class _Sections extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context);
     final cb = parent.widget.onRelinkRequested;
     if (cb == null) {
-      messenger.showSnackBar(const SnackBar(
-          content: Text('Перепривязка недоступна — нет активной библиотеки')));
+      messenger.showSnackBar(SnackBar(
+          content: Text(tr(
+              'Перепривязка недоступна — нет активной библиотеки',
+              'Relinking is unavailable — no active library',
+              'No se puede revincular: no hay una biblioteca activa'))));
       return;
     }
     final n = cb();
     messenger.showSnackBar(SnackBar(
         content: Text(n == 0
-            ? 'Сейчас перепривязывать нечего — все теги на месте'
-            : 'Перепривязано файлов: $n')));
+            ? tr(
+                'Сейчас перепривязывать нечего — все теги на месте',
+                'Nothing to relink right now — all tags are in place',
+                'No hay nada que revincular ahora: todas las etiquetas están en su sitio')
+            : '${tr('Перепривязано файлов', 'Files relinked', 'Archivos revinculados')}: $n')));
   }
 }
 
@@ -658,15 +708,24 @@ class _AllFilesTileState extends State<_AllFilesTile> {
     return Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
       Expanded(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Доступ ко всем файлам (секретные папки)',
+          Text(
+              tr(
+                  'Доступ ко всем файлам (секретные папки)',
+                  'All files access (secret folders)',
+                  'Acceso a todos los archivos (carpetas secretas)'),
               style: TextStyle(
                   color: c.text, fontSize: 14, fontWeight: FontWeight.w600)),
           const SizedBox(height: 2),
           Text(
               _granted
-                  ? 'Включён — GOAT видит скрытые .nomedia-папки, другие галереи нет.'
-                  : 'Нужен, чтобы видеть в GOAT секретные папки, скрытые от '
-                      'других галерей через .nomedia.',
+                  ? tr(
+                      'Включён — GOAT видит скрытые .nomedia-папки, другие галереи нет.',
+                      'On — GOAT can see hidden .nomedia folders; other galleries cannot.',
+                      'Activado: GOAT ve las carpetas .nomedia ocultas; otras galerías no.')
+                  : tr(
+                      'Нужен, чтобы видеть в GOAT секретные папки, скрытые от других галерей через .nomedia.',
+                      'Needed so GOAT can see secret folders hidden from other galleries with .nomedia.',
+                      'Hace falta para que GOAT vea carpetas secretas ocultas a otras galerías con .nomedia.'),
               style: TextStyle(color: c.muted, fontSize: 12.5)),
         ]),
       ),
@@ -683,7 +742,7 @@ class _AllFilesTileState extends State<_AllFilesTile> {
                   height: 16,
                   child: CircularProgressIndicator(
                       strokeWidth: 2, color: Colors.white))
-              : const Text('Включить'),
+              : Text(tr('Включить', 'Enable', 'Activar')),
         ),
     ]);
   }
@@ -769,11 +828,12 @@ class _ModePicker extends StatelessWidget {
     }
 
     return Row(children: [
-      chip(tr('Как в системе', 'System'), Icons.brightness_auto_rounded,
-          ThemeModeChoice.system),
-      chip(tr('Светлая', 'Light'), Icons.light_mode_rounded,
+      chip(tr('Как в системе', 'System', 'Sistema'),
+          Icons.brightness_auto_rounded, ThemeModeChoice.system),
+      chip(tr('Светлая', 'Light', 'Claro'), Icons.light_mode_rounded,
           ThemeModeChoice.light),
-      chip(tr('Тёмная', 'Dark'), Icons.dark_mode_rounded, ThemeModeChoice.dark),
+      chip(tr('Тёмная', 'Dark', 'Oscuro'), Icons.dark_mode_rounded,
+          ThemeModeChoice.dark),
     ]);
   }
 }
@@ -816,7 +876,8 @@ class _PerfPicker extends StatelessWidget {
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
-        chip(tr('Авто', 'Auto', 'Auto'), Icons.auto_mode_rounded, PerfMode.auto),
+        chip(
+            tr('Авто', 'Auto', 'Auto'), Icons.auto_mode_rounded, PerfMode.auto),
         chip(tr('Включить', 'On', 'Activado'), Icons.battery_saver_rounded,
             PerfMode.on),
         chip(tr('Выключить', 'Off', 'Desactivado'), Icons.flash_on_rounded,
@@ -829,7 +890,8 @@ class _PerfPicker extends StatelessWidget {
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-                tr('Авто-режим определил слабое устройство — экономия включена.',
+                tr(
+                    'Авто-режим определил слабое устройство — экономия включена.',
                     'Auto detected a slow device — saving is on.',
                     'Auto detectó un dispositivo lento — el ahorro está activo.'),
                 style: TextStyle(color: c.muted, fontSize: 11.5)),
@@ -880,16 +942,20 @@ class _DensityPicker extends StatelessWidget {
     }
 
     return Row(children: [
-      chip(tr('Авто', 'Auto'), tr('телефон компактнее', 'compact on phone'),
-          Icons.auto_awesome_rounded, UiDensity.auto),
       chip(
-          tr('Компактно', 'Compact'),
-          tr('больше места фото', 'more room for photos'),
+          tr('Авто', 'Auto', 'Auto'),
+          tr('телефон компактнее', 'compact on phone', 'compacto en teléfono'),
+          Icons.auto_awesome_rounded,
+          UiDensity.auto),
+      chip(
+          tr('Компактно', 'Compact', 'Compacto'),
+          tr('больше места фото', 'more room for photos',
+              'más espacio para fotos'),
           Icons.fit_screen_rounded,
           UiDensity.compact),
       chip(
-          tr('Просторно', 'Roomy'),
-          tr('как на ПК/планшете', 'desktop/tablet style'),
+          tr('Просторно', 'Roomy', 'Espacioso'),
+          tr('как на ПК/планшете', 'desktop/tablet style', 'estilo PC/tablet'),
           Icons.space_dashboard_rounded,
           UiDensity.comfortable),
     ]);
@@ -936,12 +1002,21 @@ class _SectionNavPicker extends StatelessWidget {
     }
 
     return Row(children: [
-      chip(tr('Везде', 'Both'), tr('как сейчас', 'as now'),
-          Icons.space_bar_rounded, SectionNavPlacement.both),
-      chip(tr('Сбоку', 'Side'), tr('снизу на телефоне', 'bottom on phone'),
-          Icons.dock_rounded, SectionNavPlacement.side),
-      chip(tr('Сверху', 'Top'), tr('только верх', 'top only'),
-          Icons.vertical_align_top_rounded, SectionNavPlacement.top),
+      chip(
+          tr('Везде', 'Both', 'En ambos'),
+          tr('как сейчас', 'as now', 'como ahora'),
+          Icons.space_bar_rounded,
+          SectionNavPlacement.both),
+      chip(
+          tr('Сбоку', 'Side', 'Lateral'),
+          tr('снизу на телефоне', 'bottom on phone', 'abajo en teléfono'),
+          Icons.dock_rounded,
+          SectionNavPlacement.side),
+      chip(
+          tr('Сверху', 'Top', 'Arriba'),
+          tr('только верх', 'top only', 'solo arriba'),
+          Icons.vertical_align_top_rounded,
+          SectionNavPlacement.top),
     ]);
   }
 }
@@ -951,12 +1026,12 @@ class _GapStylePicker extends StatelessWidget {
   const _GapStylePicker();
 
   static const _items = [
-    (GapStyle.none, 'Нет'),
-    (GapStyle.color, 'Цвет'),
-    (GapStyle.silver, 'Серебро'),
-    (GapStyle.gold, 'Золото'),
-    (GapStyle.holographic, 'Голография'),
-    (GapStyle.polaroid, 'Полароид'),
+    GapStyle.none,
+    GapStyle.color,
+    GapStyle.silver,
+    GapStyle.gold,
+    GapStyle.holographic,
+    GapStyle.polaroid,
   ];
 
   static const _palette = [
@@ -1011,13 +1086,22 @@ class _GapStylePicker extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       );
 
+  String _label(GapStyle st) => switch (st) {
+        GapStyle.none => tr('Нет', 'None', 'Ninguno'),
+        GapStyle.color => tr('Цвет', 'Color', 'Color'),
+        GapStyle.silver => tr('Серебро', 'Silver', 'Plata'),
+        GapStyle.gold => tr('Золото', 'Gold', 'Oro'),
+        GapStyle.holographic => tr('Голография', 'Holographic', 'Holográfico'),
+        GapStyle.polaroid => tr('Полароид', 'Polaroid', 'Polaroid'),
+      };
+
   @override
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
     final s = SettingsService.instance;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Wrap(spacing: 10, runSpacing: 10, children: [
-        for (final (st, label) in _items)
+        for (final st in _items)
           GestureDetector(
             onTap: () => s.setGapStyle(st),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -1032,7 +1116,7 @@ class _GapStylePicker extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
-              Text(label,
+              Text(_label(st),
                   style: TextStyle(
                       color: s.gapStyle == st ? c.accentInk : c.muted,
                       fontSize: 11,
@@ -1064,7 +1148,11 @@ class _GapStylePicker extends StatelessWidget {
       ],
       if (s.gapStyle != GapStyle.none) ...[
         const SizedBox(height: 8),
-        Text('Зазоры видны лучше при ненулевом «зазоре между плитками» выше.',
+        Text(
+            tr(
+                'Зазоры видны лучше при ненулевом «зазоре между плитками» выше.',
+                'Gaps are easier to see when “gap between tiles” above is not zero.',
+                'La separación se ve mejor si “espacio entre miniaturas” no está en cero.'),
             style: TextStyle(color: c.muted, fontSize: 11.5)),
       ],
     ]);
@@ -1110,11 +1198,15 @@ class _LayoutPicker extends StatelessWidget {
     }
 
     return Row(children: [
-      chip(tr('Квадраты', 'Squares'), tr('ровная сетка', 'even grid'),
-          Icons.grid_view_rounded, GridLayout.square),
       chip(
-          tr('Мозаика', 'Mosaic'),
-          tr('разные формы, видно больше', 'varied shapes, see more'),
+          tr('Квадраты', 'Squares', 'Cuadrados'),
+          tr('ровная сетка', 'even grid', 'cuadrícula uniforme'),
+          Icons.grid_view_rounded,
+          GridLayout.square),
+      chip(
+          tr('Мозаика', 'Mosaic', 'Mosaico'),
+          tr('разные формы, видно больше', 'varied shapes, see more',
+              'formas variadas, se ve más'),
           Icons.dashboard_rounded,
           GridLayout.mosaic),
     ]);
@@ -1156,10 +1248,11 @@ class _StartPicker extends StatelessWidget {
     }
 
     return Row(children: [
-      chip(tr('Все', 'All'), Icons.grid_view_rounded, StartSection.all),
-      chip(tr('По датам', 'By date'), Icons.calendar_today_rounded,
+      chip(tr('Все', 'All', 'Todo'), Icons.grid_view_rounded, StartSection.all),
+      chip(tr('По датам', 'By date', 'Por fecha'), Icons.calendar_today_rounded,
           StartSection.dates),
-      chip(tr('Альбомы', 'Albums'), Icons.folder_rounded, StartSection.albums),
+      chip(tr('Альбомы', 'Albums', 'Álbumes'), Icons.folder_rounded,
+          StartSection.albums),
     ]);
   }
 }
@@ -1174,6 +1267,19 @@ class _BasePicker extends StatelessWidget {
     required this.currentId,
     required this.onPick,
   });
+
+  String _label(AuroraBase b) => switch (b.id) {
+        'paper' => tr('Бумага', 'Paper', 'Papel'),
+        'sand' => tr('Песок', 'Sand', 'Arena'),
+        'cream' => tr('Крем', 'Cream', 'Crema'),
+        'mist' => tr('Туман', 'Mist', 'Niebla'),
+        'charcoal' => tr('Уголь', 'Charcoal', 'Carbón'),
+        'slate' => tr('Графит', 'Graphite', 'Grafito'),
+        'midnight' => tr('Полночь', 'Midnight', 'Medianoche'),
+        'oled' => tr('OLED-чёрный', 'OLED black', 'Negro OLED'),
+        'sepia' => tr('Сепия', 'Sepia', 'Sepia'),
+        _ => b.name,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -1236,7 +1342,7 @@ class _BasePicker extends StatelessWidget {
                     ]),
                   ),
                   const SizedBox(height: 6),
-                  Text(b.name,
+                  Text(_label(b),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                           color: c.text,
@@ -1255,13 +1361,29 @@ class _AccentPicker extends StatelessWidget {
   final ValueChanged<String> onPick;
   const _AccentPicker({required this.currentId, required this.onPick});
 
+  String _label(AuroraAccent a) => switch (a.id) {
+        'coral' => tr('Коралл', 'Coral', 'Coral'),
+        'amber' => tr('Янтарь', 'Amber', 'Ámbar'),
+        'olive' => tr('Олива', 'Olive', 'Oliva'),
+        'sage' => tr('Шалфей', 'Sage', 'Salvia'),
+        'forest' => tr('Хвоя', 'Forest', 'Bosque'),
+        'teal' => tr('Бирюза', 'Teal', 'Verde azulado'),
+        'ocean' => tr('Океан', 'Ocean', 'Océano'),
+        'indigo' => tr('Индиго', 'Indigo', 'Índigo'),
+        'violet' => tr('Фиалка', 'Violet', 'Violeta'),
+        'plum' => tr('Слива', 'Plum', 'Ciruela'),
+        'magenta' => tr('Маджента', 'Magenta', 'Magenta'),
+        'crimson' => tr('Алый', 'Crimson', 'Carmesí'),
+        _ => a.name,
+      };
+
   @override
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
     return Wrap(spacing: 10, runSpacing: 10, children: [
       for (final a in kAccents)
         Tooltip(
-          message: a.name,
+          message: _label(a),
           child: GestureDetector(
             onTap: () => onPick(a.id),
             child: Container(
@@ -1322,8 +1444,10 @@ class _About extends StatelessWidget {
       const SizedBox(height: 14),
       Text(
           kBuildNumber == 0
-              ? 'Сборка: локальная разработка'
-              : 'Сборка №$kBuildNumber',
+              ? tr('Сборка: локальная разработка', 'Build: local development',
+                  'Compilación: desarrollo local')
+              : tr('Сборка №$kBuildNumber', 'Build #$kBuildNumber',
+                  'Compilación n.º $kBuildNumber'),
           style: TextStyle(color: c.muted, fontSize: 13)),
     ]);
   }

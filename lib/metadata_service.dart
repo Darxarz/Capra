@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
+import 'i18n.dart';
 
 /// Метаданные изображения: размеры, EXIF (для фото) и параметры генерации
 /// нейросетью (Stable Diffusion / A1111 / ComfyUI / NovelAI).
@@ -221,7 +222,9 @@ Map<String, dynamic>? _parseJpeg(Uint8List b) {
   out['height'] = h;
   // EXIF добавляем только если это не AI-картинка (или вдобавок к ней)
   if (out['exif'] == null) {
-    out['exif'] = [for (final e in exif) [e.key, e.value]];
+    out['exif'] = [
+      for (final e in exif) [e.key, e.value]
+    ];
   }
   return out;
 }
@@ -233,16 +236,16 @@ Map<String, dynamic>? _parseJpeg(Uint8List b) {
   try {
     final exif = img.ExifData.fromInputBuffer(img.InputBuffer(block));
     // удобочитаемые поля по именам
-    const wanted = <String, String>{
-      'Make': 'Камера',
-      'Model': 'Модель',
-      'LensModel': 'Объектив',
-      'DateTimeOriginal': 'Снято',
-      'ExposureTime': 'Выдержка',
-      'FNumber': 'Диафрагма',
+    final wanted = <String, String>{
+      'Make': tr('Камера', 'Camera', 'Cámara'),
+      'Model': tr('Модель', 'Model', 'Modelo'),
+      'LensModel': tr('Объектив', 'Lens', 'Objetivo'),
+      'DateTimeOriginal': tr('Снято', 'Taken', 'Tomada'),
+      'ExposureTime': tr('Выдержка', 'Exposure', 'Exposición'),
+      'FNumber': tr('Диафрагма', 'Aperture', 'Apertura'),
       'ISO': 'ISO',
-      'FocalLength': 'Фокус',
-      'Software': 'Софт',
+      'FocalLength': tr('Фокус', 'Focal length', 'Distancia focal'),
+      'Software': tr('Софт', 'Software', 'Software'),
     };
     wanted.forEach((name, label) {
       final id = img.exifTagNameToID[name];
@@ -288,7 +291,9 @@ Map<String, dynamic> _interpretText(Map<String, String> text) {
   if (text.isNotEmpty) {
     return {
       'aiTool': null,
-      'exif': [for (final e in text.entries) [e.key, _short(e.value)]],
+      'exif': [
+        for (final e in text.entries) [e.key, _short(e.value)]
+      ],
     };
   }
   return {'aiTool': null};
@@ -320,8 +325,7 @@ Map<String, dynamic> _parseA1111(String s) {
     }
     // разбор "Key: value, Key2: value2" — режем перед "Слово: "
     final settings = lines[settingsIdx];
-    final parts =
-        settings.split(RegExp(r',\s*(?=[A-Za-z][\w /]*:\s)'));
+    final parts = settings.split(RegExp(r',\s*(?=[A-Za-z][\w /]*:\s)'));
     for (final part in parts) {
       final ci = part.indexOf(':');
       if (ci > 0) {

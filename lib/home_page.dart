@@ -256,9 +256,11 @@ class _HomePageState extends State<HomePage> {
     if (_useDeviceMedia && nowHidden && !_allFiles) {
       final ok = await _ensureAllFiles();
       if (!ok) {
-        messenger.showSnackBar(const SnackBar(
-            content: Text('Для секретных папок нужен «доступ ко всем файлам» '
-                '(Настройки → Приватность).')));
+        messenger.showSnackBar(SnackBar(
+            content: Text(tr(
+                'Для секретных папок нужен «доступ ко всем файлам» (Настройки → Приватность).',
+                'Secret folders need “all files access” (Settings → Privacy).',
+                'Las carpetas secretas necesitan “acceso a todos los archivos” (Ajustes → Privacidad).'))));
         return;
       }
     }
@@ -277,8 +279,12 @@ class _HomePageState extends State<HomePage> {
     if (!mounted) return;
     messenger.showSnackBar(SnackBar(
       content: Text(nowHidden
-          ? 'Папка скрыта. Показать — в Настройках → «Показывать скрытые».'
-          : 'Папка снова видна.'),
+          ? tr(
+              'Папка скрыта. Показать — в Настройках → «Показывать скрытые».',
+              'Folder hidden. To show it, enable Settings → “Show hidden”.',
+              'Carpeta oculta. Para verla, activa Ajustes → “Mostrar ocultas”.')
+          : tr('Папка снова видна.', 'Folder is visible again.',
+              'La carpeta vuelve a estar visible.')),
     ));
   }
 
@@ -363,21 +369,25 @@ class _HomePageState extends State<HomePage> {
         final c = AuroraTheme.of(ctx).colors;
         return AlertDialog(
           backgroundColor: c.surface,
-          title: Text('Обновить GOAT?', style: TextStyle(color: c.text)),
+          title: Text(tr('Обновить GOAT?', 'Update GOAT?', '¿Actualizar GOAT?'),
+              style: TextStyle(color: c.text)),
           content: Text(
-            'Доступна сборка №${u.build}. Приложение скачает её, '
-            'заменит файлы и перезапустится.',
+            tr(
+                'Доступна сборка №${u.build}. Приложение скачает её, заменит файлы и перезапустится.',
+                'Build #${u.build} is available. The app will download it, replace the files and restart.',
+                'La compilación n.º ${u.build} está disponible. La app la descargará, reemplazará los archivos y se reiniciará.'),
             style: TextStyle(color: c.muted),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: Text('Позже', style: TextStyle(color: c.muted)),
+              child: Text(tr('Позже', 'Later', 'Más tarde'),
+                  style: TextStyle(color: c.muted)),
             ),
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: c.accent),
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Обновить'),
+              child: Text(tr('Обновить', 'Update', 'Actualizar')),
             ),
           ],
         );
@@ -427,10 +437,14 @@ class _HomePageState extends State<HomePage> {
     if (granted) {
       await _rescan();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Доступ к фото не выдан. Открыть настройки?'),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(tr(
+            'Доступ к фото не выдан. Открыть настройки?',
+            'Photo access was not granted. Open settings?',
+            'No se concedió acceso a las fotos. ¿Abrir ajustes?')),
         action: SnackBarAction(
-            label: 'Настройки', onPressed: PhotoManager.openSetting),
+            label: tr('Настройки', 'Settings', 'Ajustes'),
+            onPressed: PhotoManager.openSetting),
       ));
     }
   }
@@ -442,7 +456,8 @@ class _HomePageState extends State<HomePage> {
       return;
     }
     final path = await FilePicker.platform.getDirectoryPath(
-      dialogTitle: 'Выбери папку с фотографиями',
+      dialogTitle: tr('Выбери папку с фотографиями',
+          'Choose a folder with photos', 'Elige una carpeta con fotos'),
     );
     if (path == null || _folders.contains(path)) return;
     final next = [..._folders, path];
@@ -465,20 +480,25 @@ class _HomePageState extends State<HomePage> {
       context: ctx,
       builder: (d) => AlertDialog(
         backgroundColor: c.surface,
-        title: Text('Очистить сканирование?', style: TextStyle(color: c.text)),
+        title: Text(
+            tr('Очистить сканирование?', 'Clear scan?', '¿Borrar el escaneo?'),
+            style: TextStyle(color: c.text)),
         content: Text(
-            'Уберём все $n папок из библиотеки. Сами файлы на диске не трогаем — '
-            'только список просканированных папок. Потом можно добавить заново.',
+            tr(
+                'Уберём все $n папок из библиотеки. Сами файлы на диске не трогаем — только список просканированных папок. Потом можно добавить заново.',
+                'We’ll remove all $n folders from the library. Files on disk stay untouched — only the scanned folder list is cleared. You can add them again later.',
+                'Quitaremos las $n carpetas de la biblioteca. Los archivos del disco no se tocan: solo se borra la lista de carpetas escaneadas. Puedes añadirlas de nuevo después.'),
             style: TextStyle(color: c.muted)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(d, false),
-            child: Text('Отмена', style: TextStyle(color: c.muted)),
+            child: Text(tr('Отмена', 'Cancel', 'Cancelar'),
+                style: TextStyle(color: c.muted)),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: c.accent),
             onPressed: () => Navigator.pop(d, true),
-            child: const Text('Очистить'),
+            child: Text(tr('Очистить', 'Clear', 'Borrar')),
           ),
         ],
       ),
@@ -491,8 +511,9 @@ class _HomePageState extends State<HomePage> {
     setState(() => _folders = const []);
     await _rescan();
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Список папок очищен')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(tr('Список папок очищен', 'Folder list cleared',
+            'Lista de carpetas borrada'))));
   }
 
   Future<void> _rescan() async {
@@ -620,31 +641,35 @@ class _HomePageState extends State<HomePage> {
       ),
       builder: (_) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          tile(Icons.folder_open, tr('Папки библиотеки', 'Library folders'),
+          tile(
+              Icons.folder_open,
+              tr('Папки библиотеки', 'Library folders',
+                  'Carpetas de la biblioteca'),
               _manageFolders),
           tile(
               _favOnly ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-              tr('Только избранное', 'Favorites only'),
+              tr('Только избранное', 'Favorites only', 'Solo favoritos'),
               () => setState(() => _favOnly = !_favOnly),
               on: _favOnly),
           tile(
               Icons.brush_outlined,
-              tr('Проекты KRA/PSD', 'KRA/PSD projects'),
+              tr('Проекты KRA/PSD', 'KRA/PSD projects', 'Proyectos KRA/PSD'),
               () => setState(() {
                     _projectsOnly = !_projectsOnly;
                     if (_projectsOnly) _mode = ViewMode.all;
                   }),
               on: _projectsOnly),
-          tile(Icons.sell_outlined, tr('Теги', 'Tags'), _openTagsSheet,
+          tile(Icons.sell_outlined, tr('Теги', 'Tags', 'Etiquetas'),
+              _openTagsSheet,
               on: _filterTags.isNotEmpty),
-          tile(Icons.content_copy_outlined, tr('Дубликаты', 'Duplicates'),
-              _openDedup),
+          tile(Icons.content_copy_outlined,
+              tr('Дубликаты', 'Duplicates', 'Duplicados'), _openDedup),
           tile(Icons.wifi_tethering_rounded,
-              tr('Локальная сеть', 'Local network'), _openLan,
+              tr('Локальная сеть', 'Local network', 'Red local'), _openLan,
               on: LanService.instance.isRunning),
-          tile(
-              Icons.delete_outline_rounded, tr('Корзина', 'Trash'), _openTrash),
-          tile(Icons.settings_outlined, tr('Настройки', 'Settings'),
+          tile(Icons.delete_outline_rounded, tr('Корзина', 'Trash', 'Papelera'),
+              _openTrash),
+          tile(Icons.settings_outlined, tr('Настройки', 'Settings', 'Ajustes'),
               _openSettings),
         ]),
       ),
@@ -681,17 +706,21 @@ class _HomePageState extends State<HomePage> {
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               Icon(Icons.delete_outline_rounded, color: c.accent, size: 34),
               const SizedBox(height: 12),
-              Text('Корзина — в галерее устройства',
+              Text(
+                  tr(
+                      'Корзина — в галерее устройства',
+                      'Trash is in the device gallery',
+                      'La papelera está en la galería del dispositivo'),
                   style: TextStyle(
                       color: c.text,
                       fontSize: 16,
                       fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               Text(
-                  'На Android удалённые фото попадают в системную корзину — '
-                  '«Недавно удалённые» в приложении Галерея/Фото устройства. '
-                  'Там их можно восстановить в течение ~30 дней. Открыть её '
-                  'из стороннего приложения система не позволяет.',
+                  tr(
+                      'На Android удалённые фото попадают в системную корзину — «Недавно удалённые» в приложении Галерея/Фото устройства. Там их можно восстановить в течение ~30 дней. Открыть её из стороннего приложения система не позволяет.',
+                      'On Android, deleted photos go to the system trash — “Recently deleted” in the device Gallery/Photos app. You can restore them there for about 30 days. Android does not let third-party apps open that screen directly.',
+                      'En Android, las fotos eliminadas van a la papelera del sistema: “Eliminados recientemente” en la app Galería/Fotos del dispositivo. Puedes restaurarlas allí durante unos 30 días. Android no permite abrir esa pantalla directamente desde apps de terceros.'),
                   textAlign: TextAlign.center,
                   style: TextStyle(color: c.muted, fontSize: 13)),
               const SizedBox(height: 18),
@@ -701,7 +730,7 @@ class _HomePageState extends State<HomePage> {
                   minimumSize: const Size.fromHeight(46),
                 ),
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('Понятно'),
+                child: Text(tr('Понятно', 'Got it', 'Entendido')),
               ),
             ]),
           ),
@@ -731,7 +760,7 @@ class _HomePageState extends State<HomePage> {
               child: Row(children: [
                 Icon(Icons.photo_library_outlined, color: c.accent, size: 20),
                 const SizedBox(width: 10),
-                Text('Доступ к фото',
+                Text(tr('Доступ к фото', 'Photo access', 'Acceso a fotos'),
                     style: TextStyle(
                         color: c.text,
                         fontSize: 16,
@@ -743,15 +772,24 @@ class _HomePageState extends State<HomePage> {
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
               child: Text(
                   _mediaGranted
-                      ? 'GOAT показывает все фото устройства автоматически.'
-                      : 'Дай доступ к фото — GOAT покажет все изображения.',
+                      ? tr(
+                          'GOAT показывает все фото устройства автоматически.',
+                          'GOAT shows all device photos automatically.',
+                          'GOAT muestra automáticamente todas las fotos del dispositivo.')
+                      : tr(
+                          'Дай доступ к фото — GOAT покажет все изображения.',
+                          'Grant photo access — GOAT will show all images.',
+                          'Da acceso a tus fotos: GOAT mostrará todas las imágenes.'),
                   style: TextStyle(color: c.muted, fontSize: 13)),
             ),
             ListTile(
               leading:
                   Icon(Icons.photo_size_select_actual_outlined, color: c.text),
               title: Text(
-                  _mediaGranted ? 'Выбрать, какие фото видны' : 'Дать доступ',
+                  _mediaGranted
+                      ? tr('Выбрать, какие фото видны', 'Choose visible photos',
+                          'Elegir fotos visibles')
+                      : tr('Дать доступ', 'Grant access', 'Dar acceso'),
                   style: TextStyle(color: c.text)),
               onTap: () async {
                 Navigator.pop(ctx);
@@ -765,7 +803,9 @@ class _HomePageState extends State<HomePage> {
             ),
             ListTile(
               leading: Icon(Icons.settings_outlined, color: c.text),
-              title: Text('Открыть настройки приложения',
+              title: Text(
+                  tr('Открыть настройки приложения', 'Open app settings',
+                      'Abrir ajustes de la app'),
                   style: TextStyle(color: c.text)),
               onTap: () {
                 Navigator.pop(ctx);
@@ -792,7 +832,9 @@ class _HomePageState extends State<HomePage> {
               child: Row(children: [
                 Icon(Icons.folder_copy_outlined, color: c.accent, size: 20),
                 const SizedBox(width: 10),
-                Text(tr('Папки библиотеки', 'Library folders'),
+                Text(
+                    tr('Папки библиотеки', 'Library folders',
+                        'Carpetas de la biblioteca'),
                     style: TextStyle(
                         color: c.text,
                         fontSize: 16,
@@ -818,13 +860,17 @@ class _HomePageState extends State<HomePage> {
                   },
                   icon: const Icon(Icons.delete_sweep_outlined),
                   label: Text(
-                      '${tr('Очистить сканирование', 'Clear scan')} (${_folders.length})'),
+                      '${tr('Очистить сканирование', 'Clear scan', 'Borrar escaneo')} (${_folders.length})'),
                 ),
               ),
             if (_folders.isEmpty)
               Padding(
                 padding: const EdgeInsets.all(20),
-                child: Text('Пока не добавлено ни одной папки.',
+                child: Text(
+                    tr(
+                        'Пока не добавлено ни одной папки.',
+                        'No folders added yet.',
+                        'Aún no hay carpetas añadidas.'),
                     style: TextStyle(color: c.muted)),
               ),
             for (final f in _folders)
@@ -836,7 +882,7 @@ class _HomePageState extends State<HomePage> {
                     style: TextStyle(color: c.text, fontSize: 13)),
                 trailing: IconButton(
                   icon: Icon(Icons.close, color: c.muted, size: 18),
-                  tooltip: 'Убрать',
+                  tooltip: tr('Убрать', 'Remove', 'Quitar'),
                   onPressed: () async {
                     await _removeFolder(f);
                     setSheet(() {});
@@ -855,7 +901,8 @@ class _HomePageState extends State<HomePage> {
                   await _addFolder();
                 },
                 icon: const Icon(Icons.add),
-                label: Text(tr('Добавить папку', 'Add folder')),
+                label:
+                    Text(tr('Добавить папку', 'Add folder', 'Añadir carpeta')),
               ),
             ),
             if (Platform.isWindows)
@@ -872,8 +919,10 @@ class _HomePageState extends State<HomePage> {
                     await _scanWholePc();
                   },
                   icon: const Icon(Icons.travel_explore_rounded),
-                  label: Text(
-                      tr('Найти все картинки на ПК', 'Find all images on PC')),
+                  label: Text(tr(
+                      'Найти все картинки на ПК',
+                      'Find all images on PC',
+                      'Buscar todas las imágenes en el PC')),
                 ),
               ),
           ]),
@@ -905,8 +954,10 @@ class _HomePageState extends State<HomePage> {
       _loading = false;
     });
     messenger.showSnackBar(SnackBar(
-        content: Text('Найдено картинок: ${photos.length} '
-            'в ${folders.length} папках')));
+        content: Text(tr(
+            'Найдено картинок: ${photos.length} в ${folders.length} папках',
+            'Found images: ${photos.length} in ${folders.length} folders',
+            'Imágenes encontradas: ${photos.length} en ${folders.length} carpetas'))));
   }
 
   @override
@@ -965,9 +1016,10 @@ class _HomePageState extends State<HomePage> {
           folder: _folders.isNotEmpty
               ? (_folders.length == 1
                   ? _folders.first
-                  : '${_folders.length} ${tr('папок', 'folders')}')
+                  : '${_folders.length} ${tr('папок', 'folders', 'carpetas')}')
               : (_useDeviceMedia && _mediaGranted
-                  ? tr('все фото устройства', 'all device photos')
+                  ? tr('все фото устройства', 'all device photos',
+                      'todas las fotos del dispositivo')
                   : null),
         ),
         _MediaFilterBar(value: _mediaFilter, onChanged: _setMediaFilter),
@@ -1098,8 +1150,8 @@ class _HomePageState extends State<HomePage> {
     if (n > 0) {
       setState(() => _tagsRev++);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(tr('Теги добавлены к $n фото', 'Tags added to $n photos',
-              'Etiquetas añadidas a $n fotos'))));
+          content: Text(tr('Теги добавлены к $n фото',
+              'Tags added to $n photos', 'Etiquetas añadidas a $n fotos'))));
     }
     Selection.instance.clear();
   }
@@ -1108,8 +1160,8 @@ class _HomePageState extends State<HomePage> {
     final n = await MediaActions.share(_selectedPhotos());
     if (n == 0 && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(tr('Нечего отправить', 'Nothing to share',
-              'Nada para compartir'))));
+          content: Text(tr(
+              'Нечего отправить', 'Nothing to share', 'Nada para compartir'))));
     }
     Selection.instance.clear();
   }
@@ -1213,20 +1265,28 @@ class _EmptyState extends StatelessWidget {
     final needAccess = deviceMedia && !granted;
     final subtitle = deviceMedia
         ? (granted
-            ? tr('Фото на устройстве не найдены.',
-                'No photos found on the device.')
-            : tr('Дай доступ к фото — GOAT покажет все изображения устройства.',
-                'Grant photo access — GOAT will show all images on the device.'))
-        : tr('Выбери папку с фотографиями — GOAT покажет их здесь.',
-            'Pick a folder with photos — GOAT will show them here.');
+            ? tr(
+                'Фото на устройстве не найдены.',
+                'No photos found on the device.',
+                'No se encontraron fotos en el dispositivo.')
+            : tr(
+                'Дай доступ к фото — GOAT покажет все изображения устройства.',
+                'Grant photo access — GOAT will show all images on the device.',
+                'Da acceso a tus fotos: GOAT mostrará todas las imágenes del dispositivo.'))
+        : tr(
+            'Выбери папку с фотографиями — GOAT покажет их здесь.',
+            'Pick a folder with photos — GOAT will show them here.',
+            'Elige una carpeta con fotos: GOAT las mostrará aquí.');
     return Center(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.photo_library_outlined, size: 64, color: c.muted),
         const SizedBox(height: 16),
         Text(
             needAccess
-                ? tr('Нужен доступ к фото', 'Photo access needed')
-                : tr('Здесь пока пусто', 'Nothing here yet'),
+                ? tr('Нужен доступ к фото', 'Photo access needed',
+                    'Hace falta acceso a fotos')
+                : tr('Здесь пока пусто', 'Nothing here yet',
+                    'Aquí todavía no hay nada'),
             style: TextStyle(
                 fontSize: 18, fontWeight: FontWeight.w700, color: c.text)),
         const SizedBox(height: 6),
@@ -1242,8 +1302,9 @@ class _EmptyState extends StatelessWidget {
             style: FilledButton.styleFrom(backgroundColor: c.accent),
             icon: Icon(deviceMedia ? Icons.photo_library : Icons.folder_open),
             label: Text(deviceMedia
-                ? tr('Дать доступ к фото', 'Grant photo access')
-                : tr('Выбрать папку', 'Pick a folder')),
+                ? tr('Дать доступ к фото', 'Grant photo access',
+                    'Dar acceso a fotos')
+                : tr('Выбрать папку', 'Pick a folder', 'Elegir carpeta')),
           ),
       ]),
     );
@@ -1350,8 +1411,7 @@ class _Rail extends StatelessWidget {
               active: tagsOpen,
               tip: tr('Теги', 'Tags', 'Etiquetas')),
           item(Icons.content_copy_outlined, null,
-              onTap: onDedup,
-              tip: tr('Дубликаты', 'Duplicates', 'Duplicados')),
+              onTap: onDedup, tip: tr('Дубликаты', 'Duplicates', 'Duplicados')),
           // активная подсветка, пока раздаём по сети
           AnimatedBuilder(
             animation: LanService.instance,
@@ -1364,8 +1424,7 @@ class _Rail extends StatelessWidget {
               onTap: onTrash, tip: tr('Корзина', 'Trash', 'Papelera')),
           const Spacer(),
           item(Icons.settings_outlined, null,
-              onTap: onSettings,
-              tip: tr('Настройки', 'Settings', 'Ajustes')),
+              onTap: onSettings, tip: tr('Настройки', 'Settings', 'Ajustes')),
           const SizedBox(height: 10),
         ],
       ),
@@ -1426,17 +1485,18 @@ class _BottomNav extends StatelessWidget {
       ),
       child: Row(children: [
         if (showSections) ...[
-          item(Icons.grid_view_rounded, tr('Все', 'All'), mode == ViewMode.all,
-              () => onMode(ViewMode.all)),
-          item(Icons.calendar_today_rounded, tr('Даты', 'Dates'),
+          item(Icons.grid_view_rounded, tr('Все', 'All', 'Todo'),
+              mode == ViewMode.all, () => onMode(ViewMode.all)),
+          item(Icons.calendar_today_rounded, tr('Даты', 'Dates', 'Fechas'),
               mode == ViewMode.dates, () => onMode(ViewMode.dates)),
-          item(Icons.folder_rounded, tr('Альбомы', 'Albums'),
+          item(Icons.folder_rounded, tr('Альбомы', 'Albums', 'Álbumes'),
               mode == ViewMode.albums, () => onMode(ViewMode.albums)),
         ],
         item(favOnly ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-            tr('Избр.', 'Favs'), favOnly, onFav),
-        item(Icons.sell_outlined, tr('Теги', 'Tags'), tagFiltered, onTags),
-        item(Icons.more_horiz_rounded, tr('Ещё', 'More'), false, onMore),
+            tr('Избр.', 'Favs', 'Fav.'), favOnly, onFav),
+        item(Icons.sell_outlined, tr('Теги', 'Tags', 'Etiquetas'), tagFiltered,
+            onTags),
+        item(Icons.more_horiz_rounded, tr('Ещё', 'More', 'Más'), false, onMore),
       ]),
     );
   }
@@ -1528,7 +1588,7 @@ class _SelectionBar extends StatelessWidget {
       child: Row(children: [
         IconButton(
           icon: Icon(Icons.close, color: c.text),
-          tooltip: 'Снять выделение',
+          tooltip: tr('Снять выделение', 'Clear selection', 'Quitar selección'),
           onPressed: onClose,
         ),
         Text('$count',
@@ -1537,7 +1597,7 @@ class _SelectionBar extends StatelessWidget {
         const SizedBox(width: 2),
         IconButton(
           icon: Icon(Icons.select_all_rounded, size: 20, color: c.muted),
-          tooltip: 'Выбрать все',
+          tooltip: tr('Выбрать все', 'Select all', 'Seleccionar todo'),
           onPressed: onSelectAll,
         ),
         const Spacer(),
@@ -1546,12 +1606,24 @@ class _SelectionBar extends StatelessWidget {
             scrollDirection: Axis.horizontal,
             reverse: true,
             child: Row(children: [
-              act(Icons.favorite_border_rounded, 'В избранное', onFavorite),
-              act(Icons.sell_outlined, 'Добавить теги', onTags),
-              act(Icons.copy_all_rounded, 'Копировать в папку', onCopy),
-              act(Icons.drive_file_move_outline, 'Переместить в папку', onMove),
-              act(Icons.ios_share_rounded, 'Отправить', onShare),
-              act(Icons.delete_outline_rounded, 'Удалить', onDelete,
+              act(Icons.favorite_border_rounded,
+                  tr('В избранное', 'Favorite', 'A favoritos'), onFavorite),
+              act(Icons.sell_outlined,
+                  tr('Добавить теги', 'Add tags', 'Añadir etiquetas'), onTags),
+              act(
+                  Icons.copy_all_rounded,
+                  tr('Копировать в папку', 'Copy to folder',
+                      'Copiar a carpeta'),
+                  onCopy),
+              act(
+                  Icons.drive_file_move_outline,
+                  tr('Переместить в папку', 'Move to folder',
+                      'Mover a carpeta'),
+                  onMove),
+              act(Icons.ios_share_rounded,
+                  tr('Отправить', 'Share', 'Compartir'), onShare),
+              act(Icons.delete_outline_rounded,
+                  tr('Удалить', 'Delete', 'Eliminar'), onDelete,
                   color: c.accent),
             ]),
           ),
@@ -1610,13 +1682,13 @@ class _MediaFilterBar extends StatelessWidget {
               border: Border.all(color: c.line),
             ),
             child: Row(children: [
-              chip(tr('Всё', 'All'), Icons.all_inclusive_rounded,
+              chip(tr('Всё', 'All', 'Todo'), Icons.all_inclusive_rounded,
                   MediaKindFilter.all),
-              chip(tr('Фото', 'Images'), Icons.image_rounded,
+              chip(tr('Фото', 'Images', 'Imágenes'), Icons.image_rounded,
                   MediaKindFilter.images),
               chip('GIF', Icons.gif_box_rounded, MediaKindFilter.gifs),
-              chip(tr('Видео', 'Video'), Icons.play_circle_outline_rounded,
-                  MediaKindFilter.videos),
+              chip(tr('Видео', 'Video', 'Vídeo'),
+                  Icons.play_circle_outline_rounded, MediaKindFilter.videos),
             ]),
           ),
         ),
@@ -1671,7 +1743,8 @@ class _TopBar extends StatelessWidget {
           IconButton(
             onPressed: onPickFolder,
             icon: Icon(Icons.folder_open, color: c.muted),
-            tooltip: 'Папки библиотеки',
+            tooltip: tr('Папки библиотеки', 'Library folders',
+                'Carpetas de la biblioteca'),
             visualDensity: compact ? VisualDensity.compact : null,
           ),
           if (showSections) ...[
@@ -1697,7 +1770,7 @@ class _TopBar extends StatelessWidget {
             IconButton(
               onPressed: onMore,
               icon: Icon(Icons.more_horiz_rounded, color: c.muted),
-              tooltip: tr('Ещё', 'More'),
+              tooltip: tr('Ещё', 'More', 'Más'),
               visualDensity: VisualDensity.compact,
             ),
           if (update != null) ...[
@@ -1723,8 +1796,8 @@ class _LayoutToggle extends StatelessWidget {
         final mosaic = SettingsService.instance.gridLayout == GridLayout.mosaic;
         return Tooltip(
           message: mosaic
-              ? tr('Мозаика', 'Mosaic')
-              : tr('Ровные квадраты', 'Even squares'),
+              ? tr('Мозаика', 'Mosaic', 'Mosaico')
+              : tr('Ровные квадраты', 'Even squares', 'Cuadrícula uniforme'),
           child: Material(
             color: mosaic ? c.accentSoft : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
@@ -1794,8 +1867,10 @@ class _SearchFieldState extends State<_SearchField> {
               decoration: InputDecoration(
                 isDense: true,
                 border: InputBorder.none,
-                hintText: tr('Поиск по имени файла или папке…',
-                    'Search by file or folder name…'),
+                hintText: tr(
+                    'Поиск по имени файла или папке…',
+                    'Search by file or folder name…',
+                    'Buscar por nombre de archivo o carpeta…'),
                 hintStyle: TextStyle(color: c.muted, fontSize: 14),
               ),
             ),
@@ -1837,7 +1912,8 @@ class _NoResults extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
             favOnly
-                ? tr('Отмечай фото сердечком — они появятся здесь.',
+                ? tr(
+                    'Отмечай фото сердечком — они появятся здесь.',
                     'Tap the heart on photos — they’ll show up here.',
                     'Marca fotos con el corazón — aparecerán aquí.')
                 : tr('Попробуй изменить запрос.', 'Try changing your search.',
@@ -1893,11 +1969,11 @@ class _FolderViewToggle extends StatelessWidget {
             border: Border.all(color: c.line),
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            btn(tr('Сетка', 'Grid'), Icons.grid_view_rounded,
+            btn(tr('Сетка', 'Grid', 'Cuadrícula'), Icons.grid_view_rounded,
                 view == FolderView.grid, () => onChanged(FolderView.grid)),
-            btn(tr('Список', 'List'), Icons.view_list_rounded,
+            btn(tr('Список', 'List', 'Lista'), Icons.view_list_rounded,
                 view == FolderView.list, () => onChanged(FolderView.list)),
-            btn(tr('Древо', 'Tree'), Icons.account_tree_outlined,
+            btn(tr('Древо', 'Tree', 'Árbol'), Icons.account_tree_outlined,
                 view == FolderView.tree, () => onChanged(FolderView.tree)),
           ]),
         ),
@@ -1957,8 +2033,8 @@ class _TagFilterBar extends StatelessWidget {
         const SizedBox(width: 12),
         GestureDetector(
           onTap: onClear,
-          child:
-              Text('Сброс', style: TextStyle(color: c.muted, fontSize: 12.5)),
+          child: Text(tr('Сброс', 'Reset', 'Restablecer'),
+              style: TextStyle(color: c.muted, fontSize: 12.5)),
         ),
       ]),
     );
@@ -1975,23 +2051,24 @@ class _UpdateButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
     return Tooltip(
-      message: 'Доступна сборка №$buildNo',
+      message: tr('Доступна сборка №$buildNo', 'Build #$buildNo is available',
+          'Compilación n.º $buildNo disponible'),
       child: Material(
         color: c.accent,
         borderRadius: BorderRadius.circular(11),
         child: InkWell(
           borderRadius: BorderRadius.circular(11),
           onTap: onTap,
-          child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.system_update_alt_rounded,
+                const Icon(Icons.system_update_alt_rounded,
                     size: 16, color: Colors.white),
-                SizedBox(width: 6),
-                Text('Обновить',
-                    style: TextStyle(
+                const SizedBox(width: 6),
+                Text(tr('Обновить', 'Update', 'Actualizar'),
+                    style: const TextStyle(
                         color: Colors.white,
                         fontSize: 13,
                         fontWeight: FontWeight.w600)),
@@ -2042,7 +2119,11 @@ class _UpdateProgressDialogState extends State<_UpdateProgressDialog> {
     final c = AuroraTheme.of(context).colors;
     return AlertDialog(
       backgroundColor: c.surface,
-      title: Text(_error == null ? 'Обновление…' : 'Не удалось обновить',
+      title: Text(
+          _error == null
+              ? tr('Обновление…', 'Updating…', 'Actualizando…')
+              : tr('Не удалось обновить', 'Could not update',
+                  'No se pudo actualizar'),
           style: TextStyle(color: c.text)),
       content: _error != null
           ? Text(_error!, style: TextStyle(color: c.muted))
@@ -2058,12 +2139,16 @@ class _UpdateProgressDialogState extends State<_UpdateProgressDialog> {
                 const SizedBox(height: 12),
                 Text(
                   _progress == null
-                      ? 'Скачивание…'
-                      : 'Скачивание ${((_progress ?? 0) * 100).round()}%',
+                      ? tr('Скачивание…', 'Downloading…', 'Descargando…')
+                      : '${tr('Скачивание', 'Downloading', 'Descargando')} ${((_progress ?? 0) * 100).round()}%',
                   style: TextStyle(color: c.muted, fontSize: 13),
                 ),
                 const SizedBox(height: 4),
-                Text('Приложение перезапустится автоматически.',
+                Text(
+                    tr(
+                        'Приложение перезапустится автоматически.',
+                        'The app will restart automatically.',
+                        'La app se reiniciará automáticamente.'),
                     style: TextStyle(color: c.muted, fontSize: 12)),
               ],
             ),
@@ -2073,7 +2158,7 @@ class _UpdateProgressDialogState extends State<_UpdateProgressDialog> {
               FilledButton(
                 style: FilledButton.styleFrom(backgroundColor: c.accent),
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Закрыть'),
+                child: Text(tr('Закрыть', 'Close', 'Cerrar')),
               ),
             ],
     );
@@ -2121,11 +2206,11 @@ class _Tabs extends StatelessWidget {
       ),
       child: Row(children: [
         if (only == null || only!.contains(ViewMode.all))
-          tab(tr('Все', 'All'), ViewMode.all),
+          tab(tr('Все', 'All', 'Todo'), ViewMode.all),
         if (only == null || only!.contains(ViewMode.dates))
-          tab(tr('По датам', 'By date'), ViewMode.dates),
+          tab(tr('По датам', 'By date', 'Por fecha'), ViewMode.dates),
         if (only == null || only!.contains(ViewMode.albums))
-          tab(tr('Альбомы', 'Albums'), ViewMode.albums),
+          tab(tr('Альбомы', 'Albums', 'Álbumes'), ViewMode.albums),
       ]),
     );
   }
@@ -2186,8 +2271,8 @@ class _CountBar extends StatelessWidget {
                         fontSize: 12)),
                 TextSpan(
                     text: folder == null
-                        ? tr('изображений', 'images')
-                        : '${tr('изображений', 'images')} · $folder',
+                        ? tr('изображений', 'images', 'imágenes')
+                        : '${tr('изображений', 'images', 'imágenes')} · $folder',
                     style: TextStyle(color: c.muted, fontSize: 12)),
               ]),
               maxLines: 1,
@@ -2208,8 +2293,7 @@ class _CountBar extends StatelessWidget {
                     value: m,
                     child: Row(children: [
                       Icon(_sortModeIcon(m),
-                          size: 17,
-                          color: m == sort ? c.accent : c.muted),
+                          size: 17, color: m == sort ? c.accent : c.muted),
                       const SizedBox(width: 10),
                       Text(sortModeLabel(m),
                           style: TextStyle(
@@ -2587,8 +2671,7 @@ class _AllGridState extends State<_AllGrid> {
     return AnimatedBuilder(
       animation: _scroll,
       builder: (ctx, _) {
-        if (!_scroll.hasClients ||
-            !_scroll.position.hasContentDimensions) {
+        if (!_scroll.hasClients || !_scroll.position.hasContentDimensions) {
           return const SizedBox.shrink();
         }
         final maxExt = _scroll.position.maxScrollExtent;
@@ -2610,9 +2693,9 @@ class _AllGridState extends State<_AllGrid> {
               _scrubLabel = _labelAt(_scroll.offset);
             }),
             onVerticalDragUpdate: (d) {
-              final next = (_scroll.offset +
-                      (d.primaryDelta ?? 0) / trackH * maxExt)
-                  .clamp(0.0, maxExt);
+              final next =
+                  (_scroll.offset + (d.primaryDelta ?? 0) / trackH * maxExt)
+                      .clamp(0.0, maxExt);
               _scroll.jumpTo(next);
               setState(() => _scrubLabel = _labelAt(next));
             },
@@ -2677,7 +2760,8 @@ class _AllGridState extends State<_AllGrid> {
         controller: _scroll,
         padding: _pad,
         // слабое устройство: меньше плиток рендерим про запас → меньше декодов
-        cacheExtent: s.lowEndMode ? 120 : null,
+        scrollCacheExtent:
+            s.lowEndMode ? const ScrollCacheExtent.pixels(120) : null,
         gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
           maxCrossAxisExtent: widget.cell,
           mainAxisSpacing: gap,
@@ -2968,7 +3052,7 @@ class _DatesView extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                         color: c.text)),
                 const SizedBox(width: 10),
-                Text('${items.length} фото',
+                Text('${items.length} ${tr('фото', 'photos', 'fotos')}',
                     style: TextStyle(fontSize: 12, color: c.muted)),
               ]),
         ),
@@ -3127,7 +3211,7 @@ class _AlbumCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                   fontSize: 14, fontWeight: FontWeight.w600, color: c.text)),
-          Text('${album.count} изображений',
+          Text('${album.count} ${tr('изображений', 'images', 'imágenes')}',
               style: TextStyle(fontSize: 12, color: c.muted)),
         ],
       ),
@@ -3311,7 +3395,7 @@ class _FolderPageState extends State<_FolderPage> {
                 IconButton(
                   onPressed: () => Navigator.pop(context),
                   icon: Icon(Icons.arrow_back, color: c.text),
-                  tooltip: 'Назад',
+                  tooltip: tr('Назад', 'Back', 'Atrás'),
                 ),
                 const SizedBox(width: 4),
                 Expanded(
@@ -3325,7 +3409,8 @@ class _FolderPageState extends State<_FolderPage> {
                               fontSize: 17,
                               fontWeight: FontWeight.w800,
                               color: c.text)),
-                      Text('${visible.length} из ${widget.album.count}',
+                      Text(
+                          '${visible.length} ${tr('из', 'of', 'de')} ${widget.album.count}',
                           style: TextStyle(fontSize: 12, color: c.muted)),
                     ],
                   ),

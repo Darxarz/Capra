@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'model.dart';
 import 'tag_service.dart';
+import 'i18n.dart';
 
 /// Состояние файла по целостности.
 /// 0 — целый, 1 — обрезан (нет хвоста контейнера, но открывается),
@@ -54,8 +55,7 @@ class DupGroup {
   }
 
   /// Сколько места освободится, если оставить только «лучший».
-  int get reclaimable =>
-      files.fold(0, (s, f) => s + f.size) - best.size;
+  int get reclaimable => files.fold(0, (s, f) => s + f.size) - best.size;
 }
 
 class DupResult {
@@ -63,8 +63,7 @@ class DupResult {
   final List<DupFile> corrupt; // повреждённые/обрезанные (по всей библиотеке)
   const DupResult({required this.groups, required this.corrupt});
 
-  int get totalDuplicates =>
-      groups.fold(0, (s, g) => s + g.files.length - 1);
+  int get totalDuplicates => groups.fold(0, (s, g) => s + g.files.length - 1);
   int get reclaimableBytes => groups.fold(0, (s, g) => s + g.reclaimable);
 }
 
@@ -121,7 +120,8 @@ class DupScanner extends ChangeNotifier {
 
   // ── Точные дубли: дешёвая проверка хвоста + хеш только для коллизий размера ──
   Future<void> _scanExact(List<PhotoItem> photos) async {
-    phase = 'Проверка целостности…';
+    phase = tr('Проверка целостности…', 'Checking integrity…',
+        'Comprobando integridad…');
     notifyListeners();
 
     final corrupt = <DupFile>[];
@@ -148,7 +148,8 @@ class DupScanner extends ChangeNotifier {
         if (e.value.length > 1) ...e.value
     ];
 
-    phase = 'Поиск одинаковых…';
+    phase =
+        tr('Поиск одинаковых…', 'Finding exact matches…', 'Buscando iguales…');
     done = 0;
     total = candidates.length;
     notifyListeners();
@@ -199,7 +200,9 @@ class DupScanner extends ChangeNotifier {
       if (list.length < 2) continue;
       groups.add(DupGroup(
         exact: true,
-        files: [for (final p in list) _toDupFile(p, statusByPath[p.path] ?? kOk)],
+        files: [
+          for (final p in list) _toDupFile(p, statusByPath[p.path] ?? kOk)
+        ],
       ));
     }
 
@@ -213,7 +216,8 @@ class DupScanner extends ChangeNotifier {
 
   // ── Похожие: декод+перцептивный хеш для всех, кластеризация ──
   Future<void> _scanSimilar(List<PhotoItem> photos) async {
-    phase = 'Анализ изображений…';
+    phase =
+        tr('Анализ изображений…', 'Analyzing images…', 'Analizando imágenes…');
     notifyListeners();
 
     final sha = <String, String>{};
@@ -263,7 +267,8 @@ class DupScanner extends ChangeNotifier {
     }
     if (_stop) return;
 
-    phase = 'Группировка похожих…';
+    phase = tr('Группировка похожих…', 'Grouping similar images…',
+        'Agrupando imágenes similares…');
     notifyListeners();
 
     // кластеризация по перцептивному хешу (union-find через бэндинг)
@@ -349,7 +354,7 @@ class DupScanner extends ChangeNotifier {
     // крупные группы и больше освобождаемого места — выше
     groups.sort((a, b) => b.reclaimable.compareTo(a.reclaimable));
     result = DupResult(groups: groups, corrupt: corrupt);
-    phase = 'Готово';
+    phase = tr('Готово', 'Done', 'Listo');
     notifyListeners();
   }
 

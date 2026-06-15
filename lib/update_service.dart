@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
+import 'i18n.dart';
 
 /// Номер текущей сборки. Вшивается при сборке через
 /// `--dart-define=BUILD_NUMBER=...` (см. workflow). Локально/в отладке = 0,
@@ -30,15 +31,13 @@ class UpdateService {
   static Future<UpdateInfo?> check() async {
     if (!Platform.isWindows) return null;
     try {
-      final r = await http
-          .get(
-            Uri.parse('https://api.github.com/repos/$kRepo/releases/latest'),
-            headers: const {
-              'User-Agent': 'GOAT-Updater',
-              'Accept': 'application/vnd.github+json',
-            },
-          )
-          .timeout(const Duration(seconds: 10));
+      final r = await http.get(
+        Uri.parse('https://api.github.com/repos/$kRepo/releases/latest'),
+        headers: const {
+          'User-Agent': 'GOAT-Updater',
+          'Accept': 'application/vnd.github+json',
+        },
+      ).timeout(const Duration(seconds: 10));
       if (r.statusCode != 200) return null;
 
       final data = jsonDecode(r.body) as Map<String, dynamic>;
@@ -90,7 +89,8 @@ class UpdateService {
         ..headers['User-Agent'] = 'GOAT-Updater';
       final resp = await client.send(req);
       if (resp.statusCode != 200) {
-        throw HttpException('Не удалось скачать (код ${resp.statusCode})');
+        throw HttpException(
+            '${tr('Не удалось скачать', 'Could not download', 'No se pudo descargar')} (${tr('код', 'code', 'código')} ${resp.statusCode})');
       }
       final total = resp.contentLength ?? -1;
       var received = 0;

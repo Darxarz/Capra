@@ -8,6 +8,7 @@ import 'package:onnxruntime/onnxruntime.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'tag_service.dart';
+import 'i18n.dart';
 
 const int _kInputSize = 448; // вход модели 448×448
 
@@ -63,10 +64,11 @@ class Tagger {
     }
     final cf = await _csvFile();
     if (!cf.existsSync()) {
-      final r = await http
-          .get(Uri.parse(_csvUrl), headers: {'User-Agent': 'GOAT'});
+      final r =
+          await http.get(Uri.parse(_csvUrl), headers: {'User-Agent': 'GOAT'});
       if (r.statusCode != 200) {
-        throw HttpException('Словарь тегов: код ${r.statusCode}');
+        throw HttpException(
+            '${tr('Словарь тегов', 'Tag dictionary', 'Diccionario de etiquetas')}: ${tr('код', 'code', 'código')} ${r.statusCode}');
       }
       await cf.writeAsBytes(r.bodyBytes);
     }
@@ -78,7 +80,8 @@ class Tagger {
           ..headers['User-Agent'] = 'GOAT';
         final resp = await client.send(req);
         if (resp.statusCode != 200) {
-          throw HttpException('Модель: код ${resp.statusCode}');
+          throw HttpException(
+              '${tr('Модель', 'Model', 'Modelo')}: ${tr('код', 'code', 'código')} ${resp.statusCode}');
         }
         final total = resp.contentLength ?? -1;
         var got = 0;
@@ -105,7 +108,8 @@ class Tagger {
     final cf = await _csvFile();
     // грузим из байтов, а не по пути: OrtSession.fromFile на Windows портит
     // путь (ASCII читается как UTF-16) и не находит файл — проверено.
-    _session = OrtSession.fromBuffer(await mf.readAsBytes(), OrtSessionOptions());
+    _session =
+        OrtSession.fromBuffer(await mf.readAsBytes(), OrtSessionOptions());
     final ins = _session!.inputNames;
     if (ins.isNotEmpty) _inputName = ins.first;
 
@@ -168,8 +172,8 @@ class Tagger {
     final runOptions = OrtRunOptions();
     List<OrtValue?> outputs;
     try {
-      outputs =
-          await _session!.runAsync(runOptions, {_inputName: tensor}) ?? const [];
+      outputs = await _session!.runAsync(runOptions, {_inputName: tensor}) ??
+          const [];
     } finally {
       tensor.release();
       runOptions.release();
@@ -208,14 +212,21 @@ class Tagger {
 
   // признаки «реалистичности»/3D в словаре danbooru — для роутера типа
   static const _photoMarkers = {
-    'realistic', 'photorealistic', 'photo', 'photo_(medium)', 'real_life',
+    'realistic',
+    'photorealistic',
+    'photo',
+    'photo_(medium)',
+    'real_life',
   };
 
   /// Роутер типа изображения (1-й этап конвейера автотегов). Сейчас тип
   /// выводится из тегов WD-модели; в будущем сюда встанет CLIP/SigLIP-роутер,
   /// направляющий фото в RAM++, а арт — в WD/JoyTag (см. дорожную карту).
   String _deriveType(List<({String tag, int category, double conf})> tags) {
-    final general = {for (final t in tags) if (t.category == 0) t.tag};
+    final general = {
+      for (final t in tags)
+        if (t.category == 0) t.tag
+    };
     if (general.intersection(_photoMarkers).isNotEmpty) return 'фото';
     if (general.contains('3d')) return '3d';
     if (general.contains('comic') || general.contains('screenshot')) {

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'model.dart';
+import 'i18n.dart';
 
 /// Узел древа папок: сама папка + её подпапки + фото, лежащие прямо в ней.
 class FolderNode {
@@ -50,7 +51,9 @@ FolderNode buildFolderTree(List<PhotoItem> photos, String rootPath) {
   for (final p in photos) {
     var fp = p.folderPath;
     if (fp.endsWith(sep)) fp = fp.substring(0, fp.length - 1);
-    if (fp != root && !fp.startsWith(root + sep)) continue; // вне корня — пропуск
+    if (fp != root && !fp.startsWith(root + sep)) {
+      continue; // вне корня — пропуск
+    }
     final node = fp == root ? rootNode : ensure(fp);
     node.directPhotos.add(p);
   }
@@ -77,9 +80,13 @@ void _aggregate(FolderNode n) {
 /// Древо из нескольких корней. Если корень один — обычное древо; если
 /// несколько — синтетический корень «Библиотека» с каждой папкой-веткой.
 FolderNode buildForest(List<PhotoItem> photos, List<String> roots) {
-  if (roots.isEmpty) return FolderNode(name: 'Библиотека', path: '');
+  if (roots.isEmpty) {
+    return FolderNode(
+        name: tr('Библиотека', 'Library', 'Biblioteca'), path: '');
+  }
   if (roots.length == 1) return buildFolderTree(photos, roots.first);
-  final root = FolderNode(name: 'Библиотека', path: '');
+  final root =
+      FolderNode(name: tr('Библиотека', 'Library', 'Biblioteca'), path: '');
   var total = 0;
   for (final r in roots) {
     final sub = buildFolderTree(photos, r);

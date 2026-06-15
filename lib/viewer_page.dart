@@ -612,7 +612,7 @@ class _OpenInRowState extends State<_OpenInRow> {
     final c = widget.colors;
     final path = widget.photo.path;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(tr('Открыть в…', 'Open in…'),
+      Text(tr('Открыть в…', 'Open in…', 'Abrir en…'),
           style: TextStyle(
               color: c.muted, fontSize: 12.5, fontWeight: FontWeight.w600)),
       const SizedBox(height: 10),
@@ -624,7 +624,7 @@ class _OpenInRowState extends State<_OpenInRow> {
           _chip(
               Icons.more_horiz_rounded,
               null,
-              tr('Другое…', 'Other…'),
+              tr('Другое…', 'Other…', 'Otra…'),
               const Color(0xFF6B7280),
               () => EditorService.openWithDialog(path)),
       ]),
@@ -864,8 +864,8 @@ class _TagsSectionState extends State<_TagsSection> {
       if (ok != true) return;
       setState(() {
         _busy = true;
-        _busyText =
-            tr('Скачивание модели…', 'Downloading model…', 'Descargando modelo…');
+        _busyText = tr(
+            'Скачивание модели…', 'Downloading model…', 'Descargando modelo…');
         _busyProgress = 0;
       });
       try {
@@ -886,7 +886,8 @@ class _TagsSectionState extends State<_TagsSection> {
     });
     try {
       final n = await tagger.tagAndStore(widget.photo.path);
-      _snack(tr('Добавлено тегов: $n', 'Tags added: $n', 'Etiquetas añadidas: $n'));
+      _snack(tr(
+          'Добавлено тегов: $n', 'Tags added: $n', 'Etiquetas añadidas: $n'));
     } catch (e) {
       _snack(tr('Ошибка тегирования', 'Tagging error', 'Error de etiquetado'));
     }
@@ -1032,7 +1033,8 @@ class _TagsSectionState extends State<_TagsSection> {
                 decoration: InputDecoration(
                   isDense: true,
                   border: InputBorder.none,
-                  hintText: tr('Добавить тег…', 'Add a tag…', 'Añadir etiqueta…'),
+                  hintText:
+                      tr('Добавить тег…', 'Add a tag…', 'Añadir etiqueta…'),
                   hintStyle: TextStyle(color: c.muted, fontSize: 13),
                 ),
               ),

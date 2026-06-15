@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'theme.dart';
 import 'folder_tree.dart';
+import 'i18n.dart';
 
 enum TreeLayout { vertical, horizontal, compact }
 
@@ -321,32 +322,35 @@ class _TreeViewState extends State<TreeView> {
           group([
             seg(
                 Icons.account_tree_outlined,
-                'Вертикальное',
+                tr('Вертикальное', 'Vertical', 'Vertical'),
                 _layout == TreeLayout.vertical,
                 () => _setLayout(TreeLayout.vertical)),
             seg(
                 Icons.lan_outlined,
-                'Горизонтальное',
+                tr('Горизонтальное', 'Horizontal', 'Horizontal'),
                 _layout == TreeLayout.horizontal,
                 () => _setLayout(TreeLayout.horizontal)),
             seg(
                 Icons.bubble_chart_outlined,
-                'Компактное',
+                tr('Компактное', 'Compact', 'Compacto'),
                 _layout == TreeLayout.compact,
                 () => _setLayout(TreeLayout.compact)),
           ]),
           const SizedBox(width: 10),
           group([
-            seg(Icons.unfold_more, 'Развернуть всё', _mode == TreeMode.all,
+            seg(
+                Icons.unfold_more,
+                tr('Развернуть всё', 'Expand all', 'Expandir todo'),
+                _mode == TreeMode.all,
                 () => _setMode(TreeMode.all)),
             seg(
                 Icons.touch_app_outlined,
-                'По нажатию',
+                tr('По нажатию', 'On tap', 'Al tocar'),
                 _mode == TreeMode.progressive,
                 () => _setMode(TreeMode.progressive)),
           ]),
           const Spacer(),
-          Text('${widget.root.totalCount} фото',
+          Text('${widget.root.totalCount} ${tr('фото', 'photos', 'fotos')}',
               style: TextStyle(color: c.muted, fontSize: 12)),
         ],
       ),
@@ -391,19 +395,27 @@ class _TreeViewState extends State<TreeView> {
                           fontSize: 16,
                           fontWeight: FontWeight.w700)),
                 ),
-                Text('${n.totalCount} фото',
+                Text('${n.totalCount} ${tr('фото', 'photos', 'fotos')}',
                     style: TextStyle(color: c.muted, fontSize: 12)),
               ]),
             ),
             const Divider(height: 1),
-            tile(Icons.open_in_full, 'Открыть', () => widget.onOpenFolder(n)),
-            tile(Icons.drive_file_rename_outline, 'Переименовать',
-                () => _soon('Переименование')),
-            tile(Icons.drive_file_move_outline, 'Переместить',
-                () => _soon('Перемещение')),
-            tile(Icons.content_copy, 'Копировать', () => _soon('Копирование')),
-            tile(Icons.delete_outline, 'Удалить в корзину',
-                () => _soon('Удаление'),
+            tile(Icons.open_in_full, tr('Открыть', 'Open', 'Abrir'),
+                () => widget.onOpenFolder(n)),
+            tile(
+                Icons.drive_file_rename_outline,
+                tr('Переименовать', 'Rename', 'Renombrar'),
+                () => _soon(tr('Переименование', 'Renaming', 'Renombrar'))),
+            tile(
+                Icons.drive_file_move_outline,
+                tr('Переместить', 'Move', 'Mover'),
+                () => _soon(tr('Перемещение', 'Moving', 'Mover'))),
+            tile(Icons.content_copy, tr('Копировать', 'Copy', 'Copiar'),
+                () => _soon(tr('Копирование', 'Copying', 'Copiar'))),
+            tile(
+                Icons.delete_outline,
+                tr('Удалить в корзину', 'Move to trash', 'Mover a la papelera'),
+                () => _soon(tr('Удаление', 'Deleting', 'Eliminar')),
                 danger: true),
             const SizedBox(height: 8),
           ]),
@@ -414,7 +426,9 @@ class _TreeViewState extends State<TreeView> {
 
   void _soon(String what) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$what папок — добавим следующим шагом')),
+      SnackBar(
+          content: Text(
+              '$what ${tr('папок — добавим следующим шагом', 'folders — coming in the next step', 'carpetas: llegará en el siguiente paso')}')),
     );
   }
 }
@@ -638,7 +652,7 @@ class _NodeCard extends StatelessWidget {
             SizedBox(
               width: coverSide,
               child: Text(
-                '${node.children.length} папок',
+                '${node.children.length} ${tr('папок', 'folders', 'carpetas')}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,

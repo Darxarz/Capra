@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'i18n.dart';
 
 /// Держит раздачу по локальной сети живой в фоне. На Android для этого нужен
 /// foreground-сервис с постоянным уведомлением (иначе система усыпляет
@@ -14,8 +15,11 @@ class BackgroundService {
     FlutterForegroundTask.init(
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: 'goat_share',
-        channelName: 'Раздача GOAT',
-        channelDescription: 'Сервер раздачи фото по локальной сети',
+        channelName: tr('Раздача GOAT', 'GOAT sharing', 'Compartir con GOAT'),
+        channelDescription: tr(
+            'Сервер раздачи фото по локальной сети',
+            'Photo sharing server on the local network',
+            'Servidor para compartir fotos en la red local'),
         channelImportance: NotificationChannelImportance.LOW,
         priority: NotificationPriority.LOW,
         onlyAlertOnce: true,
@@ -48,8 +52,12 @@ class BackgroundService {
       await FlutterForegroundTask.startService(
         serviceId: 256,
         serviceTypes: const [ForegroundServiceTypes.dataSync],
-        notificationTitle: 'GOAT раздаёт фото',
-        notificationText: 'Другие устройства могут подключиться по Wi-Fi',
+        notificationTitle: tr('GOAT раздаёт фото', 'GOAT is sharing photos',
+            'GOAT comparte fotos'),
+        notificationText: tr(
+            'Другие устройства могут подключиться по Wi-Fi',
+            'Other devices can connect over Wi-Fi',
+            'Otros dispositivos pueden conectarse por Wi-Fi'),
       );
     } catch (_) {
       // не критично: на ПК и при отказе в уведомлениях раздача всё равно идёт

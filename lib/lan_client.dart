@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'model.dart';
+import 'i18n.dart';
 
 /// Результат успешного подключения к хосту.
 class LanConnection {
@@ -83,13 +84,19 @@ class LanClient {
       });
       final r = await http.get(url).timeout(const Duration(seconds: 6));
       if (r.statusCode == 429) {
-        throw LanError('Слишком много попыток. Подожди полминуты и снова.');
+        throw LanError(tr(
+            'Слишком много попыток. Подожди полминуты и снова.',
+            'Too many attempts. Wait half a minute and try again.',
+            'Demasiados intentos. Espera medio minuto e inténtalo de nuevo.'));
       }
       if (r.statusCode == 403) {
-        throw LanError('Неверный PIN.');
+        throw LanError(tr('Неверный PIN.', 'Wrong PIN.', 'PIN incorrecto.'));
       }
       if (r.statusCode != 200) {
-        throw LanError('Не удалось сопрячься (${r.statusCode}).');
+        throw LanError(tr(
+            'Не удалось сопрячься (${r.statusCode}).',
+            'Could not pair (${r.statusCode}).',
+            'No se pudo emparejar (${r.statusCode}).'));
       }
       final data = jsonDecode(r.body) as Map<String, dynamic>;
       return LanConnection(
@@ -102,7 +109,10 @@ class LanClient {
     } on LanError {
       rethrow;
     } catch (_) {
-      throw LanError('Сбой при сопряжении. Попробуй ещё раз.');
+      throw LanError(tr(
+          'Сбой при сопряжении. Попробуй ещё раз.',
+          'Pairing failed. Try again.',
+          'Falló el emparejamiento. Inténtalo de nuevo.'));
     }
   }
 
@@ -121,11 +131,17 @@ class LanClient {
           .timeout(const Duration(seconds: 6));
       if (r.statusCode == 401) {
         throw LanError(
-            'Устройство больше не помнит этот ключ — нужен PIN заново.',
+            tr(
+                'Устройство больше не помнит этот ключ — нужен PIN заново.',
+                'The device no longer remembers this key — PIN is needed again.',
+                'El dispositivo ya no recuerda esta clave: hace falta el PIN otra vez.'),
             needRepair: true);
       }
       if (r.statusCode != 200) {
-        throw LanError('Устройство ответило ошибкой (${r.statusCode}).');
+        throw LanError(tr(
+            'Устройство ответило ошибкой (${r.statusCode}).',
+            'The device replied with an error (${r.statusCode}).',
+            'El dispositivo respondió con un error (${r.statusCode}).'));
       }
       final data = jsonDecode(r.body) as Map<String, dynamic>;
       return LanConnection(
@@ -138,8 +154,10 @@ class LanClient {
     } on LanError {
       rethrow;
     } catch (_) {
-      throw LanError('Не удалось связаться. Устройство включило раздачу? '
-          'Одна ли у вас Wi-Fi сеть?');
+      throw LanError(tr(
+          'Не удалось связаться. Устройство включило раздачу? Одна ли у вас Wi-Fi сеть?',
+          'Could not connect. Is sharing turned on? Are both devices on the same Wi-Fi?',
+          'No se pudo conectar. ¿Está activado compartir? ¿Ambos dispositivos están en la misma Wi-Fi?'));
     }
   }
 
@@ -150,18 +168,24 @@ class LanClient {
           .get(Uri.parse('$base/ping'))
           .timeout(const Duration(seconds: 6));
       if (r.statusCode != 200) {
-        throw LanError('Устройство ответило ошибкой (${r.statusCode}).');
+        throw LanError(tr(
+            'Устройство ответило ошибкой (${r.statusCode}).',
+            'The device replied with an error (${r.statusCode}).',
+            'El dispositivo respondió con un error (${r.statusCode}).'));
       }
       final ping = jsonDecode(r.body) as Map<String, dynamic>;
       if (ping['app'] != 'GOAT') {
-        throw LanError('По этому адресу не GOAT.');
+        throw LanError(tr('По этому адресу не GOAT.',
+            'That address is not GOAT.', 'Esa dirección no es GOAT.'));
       }
       return ping;
     } on LanError {
       rethrow;
     } catch (_) {
-      throw LanError(
-          'Не удалось связаться. Проверь адрес и одну ли вы Wi-Fi сеть.');
+      throw LanError(tr(
+          'Не удалось связаться. Проверь адрес и одну ли вы Wi-Fi сеть.',
+          'Could not connect. Check the address and that both devices are on the same Wi-Fi.',
+          'No se pudo conectar. Revisa la dirección y que ambos dispositivos estén en la misma Wi-Fi.'));
     }
   }
 
@@ -177,7 +201,10 @@ class LanClient {
               '${conn.base}/list?token=${conn.token}&offset=$offset&limit=$page'))
           .timeout(const Duration(seconds: 15));
       if (r.statusCode != 200) {
-        throw LanError('Не удалось получить список (${r.statusCode}).');
+        throw LanError(tr(
+            'Не удалось получить список (${r.statusCode}).',
+            'Could not fetch the list (${r.statusCode}).',
+            'No se pudo obtener la lista (${r.statusCode}).'));
       }
       final data = jsonDecode(r.body) as Map<String, dynamic>;
       total = (data['total'] ?? 0) as int;
