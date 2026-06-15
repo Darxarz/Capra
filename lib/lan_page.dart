@@ -11,6 +11,25 @@ import 'lan_store.dart';
 import 'background_service.dart';
 import 'viewer_page.dart';
 import 'settings_service.dart';
+import 'i18n.dart';
+
+/// Локализованное название типа сетевого адаптера (ключи приходят из lan_service).
+String lanKindLabel(String kind) {
+  switch (kind) {
+    case 'VPN':
+      return 'VPN';
+    case 'Виртуальная сеть':
+      return tr('Виртуальная сеть', 'Virtual network', 'Red virtual');
+    case 'Wi-Fi':
+      return 'Wi-Fi';
+    case 'Ethernet (кабель)':
+      return tr('Ethernet (кабель)', 'Ethernet (cable)', 'Ethernet (cable)');
+    case 'Моб. интернет':
+      return tr('Моб. интернет', 'Mobile data', 'Datos móviles');
+    default:
+      return kind;
+  }
+}
 
 /// Экран локальной сети: «Раздать» свою галерею и «Подключиться» к чужой.
 class LanPage extends StatefulWidget {
@@ -63,10 +82,10 @@ class _Header extends StatelessWidget {
         IconButton(
           onPressed: onBack,
           icon: Icon(Icons.arrow_back, color: c.text),
-          tooltip: 'Назад',
+          tooltip: tr('Назад', 'Back', 'Atrás'),
         ),
         const SizedBox(width: 4),
-        Text('Локальная сеть',
+        Text(tr('Локальная сеть', 'Local network', 'Red local'),
             style: TextStyle(
                 color: c.text, fontSize: 18, fontWeight: FontWeight.w800)),
       ]),
@@ -116,8 +135,8 @@ class _Switcher extends StatelessWidget {
         border: Border.all(color: c.line),
       ),
       child: Row(children: [
-        seg('Раздать', Icons.wifi_tethering_rounded, 0),
-        seg('Подключиться', Icons.cast_connected_rounded, 1),
+        seg(tr('Раздать', 'Share', 'Compartir'), Icons.wifi_tethering_rounded, 0),
+        seg(tr('Подключиться', 'Connect', 'Conectar'), Icons.cast_connected_rounded, 1),
       ]),
     );
   }
@@ -161,7 +180,7 @@ class _HostViewState extends State<_HostView> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Не удалось запустить: $e')));
+            .showSnackBar(SnackBar(content: Text('${tr('Не удалось запустить', 'Could not start', 'No se pudo iniciar')}: $e')));
       }
     }
     if (mounted) setState(() => _busy = false);
@@ -193,7 +212,7 @@ class _HostViewState extends State<_HostView> {
                       child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(on ? 'Раздача включена' : 'Раздача выключена',
+                            Text(on ? tr('Раздача включена', 'Sharing on', 'Compartir activado') : tr('Раздача выключена', 'Sharing off', 'Compartir desactivado'),
                                 style: TextStyle(
                                     color: c.text,
                                     fontSize: 15,
@@ -201,8 +220,8 @@ class _HostViewState extends State<_HostView> {
                             const SizedBox(height: 2),
                             Text(
                                 on
-                                    ? 'Другое устройство в той же Wi-Fi сети может подключиться'
-                                    : 'Включи, чтобы показать свои фото другому устройству',
+                                    ? tr('Другое устройство в той же Wi-Fi сети может подключиться', 'Another device on the same Wi-Fi can connect', 'Otro dispositivo en la misma Wi-Fi puede conectarse')
+                                    : tr('Включи, чтобы показать свои фото другому устройству', 'Turn on to show your photos to another device', 'Actívalo para mostrar tus fotos a otro dispositivo'),
                                 style:
                                     TextStyle(color: c.muted, fontSize: 12.5)),
                           ]),
@@ -221,7 +240,7 @@ class _HostViewState extends State<_HostView> {
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('PIN для подключения',
+                        Text(tr('PIN для подключения', 'Connection PIN', 'PIN de conexión'),
                             style: TextStyle(
                                 color: c.muted,
                                 fontSize: 12.5,
@@ -235,8 +254,7 @@ class _HostViewState extends State<_HostView> {
                                 letterSpacing: 6)),
                         const SizedBox(height: 4),
                         Text(
-                            'Введи этот PIN на другом устройстве. '
-                            'Он меняется при каждом включении.',
+                            tr('Введи этот PIN на другом устройстве. Он меняется при каждом включении.', 'Enter this PIN on the other device. It changes each time sharing is turned on.', 'Introduce este PIN en el otro dispositivo. Cambia cada vez que activas el modo compartir.'),
                             style: TextStyle(color: c.muted, fontSize: 12)),
                       ])),
               const SizedBox(height: 16),
@@ -245,21 +263,21 @@ class _HostViewState extends State<_HostView> {
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Адрес устройства',
+                        Text(tr('Адрес устройства', 'Device address', 'Dirección del dispositivo'),
                             style: TextStyle(
                                 color: c.muted,
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.w600)),
                         const SizedBox(height: 8),
                         if (_addresses.isEmpty)
-                          Text('Не нашёл сетевой адрес. Подключён ли Wi-Fi?',
+                          Text(tr('Не нашёл сетевой адрес. Подключён ли Wi-Fi?', 'No network address found. Is Wi-Fi connected?', 'No se encontró dirección de red. ¿Wi-Fi conectado?'),
                               style: TextStyle(color: c.muted, fontSize: 13))
                         else
                           for (final a in _addresses)
                             _AddressRow(
                                 adapter: a, port: lan.port, pin: lan.pin, c: c),
                         const SizedBox(height: 6),
-                        Text('Раздаётся фото: ${lan.sharedCount}',
+                        Text('${tr('Раздаётся фото', 'Photos shared', 'Fotos compartidas')}: ${lan.sharedCount}',
                             style: TextStyle(color: c.muted, fontSize: 12.5)),
                       ])),
             ],
@@ -293,13 +311,13 @@ class _TrustedList extends StatelessWidget {
             c: c,
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Доверенные устройства',
+              Text(tr('Доверенные устройства', 'Trusted devices', 'Dispositivos de confianza'),
                   style: TextStyle(
                       color: c.muted,
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600)),
               const SizedBox(height: 2),
-              Text('Эти устройства подключаются без PIN',
+              Text(tr('Эти устройства подключаются без PIN', 'These devices connect without a PIN', 'Estos dispositivos se conectan sin PIN'),
                   style: TextStyle(color: c.muted, fontSize: 11.5)),
               const SizedBox(height: 6),
               for (final t in list)
@@ -319,7 +337,7 @@ class _TrustedList extends StatelessWidget {
                     ),
                     TextButton(
                       onPressed: () => LanStore.instance.forgetTrusted(t.token),
-                      child: Text('Забыть',
+                      child: Text(tr('Забыть', 'Forget', 'Olvidar'),
                           style: TextStyle(color: c.muted, fontSize: 12.5)),
                     ),
                   ]),
@@ -371,7 +389,7 @@ class _AddressRow extends StatelessWidget {
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               Flexible(
-                child: Text(adapter.kind,
+                child: Text(lanKindLabel(adapter.kind),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -387,16 +405,16 @@ class _AddressRow extends StatelessWidget {
         ),
         IconButton(
           icon: Icon(Icons.qr_code_rounded, size: 20, color: c.muted),
-          tooltip: 'QR-код',
+          tooltip: tr('QR-код', 'QR code', 'Código QR'),
           onPressed: () => _showQr(context, adapter, port, pin, c),
         ),
         IconButton(
           icon: Icon(Icons.copy_rounded, size: 18, color: c.muted),
-          tooltip: 'Скопировать',
+          tooltip: tr('Скопировать', 'Copy', 'Copiar'),
           onPressed: () {
             Clipboard.setData(ClipboardData(text: address));
             ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Адрес скопирован')));
+                SnackBar(content: Text(tr('Адрес скопирован', 'Address copied', 'Dirección copiada'))));
           },
         ),
       ]),
@@ -412,7 +430,7 @@ void _showQr(BuildContext context, LanAdapter adapter, int port, String pin,
     context: context,
     builder: (ctx) => AlertDialog(
       backgroundColor: c.surface,
-      title: Text('Сканируй на другом устройстве',
+      title: Text(tr('Сканируй на другом устройстве', 'Scan on the other device', 'Escanea en el otro dispositivo'),
           style: TextStyle(color: c.text, fontSize: 16)),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
         Container(
@@ -429,10 +447,10 @@ void _showQr(BuildContext context, LanAdapter adapter, int port, String pin,
           ),
         ),
         const SizedBox(height: 12),
-        Text('${adapter.kind} · ${adapter.ip}:$port',
+        Text('${lanKindLabel(adapter.kind)} · ${adapter.ip}:$port',
             style: TextStyle(color: c.muted, fontSize: 12.5)),
         const SizedBox(height: 2),
-        Text('GOAT → Подключиться → Сканировать QR',
+        Text(tr('GOAT → Подключиться → Сканировать QR', 'GOAT → Connect → Scan QR', 'GOAT → Conectar → Escanear QR'),
             textAlign: TextAlign.center,
             style: TextStyle(color: c.muted, fontSize: 11.5)),
       ]),
@@ -440,7 +458,7 @@ void _showQr(BuildContext context, LanAdapter adapter, int port, String pin,
         FilledButton(
           style: FilledButton.styleFrom(backgroundColor: c.accent),
           onPressed: () => Navigator.pop(ctx),
-          child: const Text('Готово'),
+          child: Text(tr('Готово', 'Done', 'Listo')),
         ),
       ],
     ),
@@ -473,7 +491,7 @@ class _ClientViewState extends State<_ClientView> {
     try {
       return Platform.localHostname;
     } catch (_) {
-      return Platform.isAndroid ? 'Android' : 'Устройство';
+      return Platform.isAndroid ? 'Android' : tr('Устройство', 'Device', 'Dispositivo');
     }
   }
 
@@ -488,7 +506,7 @@ class _ClientViewState extends State<_ClientView> {
           _RemoteGalleryPage(hostName: conn.hostName, photos: photos),
     ));
     messenger.showSnackBar(SnackBar(
-        content: Text('Подключено к ${conn.hostName}: ${photos.length} фото')));
+        content: Text(tr('Подключено к ${conn.hostName}: ${photos.length} фото', 'Connected to ${conn.hostName}: ${photos.length} photos', 'Conectado a ${conn.hostName}: ${photos.length} fotos'))));
   }
 
   /// Сканировать QR с экрана раздачи: подставить адрес+PIN и сразу сопрячь.
@@ -500,7 +518,7 @@ class _ClientViewState extends State<_ClientView> {
     if (raw == null) return;
     final data = parseLanQr(raw);
     if (data == null) {
-      if (mounted) setState(() => _error = 'QR не от GOAT.');
+      if (mounted) setState(() => _error = tr('QR не от GOAT.', 'This QR is not from GOAT.', 'Este QR no es de GOAT.'));
       return;
     }
     _ipCtl.text = '${data.ip}:${data.port}';
@@ -519,7 +537,7 @@ class _ClientViewState extends State<_ClientView> {
     }
     final pin = _pinCtl.text.trim();
     if (ip.isEmpty || pin.isEmpty) {
-      setState(() => _error = 'Введи адрес и PIN.');
+      setState(() => _error = tr('Введи адрес и PIN.', 'Enter address and PIN.', 'Introduce dirección y PIN.'));
       return;
     }
     setState(() {
@@ -549,7 +567,7 @@ class _ClientViewState extends State<_ClientView> {
     } on LanError catch (e) {
       setState(() => _error = e.message);
     } catch (e) {
-      setState(() => _error = 'Ошибка: $e');
+      setState(() => _error = '${tr('Ошибка', 'Error', 'Error')}: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -592,12 +610,11 @@ class _ClientViewState extends State<_ClientView> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: c.surface,
-        title: Text('Не дозвонился до «${host.name}»',
+        title: Text(tr('Не дозвонился до «${host.name}»', 'Couldn’t reach “${host.name}”', 'No se pudo contactar con «${host.name}»'),
             style: TextStyle(color: c.text, fontSize: 17)),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           Text(
-              'Возможно, сменился адрес устройства. Уточни IP:порт '
-              '(включена ли раздача на нём?).',
+              tr('Возможно, сменился адрес устройства. Уточни IP:порт (включена ли раздача на нём?).', 'The device address may have changed. Check IP:port (is sharing on there?).', 'La dirección puede haber cambiado. Revisa IP:puerto (¿está activo el modo compartir?).'),
               style: TextStyle(color: c.muted, fontSize: 13)),
           const SizedBox(height: 12),
           TextField(
@@ -610,12 +627,12 @@ class _ClientViewState extends State<_ClientView> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('Отмена', style: TextStyle(color: c.muted)),
+            child: Text(tr('Отмена', 'Cancel', 'Cancelar'), style: TextStyle(color: c.muted)),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: c.accent),
             onPressed: () => Navigator.pop(ctx, ctl.text.trim()),
-            child: const Text('Подключиться'),
+            child: Text(tr('Подключиться', 'Connect', 'Conectar')),
           ),
         ],
       ),
@@ -650,13 +667,13 @@ class _ClientViewState extends State<_ClientView> {
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Мои устройства',
+                        Text(tr('Мои устройства', 'My devices', 'Mis dispositivos'),
                             style: TextStyle(
                                 color: c.muted,
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.w600)),
                         const SizedBox(height: 2),
-                        Text('Подключение в один тап, без PIN',
+                        Text(tr('Подключение в один тап, без PIN', 'One-tap connect, no PIN', 'Conexión con un toque, sin PIN'),
                             style: TextStyle(color: c.muted, fontSize: 11.5)),
                         const SizedBox(height: 6),
                         for (final h in hosts)
@@ -682,8 +699,8 @@ class _ClientViewState extends State<_ClientView> {
                 onPressed: () => setState(() => _addOpen = true),
                 icon: const Icon(Icons.add),
                 label: Text(hosts.isEmpty
-                    ? 'Подключиться к устройству'
-                    : 'Добавить новое устройство'),
+                    ? tr('Подключиться к устройству', 'Connect to a device', 'Conectar a un dispositivo')
+                    : tr('Добавить новое устройство', 'Add a new device', 'Añadir un dispositivo')),
               )
             else
               _Card(
@@ -693,7 +710,7 @@ class _ClientViewState extends State<_ClientView> {
                       children: [
                         Row(children: [
                           Expanded(
-                            child: Text('Новое устройство',
+                            child: Text(tr('Новое устройство', 'New device', 'Nuevo dispositivo'),
                                 style: TextStyle(
                                     color: c.text,
                                     fontSize: 15,
@@ -718,7 +735,7 @@ class _ClientViewState extends State<_ClientView> {
                             ),
                             onPressed: _busy ? null : _scanQr,
                             icon: const Icon(Icons.qr_code_scanner_rounded),
-                            label: const Text('Сканировать QR'),
+                            label: Text(tr('Сканировать QR', 'Scan QR', 'Escanear QR')),
                           ),
                           const SizedBox(height: 14),
                           Row(children: [
@@ -726,7 +743,7 @@ class _ClientViewState extends State<_ClientView> {
                             Padding(
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 10),
-                              child: Text('или вручную',
+                              child: Text(tr('или вручную', 'or manually', 'o manualmente'),
                                   style:
                                       TextStyle(color: c.muted, fontSize: 12)),
                             ),
@@ -734,7 +751,7 @@ class _ClientViewState extends State<_ClientView> {
                           ]),
                           const SizedBox(height: 14),
                         ],
-                        Text('Адрес устройства',
+                        Text(tr('Адрес устройства', 'Device address', 'Dirección del dispositivo'),
                             style: TextStyle(
                                 color: c.muted,
                                 fontSize: 12.5,
@@ -742,7 +759,7 @@ class _ClientViewState extends State<_ClientView> {
                         const SizedBox(height: 8),
                         _Field(
                           controller: _ipCtl,
-                          hint: 'например 192.168.1.5',
+                          hint: tr('например 192.168.1.5', 'e.g. 192.168.1.5', 'p. ej. 192.168.1.5'),
                           icon: Icons.lan_outlined,
                           keyboard: TextInputType.text,
                           c: c,
@@ -756,7 +773,7 @@ class _ClientViewState extends State<_ClientView> {
                         const SizedBox(height: 8),
                         _Field(
                           controller: _pinCtl,
-                          hint: '6 цифр',
+                          hint: tr('6 цифр', '6 digits', '6 dígitos'),
                           icon: Icons.password_rounded,
                           keyboard: TextInputType.number,
                           maxLen: 6,
@@ -789,16 +806,14 @@ class _ClientViewState extends State<_ClientView> {
                                       strokeWidth: 2, color: Colors.white))
                               : const Icon(Icons.link_rounded),
                           label:
-                              Text(_busy ? 'Сопрягаю…' : 'Сопрячь устройство'),
+                              Text(_busy ? tr('Сопрягаю…', 'Pairing…', 'Emparejando…') : tr('Сопрячь устройство', 'Pair device', 'Emparejar dispositivo')),
                         ),
                       ])),
             const SizedBox(height: 14),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: Text(
-                  'На втором устройстве открой «Локальная сеть → Раздать», '
-                  'включи раздачу и продиктуй адрес и PIN. PIN нужен только '
-                  'в первый раз — дальше устройства помнят друг друга.',
+                  tr('На втором устройстве открой «Локальная сеть → Раздать», включи раздачу и продиктуй адрес и PIN. PIN нужен только в первый раз — дальше устройства помнят друг друга.', 'On the other device open “Local network → Share”, turn on sharing and read out the address and PIN. The PIN is only needed the first time — after that the devices remember each other.', 'En el otro dispositivo abre «Red local → Compartir», activa el modo compartir y dicta la dirección y el PIN. El PIN solo hace falta la primera vez — después los dispositivos se recuerdan.'),
                   style: TextStyle(color: c.muted, fontSize: 12.5)),
             ),
           ],
@@ -858,8 +873,11 @@ class _KnownRow extends StatelessWidget {
             onSelected: (v) {
               if (v == 'forget') onForget();
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'forget', child: Text('Забыть устройство')),
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                  value: 'forget',
+                  child: Text(tr('Забыть устройство', 'Forget device',
+                      'Olvidar dispositivo'))),
             ],
           ),
         ]),
@@ -977,13 +995,13 @@ class _ScanPageState extends State<_ScanPage> {
             ),
           ),
         ),
-        const SafeArea(
+        SafeArea(
           child: Align(
             alignment: Alignment.bottomCenter,
             child: Padding(
-              padding: EdgeInsets.only(bottom: 30),
-              child: Text('Наведи на QR с экрана раздачи',
-                  style: TextStyle(color: Colors.white, fontSize: 14)),
+              padding: const EdgeInsets.only(bottom: 30),
+              child: Text(tr('Наведи на QR с экрана раздачи', 'Point at the QR on the sharing screen', 'Apunta al QR de la pantalla de compartir'),
+                  style: const TextStyle(color: Colors.white, fontSize: 14)),
             ),
           ),
         ),
@@ -1013,7 +1031,7 @@ class _RemoteGalleryPage extends StatelessWidget {
               IconButton(
                 onPressed: () => Navigator.pop(context),
                 icon: Icon(Icons.arrow_back, color: c.text),
-                tooltip: 'Назад',
+                tooltip: tr('Назад', 'Back', 'Atrás'),
               ),
               const SizedBox(width: 4),
               Expanded(
@@ -1034,7 +1052,7 @@ class _RemoteGalleryPage extends StatelessWidget {
                                   color: c.text)),
                         ),
                       ]),
-                      Text('${photos.length} фото · по сети',
+                      Text('${photos.length} ${tr('фото · по сети', 'photos · over network', 'fotos · por red')}',
                           style: TextStyle(fontSize: 12, color: c.muted)),
                     ]),
               ),
@@ -1043,7 +1061,7 @@ class _RemoteGalleryPage extends StatelessWidget {
           Expanded(
             child: photos.isEmpty
                 ? Center(
-                    child: Text('У этого устройства нет фото',
+                    child: Text(tr('У этого устройства нет фото', 'This device has no photos', 'Este dispositivo no tiene fotos'),
                         style: TextStyle(color: c.muted)))
                 : GridView.builder(
                     padding: const EdgeInsets.fromLTRB(16, 6, 16, 18),

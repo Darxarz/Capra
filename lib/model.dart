@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'preview_service.dart';
 import 'settings_service.dart';
+import 'i18n.dart';
 
 /// Расширения, которые считаем изображениями.
 const Set<String> kImageExtensions = {
@@ -153,20 +154,42 @@ class AlbumItem {
   });
 }
 
-const List<String> _months = [
-  'января',
-  'февраля',
-  'марта',
-  'апреля',
-  'мая',
-  'июня',
-  'июля',
-  'августа',
-  'сентября',
-  'октября',
-  'ноября',
-  'декабря'
+const List<String> _monthsRu = [
+  'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'
 ];
+const List<String> _monthsEn = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+const List<String> _monthsEs = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+];
+
+String _monthName(int month) {
+  switch (uiLang) {
+    case AppLang.en:
+      return _monthsEn[month - 1];
+    case AppLang.es:
+      return _monthsEs[month - 1];
+    default:
+      return _monthsRu[month - 1];
+  }
+}
+
+/// «5 января» / «January 5» / «5 de enero» — порядок зависит от языка.
+String _dayMonth(DateTime d, {bool withYear = false}) {
+  final mn = _monthName(d.month);
+  switch (uiLang) {
+    case AppLang.en:
+      return withYear ? '$mn ${d.day}, ${d.year}' : '$mn ${d.day}';
+    case AppLang.es:
+      return withYear ? '${d.day} de $mn ${d.year}' : '${d.day} de $mn';
+    default:
+      return withYear ? '${d.day} $mn ${d.year}' : '${d.day} $mn';
+  }
+}
 
 String _two(int n) => n < 10 ? '0$n' : '$n';
 
@@ -176,20 +199,21 @@ String dateGroupOf(DateTime d) {
   final today = DateTime(now.year, now.month, now.day);
   final that = DateTime(d.year, d.month, d.day);
   final diff = today.difference(that).inDays;
-  if (diff <= 0) return 'Сегодня';
-  if (diff == 1) return 'Вчера';
-  if (diff < 7) return 'На этой неделе';
-  if (d.year == now.year) return '${d.day} ${_months[d.month - 1]}';
-  return '${d.day} ${_months[d.month - 1]} ${d.year}';
+  if (diff <= 0) return tr('Сегодня', 'Today', 'Hoy');
+  if (diff == 1) return tr('Вчера', 'Yesterday', 'Ayer');
+  if (diff < 7) return tr('На этой неделе', 'This week', 'Esta semana');
+  return _dayMonth(d, withYear: d.year != now.year);
 }
 
 String prettyDate(DateTime d) =>
-    '${d.day} ${_months[d.month - 1]} ${d.year}, ${_two(d.hour)}:${_two(d.minute)}';
+    '${_dayMonth(d, withYear: true)}, ${_two(d.hour)}:${_two(d.minute)}';
 
 String prettySize(int bytes) {
   if (bytes >= 1024 * 1024) {
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} МБ';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} ${tr('МБ', 'MB', 'MB')}';
   }
-  if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(0)} КБ';
-  return '$bytes Б';
+  if (bytes >= 1024) {
+    return '${(bytes / 1024).toStringAsFixed(0)} ${tr('КБ', 'KB', 'KB')}';
+  }
+  return '$bytes ${tr('Б', 'B', 'B')}';
 }
