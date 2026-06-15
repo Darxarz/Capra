@@ -8,6 +8,7 @@ import 'settings_service.dart';
 import 'tag_service.dart';
 import 'update_service.dart';
 import 'library_service.dart';
+import 'i18n.dart';
 
 /// Полноэкранный раздел настроек: внешний вид, сетка, теги, о приложении.
 class SettingsPage extends StatefulWidget {
@@ -65,7 +66,7 @@ class _Header extends StatelessWidget {
           tooltip: 'Назад',
         ),
         const SizedBox(width: 4),
-        Text('Настройки',
+        Text(tr('Настройки', 'Settings'),
             style: TextStyle(
                 color: c.text, fontSize: 18, fontWeight: FontWeight.w800)),
       ]),
@@ -86,36 +87,39 @@ class _Sections extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
       children: [
-        const _SectionTitle('Внешний вид'),
+        _SectionTitle(tr('Язык', 'Language')),
+        _Card(c: c, child: const _LangPicker()),
+        const SizedBox(height: 22),
+        _SectionTitle(tr('Внешний вид', 'Appearance')),
         _Card(c: c, child: Column(children: [
-          _RowLabel('Режим', c: c),
+          _RowLabel(tr('Режим', 'Mode'), c: c),
           const SizedBox(height: 8),
           const _ModePicker(),
           const SizedBox(height: 18),
           if (s.themeMode != ThemeModeChoice.dark) ...[
-            _RowLabel('Светлая палитра', c: c),
+            _RowLabel(tr('Светлая палитра', 'Light palette'), c: c),
             const SizedBox(height: 8),
             _BasePicker(bases: kLightBases, currentId: s.lightBaseId,
                 onPick: s.setLightBase),
             const SizedBox(height: 18),
           ],
           if (s.themeMode != ThemeModeChoice.light) ...[
-            _RowLabel('Тёмная палитра', c: c),
+            _RowLabel(tr('Тёмная палитра', 'Dark palette'), c: c),
             const SizedBox(height: 8),
             _BasePicker(bases: kDarkBases, currentId: s.darkBaseId,
                 onPick: s.setDarkBase),
             const SizedBox(height: 18),
           ],
-          _RowLabel('Акцент', c: c),
+          _RowLabel(tr('Акцент', 'Accent'), c: c),
           const SizedBox(height: 8),
           _AccentPicker(currentId: s.accentId, onPick: s.setAccent),
         ])),
         const SizedBox(height: 22),
 
-        const _SectionTitle('Сетка'),
+        _SectionTitle(tr('Сетка', 'Grid')),
         _Card(c: c, child: Column(children: [
           _SliderRow(
-            label: 'Размер плиток по умолчанию',
+            label: tr('Размер плиток по умолчанию', 'Default tile size'),
             value: s.cellSize,
             min: 70, max: 240,
             valueLabel: '${s.cellSize.round()} px',
@@ -124,59 +128,64 @@ class _Sections extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           _SliderRow(
-            label: 'Скругление углов',
+            label: tr('Скругление углов', 'Corner rounding'),
             value: s.gridRadius,
             min: 0, max: 18,
             valueLabel: s.gridRadius < 0.5
-                ? 'острые'
+                ? tr('острые', 'sharp')
                 : '${s.gridRadius.round()} px',
             onChanged: s.setGridRadius,
             c: c,
           ),
           const SizedBox(height: 16),
           _SliderRow(
-            label: 'Зазор между плитками',
+            label: tr('Зазор между плитками', 'Gap between tiles'),
             value: s.tileSpacing,
             min: 0, max: 10,
             valueLabel: s.tileSpacing < 0.5
-                ? 'без зазора'
+                ? tr('без зазора', 'no gap')
                 : '${s.tileSpacing.round()} px',
             onChanged: s.setTileSpacing,
             c: c,
           ),
           const SizedBox(height: 18),
-          _RowLabel('Раскладка', c: c),
+          _RowLabel(tr('Раскладка', 'Layout'), c: c),
           const SizedBox(height: 8),
           const _LayoutPicker(),
           const SizedBox(height: 18),
-          _RowLabel('Зазоры', c: c),
+          _RowLabel(tr('Зазоры', 'Gaps'), c: c),
           const SizedBox(height: 8),
           const _GapStylePicker(),
           const SizedBox(height: 12),
           _SwitchRow(
-            title: 'Квадратные миниатюры',
-            subtitle: 'Если выключить — плитка показывает фото целиком, без обрезки',
+            title: tr('Квадратные миниатюры', 'Square thumbnails'),
+            subtitle: tr(
+                'Если выключить — плитка показывает фото целиком, без обрезки',
+                'Off — tiles show the whole photo without cropping'),
             value: s.squareThumbs,
             onChanged: s.setSquareThumbs,
             c: c,
           ),
           _SwitchRow(
-            title: 'Уменьшить анимации',
-            subtitle: 'Меньше плавных переходов — быстрее ощущается интерфейс',
+            title: tr('Уменьшить анимации', 'Reduce motion'),
+            subtitle: tr('Меньше плавных переходов — быстрее ощущается интерфейс',
+                'Fewer transitions — the UI feels snappier'),
             value: s.reduceMotion,
             onChanged: s.setReduceMotion,
             c: c,
           ),
           _SwitchRow(
-            title: 'Метка GIF на анимациях',
-            subtitle: 'Маленький значок «GIF» в углу миниатюры',
+            title: tr('Метка GIF на анимациях', 'GIF badge on animations'),
+            subtitle: tr('Маленький значок «GIF» в углу миниатюры',
+                'Small "GIF" mark in the tile corner'),
             value: s.showGifBadge,
             onChanged: s.setShowGifBadge,
             c: c,
           ),
           _SwitchRow(
-            title: 'Сердечко на избранных',
-            subtitle: 'Метка избранного в углу миниатюры',
+            title: tr('Сердечко на избранных', 'Heart on favorites'),
+            subtitle: tr('Метка избранного в углу миниатюры',
+                'Favorite mark in the tile corner'),
             value: s.showFavBadge,
             onChanged: s.setShowFavBadge,
             c: c,
@@ -184,20 +193,23 @@ class _Sections extends StatelessWidget {
         ])),
         const SizedBox(height: 22),
 
-        const _SectionTitle('Запуск'),
+        _SectionTitle(tr('Запуск', 'Startup')),
         _Card(c: c, child: Column(children: [
-          _RowLabel('Стартовый раздел', c: c),
+          _RowLabel(tr('Стартовый раздел', 'Start section'), c: c),
           const SizedBox(height: 8),
           const _StartPicker(),
         ])),
         const SizedBox(height: 22),
 
-        const _SectionTitle('Приватность'),
+        _SectionTitle(tr('Приватность', 'Privacy')),
         _Card(c: c, child: Column(children: [
           _SwitchRow(
-            title: 'Показывать скрытые папки',
-            subtitle: 'Секретные альбомы (помеченные .nomedia) станут видны '
-                'в галерее. Долгий тап / ПКМ по папке — скрыть или показать.',
+            title: tr('Показывать скрытые папки', 'Show hidden folders'),
+            subtitle: tr(
+                'Секретные альбомы (помеченные .nomedia) станут видны '
+                    'в галерее. Долгий тап / ПКМ по папке — скрыть или показать.',
+                'Secret albums (marked with .nomedia) become visible. '
+                    'Long-press / right-click a folder to hide or show it.'),
             value: s.showHidden,
             onChanged: s.setShowHidden,
             c: c,
@@ -207,7 +219,8 @@ class _Sections extends StatelessWidget {
               padding: const EdgeInsets.only(top: 6),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text('Скрыто папок: ${s.hiddenFolders.length}',
+                child: Text(
+                    '${tr('Скрыто папок', 'Hidden folders')}: ${s.hiddenFolders.length}',
                     style: TextStyle(color: c.muted, fontSize: 12.5)),
               ),
             ),
@@ -221,14 +234,14 @@ class _Sections extends StatelessWidget {
         const SizedBox(height: 22),
 
         if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) ...[
-          const _SectionTitle('Поиск по компьютеру'),
+          _SectionTitle(tr('Поиск по компьютеру', 'Search the computer')),
           _Card(c: c, child: Column(children: [
             _SliderRow(
-              label: 'Игнорировать картинки меньше',
+              label: tr('Игнорировать картинки меньше', 'Ignore images smaller than'),
               value: s.pcScanMinDim.toDouble(),
               min: 0, max: 1024,
               valueLabel: s.pcScanMinDim == 0
-                  ? 'не отсеивать'
+                  ? tr('не отсеивать', 'no filter')
                   : '${s.pcScanMinDim} px',
               onChanged: (v) => s.setPcScanMinDim((v / 32).round() * 32),
               c: c,
@@ -237,41 +250,48 @@ class _Sections extends StatelessWidget {
             Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                  'При «найти все картинки на ПК» отсеивает иконки и текстуры '
-                  '(мелкие картинки, файлы < 20 КБ и служебные папки).',
+                  tr(
+                      'При «найти все картинки на ПК» отсеивает иконки и текстуры '
+                          '(мелкие картинки, файлы < 20 КБ и служебные папки).',
+                      'When using "find all images on PC" it filters out icons '
+                          'and textures (small images, files < 20 KB, system folders).'),
                   style: TextStyle(color: c.muted, fontSize: 12)),
             ),
           ])),
           const SizedBox(height: 22),
         ],
 
-        const _SectionTitle('Теги'),
+        _SectionTitle(tr('Теги', 'Tags')),
         _Card(c: c, child: Column(children: [
           _ActionRow(
             icon: Icons.upload_file_outlined,
-            title: 'Экспорт тегов',
-            subtitle: 'Сохранить базу тегов в JSON (бэкап/перенос)',
+            title: tr('Экспорт тегов', 'Export tags'),
+            subtitle: tr('Сохранить базу тегов в JSON (бэкап/перенос)',
+                'Save the tag database to JSON (backup/transfer)'),
             onTap: () => _exportTags(context),
             c: c,
           ),
           _ActionRow(
             icon: Icons.download_outlined,
-            title: 'Импорт тегов',
-            subtitle: 'Загрузить теги из ранее сохранённого JSON',
+            title: tr('Импорт тегов', 'Import tags'),
+            subtitle: tr('Загрузить теги из ранее сохранённого JSON',
+                'Load tags from a previously saved JSON'),
             onTap: () => _importTags(context),
             c: c,
           ),
           _ActionRow(
             icon: Icons.link_outlined,
-            title: 'Перепривязать теги',
-            subtitle: 'Найти теги переименованных/перемещённых файлов по содержимому',
+            title: tr('Перепривязать теги', 'Relink tags'),
+            subtitle: tr(
+                'Найти теги переименованных/перемещённых файлов по содержимому',
+                'Find tags of renamed/moved files by their content'),
             onTap: () => _relinkTags(context),
             c: c,
           ),
         ])),
         const SizedBox(height: 22),
 
-        const _SectionTitle('О приложении'),
+        _SectionTitle(tr('О приложении', 'About')),
         _Card(c: c, child: const _About()),
         const SizedBox(height: 12),
       ],
@@ -574,6 +594,48 @@ class _AllFilesTileState extends State<_AllFilesTile> {
   }
 }
 
+// ───────────────────────── выбор языка ─────────────────────────
+class _LangPicker extends StatelessWidget {
+  const _LangPicker();
+  @override
+  Widget build(BuildContext context) {
+    final c = AuroraTheme.of(context).colors;
+    final s = SettingsService.instance;
+    Widget chip(String label, IconData icon, AppLang v) {
+      final on = s.appLang == v;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => s.setAppLang(v),
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: on ? c.accentSoft : c.surface2,
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(color: on ? c.accent : c.line),
+            ),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Icon(icon, size: 18, color: on ? c.accentInk : c.muted),
+              const SizedBox(height: 4),
+              Text(label,
+                  style: TextStyle(
+                      color: on ? c.accentInk : c.text,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600)),
+            ]),
+          ),
+        ),
+      );
+    }
+
+    return Row(children: [
+      chip(tr('Система', 'System'), Icons.translate_rounded, AppLang.system),
+      chip('Русский', Icons.abc, AppLang.ru),
+      chip('English', Icons.abc, AppLang.en),
+    ]);
+  }
+}
+
 // ───────────────────────── выбор режима ─────────────────────────
 class _ModePicker extends StatelessWidget {
   const _ModePicker();
@@ -610,9 +672,10 @@ class _ModePicker extends StatelessWidget {
     }
 
     return Row(children: [
-      chip('Как в системе', Icons.brightness_auto_rounded, ThemeModeChoice.system),
-      chip('Светлая', Icons.light_mode_rounded, ThemeModeChoice.light),
-      chip('Тёмная', Icons.dark_mode_rounded, ThemeModeChoice.dark),
+      chip(tr('Как в системе', 'System'), Icons.brightness_auto_rounded,
+          ThemeModeChoice.system),
+      chip(tr('Светлая', 'Light'), Icons.light_mode_rounded, ThemeModeChoice.light),
+      chip(tr('Тёмная', 'Dark'), Icons.dark_mode_rounded, ThemeModeChoice.dark),
     ]);
   }
 }
@@ -768,10 +831,10 @@ class _LayoutPicker extends StatelessWidget {
       );
     }
     return Row(children: [
-      chip('Квадраты', 'ровная сетка', Icons.grid_view_rounded,
-          GridLayout.square),
-      chip('Мозаика', 'разные формы, видно больше', Icons.dashboard_rounded,
-          GridLayout.mosaic),
+      chip(tr('Квадраты', 'Squares'), tr('ровная сетка', 'even grid'),
+          Icons.grid_view_rounded, GridLayout.square),
+      chip(tr('Мозаика', 'Mosaic'), tr('разные формы, видно больше', 'varied shapes, see more'),
+          Icons.dashboard_rounded, GridLayout.mosaic),
     ]);
   }
 }
@@ -810,9 +873,9 @@ class _StartPicker extends StatelessWidget {
       );
     }
     return Row(children: [
-      chip('Все', Icons.grid_view_rounded, StartSection.all),
-      chip('По датам', Icons.calendar_today_rounded, StartSection.dates),
-      chip('Альбомы', Icons.folder_rounded, StartSection.albums),
+      chip(tr('Все', 'All'), Icons.grid_view_rounded, StartSection.all),
+      chip(tr('По датам', 'By date'), Icons.calendar_today_rounded, StartSection.dates),
+      chip(tr('Альбомы', 'Albums'), Icons.folder_rounded, StartSection.albums),
     ]);
   }
 }

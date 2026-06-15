@@ -27,6 +27,7 @@ import 'dims_service.dart';
 import 'selection.dart';
 import 'media_actions.dart';
 import 'gap_background.dart';
+import 'i18n.dart';
 
 enum ViewMode { all, dates, albums }
 
@@ -601,7 +602,7 @@ class _HomePageState extends State<HomePage> {
               child: Row(children: [
                 Icon(Icons.folder_copy_outlined, color: c.accent, size: 20),
                 const SizedBox(width: 10),
-                Text('Папки библиотеки',
+                Text(tr('Папки библиотеки', 'Library folders'),
                     style: TextStyle(
                         color: c.text,
                         fontSize: 16,
@@ -626,7 +627,8 @@ class _HomePageState extends State<HomePage> {
                     await _clearFolders();
                   },
                   icon: const Icon(Icons.delete_sweep_outlined),
-                  label: Text('Очистить сканирование (${_folders.length} папок)'),
+                  label: Text(
+                      '${tr('Очистить сканирование', 'Clear scan')} (${_folders.length})'),
                 ),
               ),
             if (_folders.isEmpty)
@@ -663,7 +665,7 @@ class _HomePageState extends State<HomePage> {
                   await _addFolder();
                 },
                 icon: const Icon(Icons.add),
-                label: const Text('Добавить папку'),
+                label: Text(tr('Добавить папку', 'Add folder')),
               ),
             ),
             if (Platform.isWindows)
@@ -680,7 +682,7 @@ class _HomePageState extends State<HomePage> {
                     await _scanWholePc();
                   },
                   icon: const Icon(Icons.travel_explore_rounded),
-                  label: const Text('Найти все картинки на ПК'),
+                  label: Text(tr('Найти все картинки на ПК', 'Find all images on PC')),
                 ),
               ),
           ]),
@@ -777,9 +779,9 @@ class _HomePageState extends State<HomePage> {
                     folder: _folders.isNotEmpty
                         ? (_folders.length == 1
                             ? _folders.first
-                            : '${_folders.length} папок')
+                            : '${_folders.length} ${tr('папок', 'folders')}')
                         : (_useDeviceMedia && _mediaGranted
-                            ? 'все фото устройства'
+                            ? tr('все фото устройства', 'all device photos')
                             : null),
                   ),
                   if (_filterTags.isNotEmpty)
@@ -957,14 +959,19 @@ class _EmptyState extends StatelessWidget {
     final needAccess = deviceMedia && !granted;
     final subtitle = deviceMedia
         ? (granted
-            ? 'Фото на устройстве не найдены.'
-            : 'Дай доступ к фото — GOAT покажет все изображения устройства.')
-        : 'Выбери папку с фотографиями — GOAT покажет их здесь.';
+            ? tr('Фото на устройстве не найдены.', 'No photos found on the device.')
+            : tr('Дай доступ к фото — GOAT покажет все изображения устройства.',
+                'Grant photo access — GOAT will show all images on the device.'))
+        : tr('Выбери папку с фотографиями — GOAT покажет их здесь.',
+            'Pick a folder with photos — GOAT will show them here.');
     return Center(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.photo_library_outlined, size: 64, color: c.muted),
         const SizedBox(height: 16),
-        Text(needAccess ? 'Нужен доступ к фото' : 'Здесь пока пусто',
+        Text(
+            needAccess
+                ? tr('Нужен доступ к фото', 'Photo access needed')
+                : tr('Здесь пока пусто', 'Nothing here yet'),
             style: TextStyle(
                 fontSize: 18, fontWeight: FontWeight.w700, color: c.text)),
         const SizedBox(height: 6),
@@ -980,7 +987,9 @@ class _EmptyState extends StatelessWidget {
             onPressed: onPick,
             style: FilledButton.styleFrom(backgroundColor: c.accent),
             icon: Icon(deviceMedia ? Icons.photo_library : Icons.folder_open),
-            label: Text(deviceMedia ? 'Дать доступ к фото' : 'Выбрать папку'),
+            label: Text(deviceMedia
+                ? tr('Дать доступ к фото', 'Grant photo access')
+                : tr('Выбрать папку', 'Pick a folder')),
           ),
       ]),
     );
@@ -1281,7 +1290,7 @@ class _LayoutToggle extends StatelessWidget {
       builder: (ctx, _) {
         final mosaic = SettingsService.instance.gridLayout == GridLayout.mosaic;
         return Tooltip(
-          message: mosaic ? 'Мозаика' : 'Ровные квадраты',
+          message: mosaic ? tr('Мозаика', 'Mosaic') : tr('Ровные квадраты', 'Even squares'),
           child: Material(
             color: mosaic ? c.accentSoft : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
@@ -1351,7 +1360,8 @@ class _SearchFieldState extends State<_SearchField> {
               decoration: InputDecoration(
                 isDense: true,
                 border: InputBorder.none,
-                hintText: 'Поиск по имени файла или папке…',
+                hintText: tr('Поиск по имени файла или папке…',
+                    'Search by file or folder name…'),
                 hintStyle: TextStyle(color: c.muted, fontSize: 14),
               ),
             ),
@@ -1443,12 +1453,12 @@ class _FolderViewToggle extends StatelessWidget {
             border: Border.all(color: c.line),
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            btn('Сетка', Icons.grid_view_rounded, view == FolderView.grid,
-                () => onChanged(FolderView.grid)),
-            btn('Список', Icons.view_list_rounded, view == FolderView.list,
-                () => onChanged(FolderView.list)),
-            btn('Древо', Icons.account_tree_outlined, view == FolderView.tree,
-                () => onChanged(FolderView.tree)),
+            btn(tr('Сетка', 'Grid'), Icons.grid_view_rounded,
+                view == FolderView.grid, () => onChanged(FolderView.grid)),
+            btn(tr('Список', 'List'), Icons.view_list_rounded,
+                view == FolderView.list, () => onChanged(FolderView.list)),
+            btn(tr('Древо', 'Tree'), Icons.account_tree_outlined,
+                view == FolderView.tree, () => onChanged(FolderView.tree)),
           ]),
         ),
       ]),
@@ -1668,11 +1678,12 @@ class _Tabs extends StatelessWidget {
         border: Border.all(color: c.line),
       ),
       child: Row(children: [
-        if (only == null || only!.contains(ViewMode.all)) tab('Все', ViewMode.all),
+        if (only == null || only!.contains(ViewMode.all))
+          tab(tr('Все', 'All'), ViewMode.all),
         if (only == null || only!.contains(ViewMode.dates))
-          tab('По датам', ViewMode.dates),
+          tab(tr('По датам', 'By date'), ViewMode.dates),
         if (only == null || only!.contains(ViewMode.albums))
-          tab('Альбомы', ViewMode.albums),
+          tab(tr('Альбомы', 'Albums'), ViewMode.albums),
       ]),
     );
   }
@@ -1694,9 +1705,9 @@ class _CountBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
     final right = switch (mode) {
-      ViewMode.all => 'показаны все',
-      ViewMode.dates => 'сгруппировано по дате',
-      ViewMode.albums => '$albums папок',
+      ViewMode.all => tr('показаны все', 'all shown'),
+      ViewMode.dates => tr('сгруппировано по дате', 'grouped by date'),
+      ViewMode.albums => '$albums ${tr('папок', 'folders')}',
     };
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 8, 18, 6),
@@ -1711,7 +1722,9 @@ class _CountBar extends StatelessWidget {
                     style: TextStyle(
                         color: c.text, fontWeight: FontWeight.w600, fontSize: 12)),
                 TextSpan(
-                    text: folder == null ? 'изображений' : 'изображений · $folder',
+                    text: folder == null
+                        ? tr('изображений', 'images')
+                        : '${tr('изображений', 'images')} · $folder',
                     style: TextStyle(color: c.muted, fontSize: 12)),
               ]),
               maxLines: 1,

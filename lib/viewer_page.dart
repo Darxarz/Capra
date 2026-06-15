@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'theme.dart';
 import 'model.dart';
 import 'editor_service.dart';
+import 'i18n.dart';
 import 'favorites.dart';
 import 'tag_service.dart';
 import 'tagger_service.dart';
@@ -351,7 +352,7 @@ class _OpenInRowState extends State<_OpenInRow> {
     final c = widget.colors;
     final path = widget.photo.path;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('Открыть в…',
+      Text(tr('Открыть в…', 'Open in…'),
           style: TextStyle(
               color: c.muted, fontSize: 12.5, fontWeight: FontWeight.w600)),
       const SizedBox(height: 10),
@@ -360,7 +361,7 @@ class _OpenInRowState extends State<_OpenInRow> {
           _chip(null, app.badge, app.name, app.color,
               () => EditorService.openIn(app, path)),
         if (Platform.isWindows)
-          _chip(Icons.more_horiz_rounded, null, 'Другое…',
+          _chip(Icons.more_horiz_rounded, null, tr('Другое…', 'Other…'),
               const Color(0xFF6B7280),
               () => EditorService.openWithDialog(path)),
       ]),
