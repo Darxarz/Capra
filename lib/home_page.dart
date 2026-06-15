@@ -371,6 +371,43 @@ class _HomePageState extends State<HomePage> {
     await _rescan();
   }
 
+  /// Подтверждение очистки всех папок библиотеки.
+  Future<bool?> _confirmClear(BuildContext ctx, int n) {
+    final c = AuroraTheme.of(ctx).colors;
+    return showDialog<bool>(
+      context: ctx,
+      builder: (d) => AlertDialog(
+        backgroundColor: c.surface,
+        title: Text('Очистить сканирование?', style: TextStyle(color: c.text)),
+        content: Text(
+            'Уберём все $n папок из библиотеки. Сами файлы на диске не трогаем — '
+            'только список просканированных папок. Потом можно добавить заново.',
+            style: TextStyle(color: c.muted)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(d, false),
+            child: Text('Отмена', style: TextStyle(color: c.muted)),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: c.accent),
+            onPressed: () => Navigator.pop(d, true),
+            child: const Text('Очистить'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Убрать все папки библиотеки разом (после автоскана по ПК их сотни).
+  Future<void> _clearFolders() async {
+    await LibraryService.setFolders(const []);
+    setState(() => _folders = const []);
+    await _rescan();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Список папок очищен')));
+  }
+
   Future<void> _rescan() async {
     setState(() => _loading = true);
     final photos = <PhotoItem>[];
@@ -572,6 +609,26 @@ class _HomePageState extends State<HomePage> {
               ]),
             ),
             const Divider(height: 1),
+            if (_folders.length > 1)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: c.accent,
+                    side: BorderSide(color: c.accent),
+                    minimumSize: const Size.fromHeight(46),
+                  ),
+                  onPressed: () async {
+                    final nav = Navigator.of(ctx);
+                    final ok = await _confirmClear(ctx, _folders.length);
+                    if (ok != true) return;
+                    nav.pop();
+                    await _clearFolders();
+                  },
+                  icon: const Icon(Icons.delete_sweep_outlined),
+                  label: Text('Очистить сканирование (${_folders.length} папок)'),
+                ),
+              ),
             if (_folders.isEmpty)
               Padding(
                 padding: const EdgeInsets.all(20),
