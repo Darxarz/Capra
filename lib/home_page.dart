@@ -3025,62 +3025,144 @@ class _QuiltLayout extends SliverGridLayout {
   }
 }
 
-class _DatesView extends StatelessWidget {
+class _DatesView extends StatefulWidget {
   final List<PhotoItem> photos;
   final double cell;
   const _DatesView({required this.photos, required this.cell});
 
   @override
+  State<_DatesView> createState() => _DatesViewState();
+}
+
+class _DateRowEntry {
+  final String? label;
+  final int count;
+  final int start;
+  final int take;
+  const _DateRowEntry.header(this.label, this.count)
+      : start = -1,
+        take = 0;
+  const _DateRowEntry.row(this.start, this.take)
+      : label = null,
+        count = 0;
+
+  bool get isHeader => label != null;
+}
+
+class _DatesViewState extends State<_DatesView> {
+  List<_DateRowEntry> _entries = const [];
+  List<PhotoItem>? _lastPhotos;
+  double _lastCell = -1;
+  double _lastWidth = -1;
+  double _lastGap = -1;
+  AppLang? _lastLang;
+  int _lastColumns = 0;
+  double _tile = 0;
+
+  void _rebuild(double width) {
+    final gap = SettingsService.instance.tileSpacing;
+    final lang = uiLang;
+    if (identical(_lastPhotos, widget.photos) &&
+        _lastCell == widget.cell &&
+        _lastWidth == width &&
+        _lastGap == gap &&
+        _lastLang == lang) {
+      return;
+    }
+
+    const horizontalPad = 32.0;
+    final available = math.max(1.0, width - horizontalPad);
+    final cols = math.max(1, (available / widget.cell).ceil());
+    _tile = (available - gap * (cols - 1)) / cols;
+    _lastColumns = cols;
+
+    final out = <_DateRowEntry>[];
+    var i = 0;
+    while (i < widget.photos.length) {
+      final label = dateGroupOf(widget.photos[i].modified);
+      final start = i;
+      i++;
+      while (i < widget.photos.length &&
+          dateGroupOf(widget.photos[i].modified) == label) {
+        i++;
+      }
+      final count = i - start;
+      out.add(_DateRowEntry.header(label, count));
+      for (var off = 0; off < count; off += cols) {
+        out.add(_DateRowEntry.row(start + off, math.min(cols, count - off)));
+      }
+    }
+    out.add(const _DateRowEntry.row(-1, 0)); // нижний отступ
+
+    _entries = out;
+    _lastPhotos = widget.photos;
+    _lastCell = widget.cell;
+    _lastWidth = width;
+    _lastGap = gap;
+    _lastLang = lang;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
-    final groups = <String, List<PhotoItem>>{};
-    for (final p in photos) {
-      groups.putIfAbsent(dateGroupOf(p.modified), () => []).add(p);
-    }
-    final slivers = <Widget>[];
-    groups.forEach((date, items) {
-      slivers.add(SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 16, 18, 8),
-          child: Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(date,
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: c.text)),
-                const SizedBox(width: 10),
-                Text('${items.length} ${tr('фото', 'photos', 'fotos')}',
-                    style: TextStyle(fontSize: 12, color: c.muted)),
-              ]),
-        ),
-      ));
+    return LayoutBuilder(builder: (ctx, cns) {
+      _rebuild(cns.maxWidth);
       final gap = SettingsService.instance.tileSpacing;
-      slivers.add(SliverPadding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        sliver: SliverGrid(
-          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: cell,
-            mainAxisSpacing: gap,
-            crossAxisSpacing: gap,
-            childAspectRatio: 1,
-          ),
-          delegate: SliverChildBuilderDelegate(
-            (ctx, i) => PhotoTile(
-              photo: items[i],
-              cell: cell,
-              onLongPress: () => Selection.instance.enter(items[i].path),
-              onTap: () => openViewer(ctx, photos, photos.indexOf(items[i])),
-            ),
-            childCount: items.length,
-          ),
+      return GapBackground(
+        child: ListView.builder(
+          padding: const EdgeInsets.only(bottom: 18),
+          scrollCacheExtent: SettingsService.instance.lowEndMode
+              ? const ScrollCacheExtent.pixels(160)
+              : null,
+          itemCount: _entries.length,
+          itemBuilder: (ctx, i) {
+            final e = _entries[i];
+            if (e.isHeader) {
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(18, 16, 18, 8),
+                child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(e.label!,
+                          style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: c.text)),
+                      const SizedBox(width: 10),
+                      Text('${e.count} ${tr('фото', 'photos', 'fotos')}',
+                          style: TextStyle(fontSize: 12, color: c.muted)),
+                    ]),
+              );
+            }
+            if (e.start < 0) return const SizedBox(height: 18);
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: SizedBox(
+                height: _tile,
+                child: Row(children: [
+                  for (var col = 0; col < _lastColumns; col++) ...[
+                    if (col > 0) SizedBox(width: gap),
+                    Expanded(
+                      child: col < e.take
+                          ? PhotoTile(
+                              photo: widget.photos[e.start + col],
+                              cell: _tile,
+                              onLongPress: () => Selection.instance
+                                  .enter(widget.photos[e.start + col].path),
+                              onTap: () =>
+                                  openViewer(ctx, widget.photos, e.start + col),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
+                ]),
+              ),
+            );
+          },
         ),
-      ));
+      );
     });
-    slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 18)));
-    return GapBackground(child: CustomScrollView(slivers: slivers));
   }
 }
 
