@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
@@ -161,6 +162,38 @@ class _HomePageState extends State<HomePage> {
           _tagMatchPaths.contains(p.path));
     }
     return r.toList();
+  }
+
+  /// Сортирует мастер-список ОДИН раз (а не на каждом кадре): фильтры в
+  /// [_visiblePhotos] сохраняют этот порядок. Для 100к это важно по скорости.
+  void _applySort(List<PhotoItem> list) {
+    switch (SettingsService.instance.sortMode) {
+      case SortMode.dateDesc:
+        list.sort((a, b) => b.modified.compareTo(a.modified));
+        break;
+      case SortMode.dateAsc:
+        list.sort((a, b) => a.modified.compareTo(b.modified));
+        break;
+      case SortMode.nameAsc:
+        list.sort((a, b) =>
+            a.fileName.toLowerCase().compareTo(b.fileName.toLowerCase()));
+        break;
+      case SortMode.sizeDesc:
+        list.sort((a, b) => b.sizeBytes.compareTo(a.sizeBytes));
+        break;
+      case SortMode.random:
+        list.shuffle(math.Random(SettingsService.instance.sortSeed));
+        break;
+    }
+  }
+
+  void _setSort(SortMode m) {
+    SettingsService.instance.setSortMode(m);
+    setState(() {
+      _applySort(_photos);
+      _applyHidden(); // пересобрать производные списки в новом порядке
+      _treeCache = null;
+    });
   }
 
   FolderNode _folderTreeNode() {
@@ -497,6 +530,7 @@ class _HomePageState extends State<HomePage> {
     } catch (_) {}
     setState(() {
       _photos = photos;
+      _applySort(_photos);
       _applyHidden(); // считает _shown/_albums и отдаёт раздаче по сети
       _loading = false;
     });
@@ -866,6 +900,7 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _folders = folders;
       _photos = photos;
+      _applySort(_photos);
       _applyHidden();
       _loading = false;
     });
@@ -925,6 +960,8 @@ class _HomePageState extends State<HomePage> {
           total: _visiblePhotos.length,
           albums: _mediaAlbums.length,
           compact: compact,
+          sort: SettingsService.instance.sortMode,
+          onSort: _setSort,
           folder: _folders.isNotEmpty
               ? (_folders.length == 1
                   ? _folders.first
@@ -2081,28 +2118,43 @@ class _Tabs extends StatelessWidget {
   }
 }
 
+String sortModeLabel(SortMode m) => switch (m) {
+      SortMode.dateDesc => tr('Сначала новые', 'Newest first', 'Más recientes'),
+      SortMode.dateAsc => tr('Сначала старые', 'Oldest first', 'Más antiguos'),
+      SortMode.nameAsc => tr('По имени', 'By name', 'Por nombre'),
+      SortMode.sizeDesc => tr('По размеру', 'By size', 'Por tamaño'),
+      SortMode.random => tr('Случайно', 'Random', 'Aleatorio'),
+    };
+
+IconData _sortModeIcon(SortMode m) => switch (m) {
+      SortMode.dateDesc => Icons.arrow_downward_rounded,
+      SortMode.dateAsc => Icons.arrow_upward_rounded,
+      SortMode.nameAsc => Icons.sort_by_alpha_rounded,
+      SortMode.sizeDesc => Icons.data_usage_rounded,
+      SortMode.random => Icons.shuffle_rounded,
+    };
+
 class _CountBar extends StatelessWidget {
   final ViewMode mode;
   final int total;
   final int albums;
   final String? folder;
   final bool compact;
+  final SortMode sort;
+  final ValueChanged<SortMode> onSort;
   const _CountBar({
     required this.mode,
     required this.total,
     required this.albums,
     required this.folder,
+    required this.sort,
+    required this.onSort,
     this.compact = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
-    final right = switch (mode) {
-      ViewMode.all => tr('показаны все', 'all shown'),
-      ViewMode.dates => tr('сгруппировано по дате', 'grouped by date'),
-      ViewMode.albums => '$albums ${tr('папок', 'folders')}',
-    };
     return Padding(
       padding: compact
           ? const EdgeInsets.fromLTRB(12, 5, 12, 4)
@@ -2129,10 +2181,40 @@ class _CountBar extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (!compact) ...[
-            const SizedBox(width: 12),
-            Text(right, style: TextStyle(color: c.muted, fontSize: 12)),
-          ],
+          const SizedBox(width: 8),
+          // сортировка — доступна в режимах с лентой (Все/По датам)
+          if (mode != ViewMode.albums)
+            PopupMenuButton<SortMode>(
+              tooltip: tr('Сортировка', 'Sort', 'Orden'),
+              initialValue: sort,
+              onSelected: onSort,
+              color: c.surface,
+              itemBuilder: (ctx) => [
+                for (final m in SortMode.values)
+                  PopupMenuItem(
+                    value: m,
+                    child: Row(children: [
+                      Icon(_sortModeIcon(m),
+                          size: 17,
+                          color: m == sort ? c.accent : c.muted),
+                      const SizedBox(width: 10),
+                      Text(sortModeLabel(m),
+                          style: TextStyle(
+                              color: c.text,
+                              fontWeight: m == sort
+                                  ? FontWeight.w700
+                                  : FontWeight.w400)),
+                    ]),
+                  ),
+              ],
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(_sortModeIcon(sort), size: 15, color: c.muted),
+                const SizedBox(width: 5),
+                Text(sortModeLabel(sort),
+                    style: TextStyle(color: c.muted, fontSize: 12)),
+                Icon(Icons.arrow_drop_down_rounded, size: 18, color: c.muted),
+              ]),
+            ),
         ],
       ),
     );
@@ -2358,6 +2440,10 @@ class _AllGridState extends State<_AllGrid> {
   double _viewH = 0;
   bool _painting = false; // идёт покраска правой кнопкой мыши (ПК)
 
+  // состояние быстрого бегунка-скролла
+  bool _scrubbing = false;
+  String _scrubLabel = '';
+
   @override
   void dispose() {
     _autoScroll?.cancel();
@@ -2462,6 +2548,108 @@ class _AllGridState extends State<_AllGrid> {
     });
   }
 
+  /// Подпись «пузыря» бегунка для данного смещения прокрутки: дата (для
+  /// сортировки по дате), первая буква (по имени) или размер (по размеру).
+  String _labelAt(double offset) {
+    if (widget.photos.isEmpty) return '';
+    final g = _geometry();
+    final row = ((offset - _pad.top) / (g.extent + g.gap)).floor();
+    var idx = row * g.cols;
+    if (idx < 0) idx = 0;
+    if (idx >= widget.photos.length) idx = widget.photos.length - 1;
+    final ph = widget.photos[idx];
+    switch (SettingsService.instance.sortMode) {
+      case SortMode.nameAsc:
+        return ph.fileName.isNotEmpty ? ph.fileName[0].toUpperCase() : '';
+      case SortMode.sizeDesc:
+        return prettySize(ph.sizeBytes);
+      default:
+        return dateGroupOf(ph.modified);
+    }
+  }
+
+  /// Бегунок справа: тянешь — мгновенно прыгаешь по ленте, рядом пузырь с датой.
+  /// Появляется только когда листать действительно много.
+  Widget _scrubber(double viewH) {
+    return AnimatedBuilder(
+      animation: _scroll,
+      builder: (ctx, _) {
+        if (!_scroll.hasClients ||
+            !_scroll.position.hasContentDimensions) {
+          return const SizedBox.shrink();
+        }
+        final maxExt = _scroll.position.maxScrollExtent;
+        if (maxExt <= 0 || widget.photos.length < 80) {
+          return const SizedBox.shrink();
+        }
+        const margin = 8.0, handleH = 56.0;
+        final trackH = viewH - margin * 2 - handleH;
+        if (trackH <= 0) return const SizedBox.shrink();
+        final frac = (_scroll.offset / maxExt).clamp(0.0, 1.0);
+        final c = AuroraTheme.of(ctx).colors;
+        return Positioned(
+          top: margin + frac * trackH,
+          right: 0,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onVerticalDragStart: (_) => setState(() {
+              _scrubbing = true;
+              _scrubLabel = _labelAt(_scroll.offset);
+            }),
+            onVerticalDragUpdate: (d) {
+              final next = (_scroll.offset +
+                      (d.primaryDelta ?? 0) / trackH * maxExt)
+                  .clamp(0.0, maxExt);
+              _scroll.jumpTo(next);
+              setState(() => _scrubLabel = _labelAt(next));
+            },
+            onVerticalDragEnd: (_) => setState(() => _scrubbing = false),
+            onVerticalDragCancel: () => setState(() => _scrubbing = false),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              if (_scrubbing)
+                Container(
+                  margin: const EdgeInsets.only(right: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: c.accent,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: const [
+                      BoxShadow(
+                          color: Colors.black38,
+                          blurRadius: 10,
+                          offset: Offset(0, 3)),
+                    ],
+                  ),
+                  child: Text(_scrubLabel,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14)),
+                ),
+              SizedBox(
+                width: 34,
+                height: handleH,
+                child: Center(
+                  child: Container(
+                    width: _scrubbing ? 8 : 5,
+                    height: handleH,
+                    decoration: BoxDecoration(
+                      color: _scrubbing
+                          ? c.accent
+                          : c.muted.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+              ),
+            ]),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = SettingsService.instance;
@@ -2491,21 +2679,29 @@ class _AllGridState extends State<_AllGrid> {
         ),
       );
       final wrapped = GapBackground(child: grid);
-      if (!widget.selectable) return wrapped;
-      // телефон: «паровозик» долгим тапом; ПК: правой кнопкой мыши (Listener)
-      return Listener(
-        onPointerDown: _onPointerDown,
-        onPointerMove: _onPointerMove,
-        onPointerUp: _onPointerUp,
-        onPointerCancel: _onPointerUp,
-        child: GestureDetector(
-          onLongPressStart: _onLongPressStart,
-          onLongPressMoveUpdate: _onLongPressMove,
-          onLongPressEnd: _onLongPressEnd,
-          onLongPressCancel: () => _onLongPressEnd(null),
-          child: wrapped,
-        ),
-      );
+      Widget content;
+      if (!widget.selectable) {
+        content = wrapped;
+      } else {
+        // телефон: «паровозик» долгим тапом; ПК: правой кнопкой мыши (Listener)
+        content = Listener(
+          onPointerDown: _onPointerDown,
+          onPointerMove: _onPointerMove,
+          onPointerUp: _onPointerUp,
+          onPointerCancel: _onPointerUp,
+          child: GestureDetector(
+            onLongPressStart: _onLongPressStart,
+            onLongPressMoveUpdate: _onLongPressMove,
+            onLongPressEnd: _onLongPressEnd,
+            onLongPressCancel: () => _onLongPressEnd(null),
+            child: wrapped,
+          ),
+        );
+      }
+      return Stack(children: [
+        Positioned.fill(child: content),
+        _scrubber(cns.maxHeight),
+      ]);
     });
   }
 }

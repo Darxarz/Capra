@@ -16,6 +16,9 @@ enum GapStyle { none, color, silver, gold, holographic, polaroid }
 /// Язык интерфейса.
 enum AppLang { system, ru, en, es }
 
+/// Порядок сортировки фото в сетке.
+enum SortMode { dateDesc, dateAsc, nameAsc, sizeDesc, random }
+
 /// Плотность основного интерфейса: авто выбирает компактный вид на телефонах.
 enum UiDensity { auto, compact, comfortable }
 
@@ -52,6 +55,8 @@ class SettingsService extends ChangeNotifier {
   static const _kUiDensity = 'goat_ui_density';
   static const _kSectionNavPlacement = 'goat_section_nav_placement';
   static const _kAvoidCloudThumbDownloads = 'goat_avoid_cloud_thumb_downloads';
+  static const _kSortMode = 'goat_sort_mode';
+  static const _kSortSeed = 'goat_sort_seed';
 
   late SharedPreferences _p;
   bool _ready = false;
@@ -81,6 +86,8 @@ class SettingsService extends ChangeNotifier {
       SectionNavPlacement.both; // где показывать разделы
   bool avoidCloudThumbnailDownloads =
       true; // не скачивать облачные оригиналы ради сетки
+  SortMode sortMode = SortMode.dateDesc; // порядок сортировки в сетке
+  int sortSeed = 1; // зерно для случайного порядка (стабильное между кадрами)
 
   bool get ready => _ready;
 
@@ -119,7 +126,22 @@ class SettingsService extends ChangeNotifier {
         orElse: () => SectionNavPlacement.both);
     avoidCloudThumbnailDownloads =
         _p.getBool(_kAvoidCloudThumbDownloads) ?? avoidCloudThumbnailDownloads;
+    sortMode = SortMode.values.firstWhere(
+        (e) => e.name == _p.getString(_kSortMode),
+        orElse: () => SortMode.dateDesc);
+    sortSeed = _p.getInt(_kSortSeed) ?? sortSeed;
     _ready = true;
+    notifyListeners();
+  }
+
+  void setSortMode(SortMode v) {
+    sortMode = v;
+    _p.setString(_kSortMode, v.name);
+    // новый случайный порядок при каждом выборе «случайно»
+    if (v == SortMode.random) {
+      sortSeed = DateTime.now().millisecondsSinceEpoch & 0x7fffffff;
+      _p.setInt(_kSortSeed, sortSeed);
+    }
     notifyListeners();
   }
 
