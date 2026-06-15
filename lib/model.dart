@@ -31,6 +31,10 @@ const Set<String> kVideoExtensions = {
 /// в соответствующем редакторе.
 const Set<String> kProjectExtensions = {'.kra', '.psd'};
 
+/// Потолок декодирования полного фото (по большей стороне, px). Защищает от
+/// гигантских картинок, разворачивающихся в сотни МБ. 4096² ≈ 67 МБ на кадр.
+const int _kFullDecodeMax = 4096;
+
 /// Всё, что собираем при сканировании (картинки + видео + проекты).
 const Set<String> kScanExtensions = {
   ...kImageExtensions,
@@ -112,6 +116,11 @@ class PhotoItem {
   }
 
   /// Полный размер — только для открытого на весь экран фото.
+  ///
+  /// Декод ограничен потолком [_kFullDecodeMax] по большей стороне: огромная
+  /// картинка (напр. 12000×12000) иначе разворачивается в памяти в сотни МБ и
+  /// вешает/роняет приложение (особенно на Windows). Маленькие не трогаются
+  /// (allowUpscaling: false) — для них качество полное.
   ImageProvider get full {
     if (isRemote) {
       return NetworkImage('$remoteBase/file?token=$remoteToken&id=$remoteId');
@@ -120,7 +129,13 @@ class PhotoItem {
       return ProjectImage(path,
           mtime: modified.millisecondsSinceEpoch, full: true);
     }
-    return FileImage(File(path));
+    return ResizeImage(
+      FileImage(File(path)),
+      width: _kFullDecodeMax,
+      height: _kFullDecodeMax,
+      policy: ResizeImagePolicy.fit,
+      allowUpscaling: false,
+    );
   }
 }
 

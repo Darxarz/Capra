@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'theme.dart';
@@ -6,19 +7,38 @@ import 'favorites.dart';
 import 'tag_service.dart';
 import 'settings_service.dart';
 import 'lan_store.dart';
+import 'error_log.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  MediaKit.ensureInitialized();
-  await Favorites.instance.load();
-  await SettingsService.instance.load();
-  await LanStore.instance.load();
-  try {
-    await TagService.instance.init();
-  } catch (_) {
-    // если база не открылась — приложение всё равно работает (без тегов)
-  }
-  runApp(const GoatApp());
+  // Перехватываем все ошибки в файловый журнал — для диагностики крашей на
+  // устройствах, к которым нет прямого доступа. UI-зона ловит синхронные и
+  // асинхронные исключения, onError — низкоуровневые.
+  await runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+    await ErrorLog.init();
+    final prevOnError = FlutterError.onError;
+    FlutterError.onError = (details) {
+      ErrorLog.recordError(details.exception, details.stack);
+      prevOnError?.call(details);
+    };
+    WidgetsBinding.instance.platformDispatcher.onError = (error, stack) {
+      ErrorLog.recordError(error, stack);
+      return true;
+    };
+    MediaKit.ensureInitialized();
+    await Favorites.instance.load();
+    await SettingsService.instance.load();
+    await LanStore.instance.load();
+    try {
+      await TagService.instance.init();
+    } catch (e, s) {
+      // если база не открылась — приложение всё равно работает (без тегов)
+      ErrorLog.recordError(e, s);
+    }
+    runApp(const GoatApp());
+  }, (error, stack) {
+    ErrorLog.recordError(error, stack);
+  });
 }
 
 /// Корневой виджет. Перестраивается, когда меняются настройки

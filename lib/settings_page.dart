@@ -1,13 +1,16 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:share_plus/share_plus.dart';
 import 'theme.dart';
 import 'settings_service.dart';
 import 'tag_service.dart';
 import 'update_service.dart';
 import 'library_service.dart';
+import 'error_log.dart';
 import 'i18n.dart';
 
 /// Полноэкранный раздел настроек: внешний вид, сетка, теги, о приложении.
@@ -325,11 +328,39 @@ class _Sections extends StatelessWidget {
               ),
             ])),
         const SizedBox(height: 22),
+        _SectionTitle(tr('Диагностика', 'Diagnostics')),
+        _Card(
+            c: c,
+            child: _ActionRow(
+              icon: Icons.bug_report_outlined,
+              title: tr('Поделиться журналом', 'Share log'),
+              subtitle: tr(
+                  'Отправить файл журнала ошибок — поможет найти причину сбоев',
+                  'Send the error log file — helps diagnose crashes'),
+              onTap: () => _shareLog(context),
+              c: c,
+            )),
+        const SizedBox(height: 22),
         _SectionTitle(tr('О приложении', 'About')),
         _Card(c: c, child: const _About()),
         const SizedBox(height: 12),
       ],
     );
+  }
+
+  Future<void> _shareLog(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final content = await ErrorLog.readAll();
+    final path = ErrorLog.path;
+    if (Platform.isAndroid && path != null) {
+      await SharePlus.instance.share(
+          ShareParams(files: [XFile(path)], text: 'GOAT log'));
+    } else {
+      await Clipboard.setData(ClipboardData(text: content));
+      messenger.showSnackBar(SnackBar(
+          content: Text(tr('Журнал скопирован в буфер обмена',
+              'Log copied to clipboard'))));
+    }
   }
 
   Future<void> _exportTags(BuildContext context) async {
