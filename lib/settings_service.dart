@@ -19,6 +19,9 @@ enum AppLang { system, ru, en }
 /// Плотность основного интерфейса: авто выбирает компактный вид на телефонах.
 enum UiDensity { auto, compact, comfortable }
 
+/// Где показывать переключатели разделов «Все / Даты / Альбомы».
+enum SectionNavPlacement { both, side, top }
+
 /// Единый сервис настроек пользователя: палитра, плотность сетки, поведение
 /// при старте, мелкие визуальные предпочтения. Все значения сохраняются
 /// в shared_preferences и рассылаются подписчикам через ChangeNotifier.
@@ -47,6 +50,7 @@ class SettingsService extends ChangeNotifier {
   static const _kPcScanMinDim = 'goat_pc_scan_min_dim';
   static const _kAppLang = 'goat_app_lang';
   static const _kUiDensity = 'goat_ui_density';
+  static const _kSectionNavPlacement = 'goat_section_nav_placement';
 
   late SharedPreferences _p;
   bool _ready = false;
@@ -72,6 +76,8 @@ class SettingsService extends ChangeNotifier {
   int pcScanMinDim = 256; // мин. размер картинки (px) при поиске по ПК
   AppLang appLang = AppLang.system; // язык интерфейса
   UiDensity uiDensity = UiDensity.auto; // компактность главного экрана
+  SectionNavPlacement sectionNavPlacement =
+      SectionNavPlacement.both; // где показывать разделы
 
   bool get ready => _ready;
 
@@ -105,6 +111,9 @@ class SettingsService extends ChangeNotifier {
     uiDensity = UiDensity.values.firstWhere(
         (e) => e.name == _p.getString(_kUiDensity),
         orElse: () => UiDensity.auto);
+    sectionNavPlacement = SectionNavPlacement.values.firstWhere(
+        (e) => e.name == _p.getString(_kSectionNavPlacement),
+        orElse: () => SectionNavPlacement.both);
     _ready = true;
     notifyListeners();
   }
@@ -221,6 +230,12 @@ class SettingsService extends ChangeNotifier {
   void setUiDensity(UiDensity v) {
     uiDensity = v;
     _p.setString(_kUiDensity, v.name);
+    notifyListeners();
+  }
+
+  void setSectionNavPlacement(SectionNavPlacement v) {
+    sectionNavPlacement = v;
+    _p.setString(_kSectionNavPlacement, v.name);
     notifyListeners();
   }
 

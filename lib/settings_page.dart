@@ -123,6 +123,10 @@ class _Sections extends StatelessWidget {
               _RowLabel(tr('Интерфейс', 'Interface'), c: c),
               const SizedBox(height: 8),
               const _DensityPicker(),
+              const SizedBox(height: 18),
+              _RowLabel(tr('Кнопки разделов', 'Section buttons'), c: c),
+              const SizedBox(height: 8),
+              const _SectionNavPicker(),
             ])),
         const SizedBox(height: 22),
         _SectionTitle(tr('Сетка', 'Grid')),
@@ -758,6 +762,56 @@ class _DensityPicker extends StatelessWidget {
           tr('как на ПК/планшете', 'desktop/tablet style'),
           Icons.space_dashboard_rounded,
           UiDensity.comfortable),
+    ]);
+  }
+}
+
+class _SectionNavPicker extends StatelessWidget {
+  const _SectionNavPicker();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AuroraTheme.of(context).colors;
+    final s = SettingsService.instance;
+    Widget chip(
+        String label, String sub, IconData icon, SectionNavPlacement v) {
+      final on = s.sectionNavPlacement == v;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => s.setSectionNavPlacement(v),
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+            decoration: BoxDecoration(
+              color: on ? c.accentSoft : c.surface2,
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(color: on ? c.accent : c.line),
+            ),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Icon(icon, size: 18, color: on ? c.accentInk : c.muted),
+              const SizedBox(height: 4),
+              Text(label,
+                  style: TextStyle(
+                      color: on ? c.accentInk : c.text,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(height: 2),
+              Text(sub,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: c.muted, fontSize: 10.5)),
+            ]),
+          ),
+        ),
+      );
+    }
+
+    return Row(children: [
+      chip(tr('Везде', 'Both'), tr('как сейчас', 'as now'),
+          Icons.space_bar_rounded, SectionNavPlacement.both),
+      chip(tr('Сбоку', 'Side'), tr('снизу на телефоне', 'bottom on phone'),
+          Icons.dock_rounded, SectionNavPlacement.side),
+      chip(tr('Сверху', 'Top'), tr('только верх', 'top only'),
+          Icons.vertical_align_top_rounded, SectionNavPlacement.top),
     ]);
   }
 }

@@ -31,6 +31,8 @@ import 'i18n.dart';
 
 enum ViewMode { all, dates, albums }
 
+enum MediaKindFilter { all, images, gifs, videos }
+
 /// Способ показа раздела «Альбомы»: сетка обложек / список / древо.
 enum FolderView { grid, list, tree }
 
@@ -47,7 +49,6 @@ class _HomePageState extends State<HomePage> {
 
   List<PhotoItem> _photos = []; // всё, что просканировано
   List<PhotoItem> _shown = []; // с учётом скрытых папок
-  List<AlbumItem> _albums = []; // альбомы из _shown
   List<String> _folders = []; // папки библиотеки (можно несколько)
   bool _loading = false;
   UpdateInfo? _update; // доступное обновление (null = нет)
@@ -58,8 +59,10 @@ class _HomePageState extends State<HomePage> {
   bool _tagsPanelOpen = false; // открыта боковая панель тегов
   bool _favOnly = false; // показывать только избранное
   bool _projectsOnly = false; // показывать только проекты (KRA/PSD)
+  MediaKindFilter _mediaFilter = MediaKindFilter.all;
   FolderView _folderView = FolderView.grid; // вид раздела «Альбомы»
   FolderNode? _treeCache; // построенное древо папок (кэш)
+  MediaKindFilter? _treeCacheFilter;
   int _tagsRev = 0; // счётчик для пересоздания панели тегов после импорта
   bool _mediaGranted = false; // на Android: есть доступ к фото устройства
   bool _allFiles =
@@ -72,6 +75,38 @@ class _HomePageState extends State<HomePage> {
     if (pref == UiDensity.comfortable) return false;
     final size = MediaQuery.sizeOf(context);
     return size.shortestSide < 600;
+  }
+
+  bool get _showTopSections {
+    final p = SettingsService.instance.sectionNavPlacement;
+    return p == SectionNavPlacement.top || p == SectionNavPlacement.both;
+  }
+
+  bool get _showSideSections {
+    final p = SettingsService.instance.sectionNavPlacement;
+    return p == SectionNavPlacement.side || p == SectionNavPlacement.both;
+  }
+
+  bool _matchesMedia(PhotoItem p) {
+    return switch (_mediaFilter) {
+      MediaKindFilter.all => true,
+      MediaKindFilter.images => !p.isVideo && !p.isGif && !p.isProject,
+      MediaKindFilter.gifs => p.isGif,
+      MediaKindFilter.videos => p.isVideo,
+    };
+  }
+
+  List<PhotoItem> get _mediaShown =>
+      _shown.where(_matchesMedia).toList(growable: false);
+
+  List<AlbumItem> get _mediaAlbums => LibraryService.albums(_mediaShown);
+
+  void _setMediaFilter(MediaKindFilter v) {
+    setState(() {
+      _mediaFilter = v;
+      _treeCache = null;
+      _treeCacheFilter = null;
+    });
   }
 
   /// Папка скрыта (сама или её родитель в списке скрытых)?
@@ -96,15 +131,15 @@ class _HomePageState extends State<HomePage> {
     } else {
       _shown = _photos.where((p) => !_isHiddenPath(p.folderPath)).toList();
     }
-    _albums = LibraryService.albums(_shown);
     _treeCache = null;
+    _treeCacheFilter = null;
     // по сети раздаём только показываемое (секретные папки не уходят)
     LanService.instance.setLibrary(_shown);
   }
 
   /// Фото с учётом поиска и фильтра «только избранное».
   List<PhotoItem> get _visiblePhotos {
-    Iterable<PhotoItem> r = _shown;
+    Iterable<PhotoItem> r = _mediaShown;
     // отдельный режим: только проекты (KRA/PSD) или, наоборот, без них
     if (_projectsOnly) {
       r = r.where((p) => p.isProject);
@@ -128,17 +163,24 @@ class _HomePageState extends State<HomePage> {
     return r.toList();
   }
 
-  FolderNode _folderTreeNode() => _treeCache ??= buildForest(_shown, _folders);
+  FolderNode _folderTreeNode() {
+    if (_treeCache == null || _treeCacheFilter != _mediaFilter) {
+      _treeCache = buildForest(_mediaShown, _folders);
+      _treeCacheFilter = _mediaFilter;
+    }
+    return _treeCache!;
+  }
 
   Widget _albumsGrid() {
     final q = _query.trim().toLowerCase();
+    final base = _mediaAlbums;
     final albums = q.isEmpty
-        ? _albums
-        : _albums.where((a) => a.name.toLowerCase().contains(q)).toList();
+        ? base
+        : base.where((a) => a.name.toLowerCase().contains(q)).toList();
     if (albums.isEmpty) return const _NoResults(favOnly: false);
     return _AlbumsView(
       albums: albums,
-      photos: _shown,
+      photos: _mediaShown,
       cell: SettingsService.instance.cellSize,
       onHideToggle: _toggleHideFolder,
     );
@@ -146,16 +188,17 @@ class _HomePageState extends State<HomePage> {
 
   Widget _albumsList() {
     final q = _query.trim().toLowerCase();
+    final base = _mediaAlbums;
     final albums = q.isEmpty
-        ? _albums
-        : _albums.where((a) => a.name.toLowerCase().contains(q)).toList();
+        ? base
+        : base.where((a) => a.name.toLowerCase().contains(q)).toList();
     if (albums.isEmpty) return const _NoResults(favOnly: false);
     return _AlbumsList(
       albums: albums,
-      photos: _shown,
+      photos: _mediaShown,
       onOpen: (a) {
         final inFolder =
-            _shown.where((p) => p.folderPath == a.folderPath).toList();
+            _mediaShown.where((p) => p.folderPath == a.folderPath).toList();
         Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => _FolderPage(
               album: a,
@@ -854,6 +897,7 @@ class _HomePageState extends State<HomePage> {
           cell: SettingsService.instance.cellSize,
           query: _query,
           compact: compact,
+          showSections: _showTopSections && !compact,
           onSearch: (q) => setState(() {
             _query = q;
             _tagMatchPaths = q.trim().isEmpty
@@ -867,10 +911,19 @@ class _HomePageState extends State<HomePage> {
           onUpdate: _startUpdate,
           onMore: _openMobileTools,
         ),
+        if (compact && _showTopSections)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 6, 10, 2),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child:
+                  _Tabs(mode: _mode, onMode: (m) => setState(() => _mode = m)),
+            ),
+          ),
         _CountBar(
           mode: _mode,
           total: _visiblePhotos.length,
-          albums: _albums.length,
+          albums: _mediaAlbums.length,
           compact: compact,
           folder: _folders.isNotEmpty
               ? (_folders.length == 1
@@ -880,6 +933,7 @@ class _HomePageState extends State<HomePage> {
                   ? tr('все фото устройства', 'all device photos')
                   : null),
         ),
+        _MediaFilterBar(value: _mediaFilter, onChanged: _setMediaFilter),
         if (_filterTags.isNotEmpty)
           _TagFilterBar(
             tags: _filterTags,
@@ -936,6 +990,7 @@ class _HomePageState extends State<HomePage> {
       children: [
         _Rail(
           mode: _mode,
+          showSections: _showSideSections,
           onMode: (m) => setState(() => _mode = m),
           favOnly: _favOnly,
           onFav: () => setState(() => _favOnly = !_favOnly),
@@ -972,6 +1027,7 @@ class _HomePageState extends State<HomePage> {
         Expanded(child: _mainColumn(c, compact: true)),
         _BottomNav(
           mode: _mode,
+          showSections: _showSideSections,
           favOnly: _favOnly,
           tagFiltered: _filterTags.isNotEmpty,
           onMode: (m) => setState(() => _mode = m),
@@ -1153,6 +1209,7 @@ class _EmptyState extends StatelessWidget {
 // ───────────────────────── боковая панель ─────────────────────────
 class _Rail extends StatelessWidget {
   final ViewMode mode;
+  final bool showSections;
   final ValueChanged<ViewMode> onMode;
   final bool favOnly;
   final VoidCallback onFav;
@@ -1166,6 +1223,7 @@ class _Rail extends StatelessWidget {
   final VoidCallback onSettings;
   const _Rail({
     required this.mode,
+    required this.showSections,
     required this.onMode,
     required this.favOnly,
     required this.onFav,
@@ -1223,9 +1281,11 @@ class _Rail extends StatelessWidget {
                 size: 18, color: Colors.white),
           ),
           const SizedBox(height: 14),
-          item(Icons.grid_view_rounded, ViewMode.all),
-          item(Icons.calendar_today_rounded, ViewMode.dates),
-          item(Icons.folder_rounded, ViewMode.albums),
+          if (showSections) ...[
+            item(Icons.grid_view_rounded, ViewMode.all),
+            item(Icons.calendar_today_rounded, ViewMode.dates),
+            item(Icons.folder_rounded, ViewMode.albums),
+          ],
           item(favOnly ? Icons.favorite_rounded : Icons.favorite_border_rounded,
               null,
               onTap: onFav, active: favOnly),
@@ -1252,6 +1312,7 @@ class _Rail extends StatelessWidget {
 // ───────────────────────── нижняя панель для телефонов ─────────────────────────
 class _BottomNav extends StatelessWidget {
   final ViewMode mode;
+  final bool showSections;
   final bool favOnly;
   final bool tagFiltered;
   final ValueChanged<ViewMode> onMode;
@@ -1260,6 +1321,7 @@ class _BottomNav extends StatelessWidget {
   final VoidCallback onMore;
   const _BottomNav({
     required this.mode,
+    required this.showSections,
     required this.favOnly,
     required this.tagFiltered,
     required this.onMode,
@@ -1299,12 +1361,14 @@ class _BottomNav extends StatelessWidget {
         border: Border(top: BorderSide(color: c.line)),
       ),
       child: Row(children: [
-        item(Icons.grid_view_rounded, tr('Все', 'All'), mode == ViewMode.all,
-            () => onMode(ViewMode.all)),
-        item(Icons.calendar_today_rounded, tr('Даты', 'Dates'),
-            mode == ViewMode.dates, () => onMode(ViewMode.dates)),
-        item(Icons.folder_rounded, tr('Альбомы', 'Albums'),
-            mode == ViewMode.albums, () => onMode(ViewMode.albums)),
+        if (showSections) ...[
+          item(Icons.grid_view_rounded, tr('Все', 'All'), mode == ViewMode.all,
+              () => onMode(ViewMode.all)),
+          item(Icons.calendar_today_rounded, tr('Даты', 'Dates'),
+              mode == ViewMode.dates, () => onMode(ViewMode.dates)),
+          item(Icons.folder_rounded, tr('Альбомы', 'Albums'),
+              mode == ViewMode.albums, () => onMode(ViewMode.albums)),
+        ],
         item(favOnly ? Icons.favorite_rounded : Icons.favorite_border_rounded,
             tr('Избр.', 'Favs'), favOnly, onFav),
         item(Icons.sell_outlined, tr('Теги', 'Tags'), tagFiltered, onTags),
@@ -1433,12 +1497,77 @@ class _SelectionBar extends StatelessWidget {
   }
 }
 
+// ───────────────────────── фильтр типа медиа ─────────────────────────
+class _MediaFilterBar extends StatelessWidget {
+  final MediaKindFilter value;
+  final ValueChanged<MediaKindFilter> onChanged;
+  const _MediaFilterBar({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AuroraTheme.of(context).colors;
+    Widget chip(String label, IconData icon, MediaKindFilter v) {
+      final on = value == v;
+      return GestureDetector(
+        onTap: () => onChanged(v),
+        child: AnimatedContainer(
+          duration: SettingsService.instance.reduceMotion
+              ? Duration.zero
+              : const Duration(milliseconds: 140),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: on ? c.surface : Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 15, color: on ? c.accentInk : c.muted),
+            const SizedBox(width: 5),
+            Text(label,
+                style: TextStyle(
+                    color: on ? c.text : c.muted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700)),
+          ]),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 5),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: c.surface2,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: c.line),
+            ),
+            child: Row(children: [
+              chip(tr('Всё', 'All'), Icons.all_inclusive_rounded,
+                  MediaKindFilter.all),
+              chip(tr('Фото', 'Images'), Icons.image_rounded,
+                  MediaKindFilter.images),
+              chip('GIF', Icons.gif_box_rounded, MediaKindFilter.gifs),
+              chip(tr('Видео', 'Video'), Icons.play_circle_outline_rounded,
+                  MediaKindFilter.videos),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ───────────────────────── верхняя панель ─────────────────────────
 class _TopBar extends StatelessWidget {
   final ViewMode mode;
   final double cell;
   final String query;
   final bool compact;
+  final bool showSections;
   final ValueChanged<String> onSearch;
   final ValueChanged<ViewMode> onMode;
   final ValueChanged<double> onCell;
@@ -1451,6 +1580,7 @@ class _TopBar extends StatelessWidget {
     required this.cell,
     required this.query,
     required this.compact,
+    required this.showSections,
     required this.onSearch,
     required this.onMode,
     required this.onCell,
@@ -1480,7 +1610,7 @@ class _TopBar extends StatelessWidget {
             tooltip: 'Папки библиотеки',
             visualDensity: compact ? VisualDensity.compact : null,
           ),
-          if (!compact) ...[
+          if (showSections) ...[
             const SizedBox(width: 4),
             _Tabs(mode: mode, onMode: onMode),
             const SizedBox(width: 8),
