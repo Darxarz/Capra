@@ -34,6 +34,9 @@ class _ViewerPageState extends State<ViewerPage> {
   late final PageController _controller;
   late int _index;
   bool _infoOpen = false; // боковая панель свёрнута по умолчанию
+  bool _zoomed = false; // текущее фото увеличено
+  bool _chrome = true; // показывать кнопки/счётчик (тап по фото переключает)
+  int _fingers = 0; // активных касаний на экране
 
   @override
   void initState() {
@@ -48,34 +51,97 @@ class _ViewerPageState extends State<ViewerPage> {
     super.dispose();
   }
 
+  // пока на экране 2+ пальца (щипок) или фото увеличено — НЕ листаем,
+  // чтобы жест зума/панорамы не превращался в перелистывание
+  void _changeFingers(int delta) {
+    final was = _fingers >= 2;
+    _fingers = (_fingers + delta).clamp(0, 10);
+    if (was != (_fingers >= 2)) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
     final photo = widget.photos[_index];
+    final locked = _zoomed || _fingers >= 2;
 
     final stage = Stack(
       children: [
         Positioned.fill(
-          child: PageView.builder(
-            controller: _controller,
-            itemCount: widget.photos.length,
-            onPageChanged: (i) => setState(() => _index = i),
-            itemBuilder: (ctx, i) => _ViewerMedia(photo: widget.photos[i]),
+          child: Listener(
+            onPointerDown: (_) => _changeFingers(1),
+            onPointerUp: (_) => _changeFingers(-1),
+            onPointerCancel: (_) => _changeFingers(-1),
+            child: PageView.builder(
+              controller: _controller,
+              physics: locked
+                  ? const NeverScrollableScrollPhysics()
+                  : const PageScrollPhysics(),
+              itemCount: widget.photos.length,
+              onPageChanged: (i) => setState(() {
+                _index = i;
+                _zoomed = false;
+              }),
+              itemBuilder: (ctx, i) {
+                final p = widget.photos[i];
+                if (p.isVideo) return _VideoPlayerPane(photo: p);
+                return _ZoomableImage(
+                  key: ValueKey(p.path),
+                  photo: p,
+                  onZoomChanged: (z) {
+                    if (i == _index && z != _zoomed) {
+                      setState(() => _zoomed = z);
+                    }
+                  },
+                  onTap: () => setState(() => _chrome = !_chrome),
+                );
+              },
+            ),
           ),
         ),
-        Positioned(
-          top: 14,
-          left: 14,
-          child:
-              _RoundBtn(icon: Icons.close, onTap: () => Navigator.pop(context)),
-        ),
-        // кнопка «инфо» — открывает/прячет выезжающую панель
-        Positioned(
-          top: 14,
-          right: 14,
-          child: _RoundBtn(
-            icon: _infoOpen ? Icons.info : Icons.info_outline,
-            onTap: () => setState(() => _infoOpen = !_infoOpen),
+        // верхние кнопки и счётчик прячутся по тапу (иммерсивный режим)
+        IgnorePointer(
+          ignoring: !_chrome,
+          child: AnimatedOpacity(
+            opacity: _chrome ? 1 : 0,
+            duration: const Duration(milliseconds: 160),
+            child: Stack(children: [
+              Positioned(
+                top: 14,
+                left: 14,
+                child: _RoundBtn(
+                    icon: Icons.close, onTap: () => Navigator.pop(context)),
+              ),
+              if (widget.photos.length > 1)
+                Positioned(
+                  top: 20,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.45),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text('${_index + 1} / ${widget.photos.length}',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                ),
+              Positioned(
+                top: 14,
+                right: 14,
+                child: _RoundBtn(
+                  icon: _infoOpen ? Icons.info : Icons.info_outline,
+                  onTap: () => setState(() => _infoOpen = !_infoOpen),
+                ),
+              ),
+            ]),
           ),
         ),
       ],
@@ -137,22 +203,97 @@ class _ViewerPageState extends State<ViewerPage> {
   }
 }
 
-class _ViewerMedia extends StatelessWidget {
+/// Зум одного фото: щипок, панорама при увеличении и двойной тап для быстрого
+/// зума в точку касания. Сообщает наружу, увеличено ли фото (чтобы родитель
+/// заблокировал перелистывание).
+class _ZoomableImage extends StatefulWidget {
   final PhotoItem photo;
-  const _ViewerMedia({required this.photo});
+  final ValueChanged<bool> onZoomChanged;
+  final VoidCallback onTap;
+  const _ZoomableImage(
+      {super.key,
+      required this.photo,
+      required this.onZoomChanged,
+      required this.onTap});
+
+  @override
+  State<_ZoomableImage> createState() => _ZoomableImageState();
+}
+
+class _ZoomableImageState extends State<_ZoomableImage>
+    with SingleTickerProviderStateMixin {
+  final _tc = TransformationController();
+  late final AnimationController _anim;
+  Animation<Matrix4>? _animation;
+  Offset _tapPos = Offset.zero;
+  bool _zoomed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final fast = SettingsService.instance.reduceMotion;
+    _anim = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: fast ? 0 : 220),
+    )..addListener(() {
+        final a = _animation;
+        if (a != null) _tc.value = a.value;
+      });
+    _tc.addListener(_onMatrixChanged);
+  }
+
+  void _onMatrixChanged() {
+    final z = _tc.value.getMaxScaleOnAxis() > 1.02;
+    if (z != _zoomed) {
+      _zoomed = z;
+      widget.onZoomChanged(z);
+    }
+  }
+
+  void _animateTo(Matrix4 target) {
+    _animation = Matrix4Tween(begin: _tc.value, end: target)
+        .animate(CurvedAnimation(parent: _anim, curve: Curves.easeOutCubic));
+    _anim.forward(from: 0);
+  }
+
+  void _handleDoubleTap() {
+    if (_tc.value.getMaxScaleOnAxis() > 1.02) {
+      _animateTo(Matrix4.identity()); // уже увеличено — сбрасываем
+    } else {
+      const scale = 2.8;
+      // масштаб вокруг точки касания: M·v = scale·v + смещение
+      _animateTo(Matrix4.identity()
+        ..setEntry(0, 0, scale)
+        ..setEntry(1, 1, scale)
+        ..setEntry(0, 3, -_tapPos.dx * (scale - 1))
+        ..setEntry(1, 3, -_tapPos.dy * (scale - 1)));
+    }
+  }
+
+  @override
+  void dispose() {
+    _anim.dispose();
+    _tc.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (photo.isVideo) return _VideoPlayerPane(photo: photo);
-    return InteractiveViewer(
-      minScale: 1,
-      maxScale: 5,
-      child: Center(
-        child: Image(
-          image: photo.full,
-          fit: BoxFit.contain,
-          errorBuilder: (c2, e, s) => const Icon(Icons.broken_image_outlined,
-              color: Colors.white54, size: 48),
+    return GestureDetector(
+      onTap: widget.onTap,
+      onDoubleTapDown: (d) => _tapPos = d.localPosition,
+      onDoubleTap: _handleDoubleTap,
+      child: InteractiveViewer(
+        transformationController: _tc,
+        minScale: 1,
+        maxScale: 6,
+        child: Center(
+          child: Image(
+            image: widget.photo.full,
+            fit: BoxFit.contain,
+            errorBuilder: (c2, e, s) => const Icon(Icons.broken_image_outlined,
+                color: Colors.white54, size: 48),
+          ),
         ),
       ),
     );
