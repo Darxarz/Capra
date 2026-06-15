@@ -110,7 +110,9 @@ class _ViewerPageState extends State<ViewerPage> {
                 top: 14,
                 left: 14,
                 child: _RoundBtn(
-                    icon: Icons.close, onTap: () => Navigator.pop(context)),
+                    icon: Icons.close,
+                    tip: tr('Закрыть', 'Close', 'Cerrar'),
+                    onTap: () => Navigator.pop(context)),
               ),
               if (widget.photos.length > 1)
                 Positioned(
@@ -138,6 +140,7 @@ class _ViewerPageState extends State<ViewerPage> {
                 right: 14,
                 child: _RoundBtn(
                   icon: _infoOpen ? Icons.info : Icons.info_outline,
+                  tip: tr('Сведения', 'Info', 'Información'),
                   onTap: () => setState(() => _infoOpen = !_infoOpen),
                 ),
               ),
@@ -365,7 +368,8 @@ class _VideoPlayerPaneState extends State<_VideoPlayerPane> {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(28),
-          child: Text('Не удалось открыть видео\n$_error',
+          child: Text(
+              '${tr('Не удалось открыть видео', 'Could not open video', 'No se pudo abrir el vídeo')}\n$_error',
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white70, fontSize: 13)),
         ),
@@ -388,11 +392,12 @@ class _VideoPlayerPaneState extends State<_VideoPlayerPane> {
 class _RoundBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
-  const _RoundBtn({required this.icon, required this.onTap});
+  final String? tip;
+  const _RoundBtn({required this.icon, required this.onTap, this.tip});
 
   @override
   Widget build(BuildContext context) {
-    return Material(
+    final btn = Material(
       color: Colors.white24,
       shape: const CircleBorder(),
       child: InkWell(
@@ -405,6 +410,7 @@ class _RoundBtn extends StatelessWidget {
         ),
       ),
     );
+    return tip == null ? btn : Tooltip(message: tip, child: btn);
   }
 }
 
@@ -492,9 +498,11 @@ class _InfoPanel extends StatelessWidget {
             ),
             onPressed: () => MediaActions.openInEditor(context, photo),
             icon: const Icon(Icons.open_in_new_rounded),
-            label: Text(
-                'Открыть ${photo.extension.replaceFirst('.', '').toUpperCase()} '
-                'в редакторе'),
+            label: Text(() {
+              final ext = photo.extension.replaceFirst('.', '').toUpperCase();
+              return tr('Открыть $ext в редакторе', 'Open $ext in editor',
+                  'Abrir $ext en el editor');
+            }()),
           ),
         ],
         // «Открыть в…» — найденные в системе редакторы (ПК)
@@ -512,22 +520,27 @@ class _InfoPanel extends StatelessWidget {
             return Row(children: [
               action(
                 fav ? Icons.favorite : Icons.favorite_border,
-                fav ? 'В избранном' : 'В избранное',
+                fav
+                    ? tr('В избранном', 'Favorited', 'En favoritos')
+                    : tr('В избранное', 'Favorite', 'A favoritos'),
                 onTap: () => Favorites.instance.toggle(photo.path),
                 active: fav,
               ),
-              action(Icons.folder_outlined, 'В альбом'),
-              action(Icons.ios_share, 'Поделиться'),
+              action(Icons.folder_outlined,
+                  tr('В альбом', 'To album', 'Al álbum')),
+              action(Icons.ios_share, tr('Поделиться', 'Share', 'Compartir'),
+                  onTap: () => MediaActions.share([photo])),
             ]);
           },
         ),
         const SizedBox(height: 22),
         Divider(color: c.line, height: 1),
-        row('Размер', prettySize(photo.sizeBytes)),
+        row(tr('Размер', 'Size', 'Tamaño'), prettySize(photo.sizeBytes)),
         Divider(color: c.line, height: 1),
-        row('Папка', photo.folderName),
+        row(tr('Папка', 'Folder', 'Carpeta'), photo.folderName),
         const SizedBox(height: 16),
-        Text('Путь', style: TextStyle(color: c.muted, fontSize: 13)),
+        Text(tr('Путь', 'Path', 'Ruta'),
+            style: TextStyle(color: c.muted, fontSize: 13)),
         const SizedBox(height: 4),
         SelectableText(photo.path,
             style: TextStyle(color: c.text, fontSize: 12)),
@@ -616,7 +629,9 @@ class _OpenInRowState extends State<_OpenInRow> {
               () => EditorService.openWithDialog(path)),
       ]),
       if (_apps.isEmpty && !Platform.isWindows)
-        Text('Редакторы не найдены.',
+        Text(
+            tr('Редакторы не найдены.', 'No editors found.',
+                'No se encontraron editores.'),
             style: TextStyle(color: c.muted, fontSize: 12)),
     ]);
   }
@@ -669,13 +684,15 @@ class _MetaSectionState extends State<_MetaSection> {
             height: 13,
             child: CircularProgressIndicator(strokeWidth: 2, color: c.muted)),
         const SizedBox(width: 8),
-        Text('Читаю метаданные…',
+        Text(tr('Читаю метаданные…', 'Reading metadata…', 'Leyendo metadatos…'),
             style: TextStyle(color: c.muted, fontSize: 12)),
       ]);
     }
     final m = _meta;
     if (m == null || !m.hasAnything) {
-      return Text('Метаданные не найдены.',
+      return Text(
+          tr('Метаданные не найдены.', 'No metadata found.',
+              'No se encontraron metadatos.'),
           style: TextStyle(color: c.muted, fontSize: 12));
     }
 
@@ -726,7 +743,11 @@ class _MetaSectionState extends State<_MetaSection> {
         Icon(m.isAi ? Icons.auto_awesome : Icons.info_outline,
             size: 16, color: c.accent),
         const SizedBox(width: 6),
-        Text(m.isAi ? 'Параметры генерации' : 'Метаданные',
+        Text(
+            m.isAi
+                ? tr('Параметры генерации', 'Generation parameters',
+                    'Parámetros de generación')
+                : tr('Метаданные', 'Metadata', 'Metadatos'),
             style: TextStyle(
                 color: c.text, fontSize: 14, fontWeight: FontWeight.w700)),
         if (m.aiTool != null) ...[
@@ -748,7 +769,8 @@ class _MetaSectionState extends State<_MetaSection> {
     ];
 
     if (m.width != null && m.height != null) {
-      children.add(kv('Разрешение', '${m.width}×${m.height}'));
+      children.add(kv(tr('Разрешение', 'Resolution', 'Resolución'),
+          '${m.width}×${m.height}'));
     }
     if (m.prompt != null && m.prompt!.isNotEmpty) {
       children.add(promptBox('PROMPT', m.prompt!, c.surface2));
@@ -812,20 +834,29 @@ class _TagsSectionState extends State<_TagsSection> {
         context: context,
         builder: (ctx) => AlertDialog(
           backgroundColor: c.surface,
-          title: Text('Скачать ИИ-модель?', style: TextStyle(color: c.text)),
+          title: Text(
+              tr('Скачать ИИ-модель?', 'Download AI model?',
+                  '¿Descargar el modelo de IA?'),
+              style: TextStyle(color: c.text)),
           content: Text(
-            'Для авто-тегирования нужна модель WD (danbooru/аниме/арт), '
-            '~380 МБ. Скачивается один раз, дальше работает офлайн.',
+            tr(
+                'Для авто-тегирования нужна модель WD (danbooru/аниме/арт), '
+                    '~380 МБ. Скачивается один раз, дальше работает офлайн.',
+                'Auto-tagging needs the WD model (danbooru/anime/art), '
+                    '~380 MB. Downloaded once, then works offline.',
+                'El auto-etiquetado necesita el modelo WD (danbooru/anime/arte), '
+                    '~380 MB. Se descarga una vez y luego funciona sin conexión.'),
             style: TextStyle(color: c.muted),
           ),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: Text('Отмена', style: TextStyle(color: c.muted))),
+                child: Text(tr('Отмена', 'Cancel', 'Cancelar'),
+                    style: TextStyle(color: c.muted))),
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: c.accent),
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Скачать'),
+              child: Text(tr('Скачать', 'Download', 'Descargar')),
             ),
           ],
         ),
@@ -833,7 +864,8 @@ class _TagsSectionState extends State<_TagsSection> {
       if (ok != true) return;
       setState(() {
         _busy = true;
-        _busyText = 'Скачивание модели…';
+        _busyText =
+            tr('Скачивание модели…', 'Downloading model…', 'Descargando modelo…');
         _busyProgress = 0;
       });
       try {
@@ -842,20 +874,21 @@ class _TagsSectionState extends State<_TagsSection> {
         });
       } catch (e) {
         if (mounted) setState(() => _busy = false);
-        _snack('Не удалось скачать модель: $e');
+        _snack(tr('Не удалось скачать модель', 'Could not download model',
+            'No se pudo descargar el modelo'));
         return;
       }
     }
     setState(() {
       _busy = true;
-      _busyText = 'Распознаю…';
+      _busyText = tr('Распознаю…', 'Recognizing…', 'Reconociendo…');
       _busyProgress = null;
     });
     try {
       final n = await tagger.tagAndStore(widget.photo.path);
-      _snack('Добавлено тегов: $n');
+      _snack(tr('Добавлено тегов: $n', 'Tags added: $n', 'Etiquetas añadidas: $n'));
     } catch (e) {
-      _snack('Ошибка тегирования: $e');
+      _snack(tr('Ошибка тегирования', 'Tagging error', 'Error de etiquetado'));
     }
     if (mounted) {
       setState(() => _busy = false);
@@ -900,7 +933,7 @@ class _TagsSectionState extends State<_TagsSection> {
         Row(children: [
           Icon(Icons.sell_outlined, size: 16, color: c.muted),
           const SizedBox(width: 6),
-          Text('Теги',
+          Text(tr('Теги', 'Tags', 'Etiquetas'),
               style: TextStyle(
                   color: c.text, fontSize: 14, fontWeight: FontWeight.w700)),
           const Spacer(),
@@ -914,11 +947,11 @@ class _TagsSectionState extends State<_TagsSection> {
                   color: c.accent,
                   borderRadius: BorderRadius.circular(9),
                 ),
-                child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.auto_awesome, size: 15, color: Colors.white),
-                  SizedBox(width: 6),
-                  Text('Тегировать',
-                      style: TextStyle(
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.auto_awesome, size: 15, color: Colors.white),
+                  const SizedBox(width: 6),
+                  Text(tr('Тегировать', 'Auto-tag', 'Auto-etiquetar'),
+                      style: const TextStyle(
                           color: Colors.white,
                           fontSize: 12.5,
                           fontWeight: FontWeight.w600)),
@@ -951,7 +984,11 @@ class _TagsSectionState extends State<_TagsSection> {
         ],
         const SizedBox(height: 10),
         if (_tags.isEmpty)
-          Text('Пока нет тегов. Добавь вручную или запусти авто-тегирование.',
+          Text(
+              tr(
+                  'Пока нет тегов. Добавь вручную или запусти авто-тегирование.',
+                  'No tags yet. Add manually or run auto-tagging.',
+                  'Aún no hay etiquetas. Añade manualmente o usa el auto-etiquetado.'),
               style: TextStyle(color: c.muted, fontSize: 12))
         else
           Wrap(
@@ -995,7 +1032,7 @@ class _TagsSectionState extends State<_TagsSection> {
                 decoration: InputDecoration(
                   isDense: true,
                   border: InputBorder.none,
-                  hintText: 'Добавить тег…',
+                  hintText: tr('Добавить тег…', 'Add a tag…', 'Añadir etiqueta…'),
                   hintStyle: TextStyle(color: c.muted, fontSize: 13),
                 ),
               ),

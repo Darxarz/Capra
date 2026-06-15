@@ -1241,9 +1241,9 @@ class _Rail extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
     Widget item(IconData icon, ViewMode? m,
-        {VoidCallback? onTap, bool active = false}) {
+        {VoidCallback? onTap, bool active = false, String? tip}) {
       final on = active || (m != null && m == mode);
-      return Padding(
+      final btn = Padding(
         padding: const EdgeInsets.symmetric(vertical: 3),
         child: Material(
           color: on ? c.accentSoft : Colors.transparent,
@@ -1259,6 +1259,8 @@ class _Rail extends StatelessWidget {
           ),
         ),
       );
+      if (tip == null) return btn;
+      return Tooltip(message: tip, child: btn);
     }
 
     return Container(
@@ -1282,26 +1284,44 @@ class _Rail extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           if (showSections) ...[
-            item(Icons.grid_view_rounded, ViewMode.all),
-            item(Icons.calendar_today_rounded, ViewMode.dates),
-            item(Icons.folder_rounded, ViewMode.albums),
+            item(Icons.grid_view_rounded, ViewMode.all,
+                tip: tr('Все', 'All', 'Todo')),
+            item(Icons.calendar_today_rounded, ViewMode.dates,
+                tip: tr('По датам', 'By date', 'Por fecha')),
+            item(Icons.folder_rounded, ViewMode.albums,
+                tip: tr('Альбомы', 'Albums', 'Álbumes')),
           ],
           item(favOnly ? Icons.favorite_rounded : Icons.favorite_border_rounded,
               null,
-              onTap: onFav, active: favOnly),
+              onTap: onFav,
+              active: favOnly,
+              tip: tr('Избранное', 'Favorites', 'Favoritos')),
           item(Icons.brush_outlined, null,
-              onTap: onProjects, active: projectsOnly),
-          item(Icons.sell_outlined, null, onTap: onTags, active: tagsOpen),
-          item(Icons.content_copy_outlined, null, onTap: onDedup),
+              onTap: onProjects,
+              active: projectsOnly,
+              tip: tr('Проекты (KRA/PSD)', 'Projects (KRA/PSD)',
+                  'Proyectos (KRA/PSD)')),
+          item(Icons.sell_outlined, null,
+              onTap: onTags,
+              active: tagsOpen,
+              tip: tr('Теги', 'Tags', 'Etiquetas')),
+          item(Icons.content_copy_outlined, null,
+              onTap: onDedup,
+              tip: tr('Дубликаты', 'Duplicates', 'Duplicados')),
           // активная подсветка, пока раздаём по сети
           AnimatedBuilder(
             animation: LanService.instance,
             builder: (_, __) => item(Icons.wifi_tethering_rounded, null,
-                onTap: onLan, active: LanService.instance.isRunning),
+                onTap: onLan,
+                active: LanService.instance.isRunning,
+                tip: tr('Локальная сеть', 'Local network', 'Red local')),
           ),
-          item(Icons.delete_outline_rounded, null, onTap: onTrash),
+          item(Icons.delete_outline_rounded, null,
+              onTap: onTrash, tip: tr('Корзина', 'Trash', 'Papelera')),
           const Spacer(),
-          item(Icons.settings_outlined, null, onTap: onSettings),
+          item(Icons.settings_outlined, null,
+              onTap: onSettings,
+              tip: tr('Настройки', 'Settings', 'Ajustes')),
           const SizedBox(height: 10),
         ],
       ),

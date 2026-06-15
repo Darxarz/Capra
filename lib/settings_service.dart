@@ -14,7 +14,7 @@ enum GridLayout { square, mosaic }
 enum GapStyle { none, color, silver, gold, holographic, polaroid }
 
 /// Язык интерфейса.
-enum AppLang { system, ru, en }
+enum AppLang { system, ru, en, es }
 
 /// Плотность основного интерфейса: авто выбирает компактный вид на телефонах.
 enum UiDensity { auto, compact, comfortable }

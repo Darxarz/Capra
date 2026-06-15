@@ -699,9 +699,11 @@ class _LangPicker extends StatelessWidget {
     }
 
     return Row(children: [
-      chip(tr('Система', 'System'), Icons.translate_rounded, AppLang.system),
+      chip(tr('Система', 'System', 'Sistema'), Icons.translate_rounded,
+          AppLang.system),
       chip('Русский', Icons.abc, AppLang.ru),
       chip('English', Icons.abc, AppLang.en),
+      chip('Español', Icons.abc, AppLang.es),
     ]);
   }
 }
