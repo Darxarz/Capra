@@ -4,15 +4,38 @@ import 'preview_service.dart';
 
 /// Расширения, которые считаем изображениями.
 const Set<String> kImageExtensions = {
-  '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.jfif'
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.gif',
+  '.webp',
+  '.bmp',
+  '.jfif'
+};
+
+/// Расширения, которые считаем видео.
+const Set<String> kVideoExtensions = {
+  '.mp4',
+  '.m4v',
+  '.mov',
+  '.webm',
+  '.mkv',
+  '.avi',
+  '.wmv',
+  '.3gp',
+  '.3gpp',
 };
 
 /// «Проектные» форматы редакторов: показываем встроенное превью, открываем
 /// в соответствующем редакторе.
 const Set<String> kProjectExtensions = {'.kra', '.psd'};
 
-/// Всё, что собираем при сканировании (картинки + проекты).
-const Set<String> kScanExtensions = {...kImageExtensions, ...kProjectExtensions};
+/// Всё, что собираем при сканировании (картинки + видео + проекты).
+const Set<String> kScanExtensions = {
+  ...kImageExtensions,
+  ...kVideoExtensions,
+  ...kProjectExtensions,
+};
 
 /// Одно изображение. Обычно — файл на диске; но может быть и удалённым,
 /// если получено с другого устройства по локальной сети (тогда заданы
@@ -20,11 +43,13 @@ const Set<String> kScanExtensions = {...kImageExtensions, ...kProjectExtensions}
 class PhotoItem {
   final String path; // полный путь к файлу (для удалённого — имя файла)
   final bool isGif;
+  final bool isVideo;
   final String folderPath; // путь к папке-родителю
   final String folderName; // имя папки
   final DateTime modified;
   final int sizeBytes;
-  final String? assetId; // id в MediaStore (Android) — для удаления через систему
+  final String?
+      assetId; // id в MediaStore (Android) — для удаления через систему
 
   // ── удалённое фото (по локальной сети) ──
   final String? remoteBase; // напр. "http://192.168.1.5:8787"
@@ -34,6 +59,7 @@ class PhotoItem {
   const PhotoItem({
     required this.path,
     required this.isGif,
+    this.isVideo = false,
     required this.folderPath,
     required this.folderName,
     required this.modified,
@@ -108,8 +134,18 @@ class AlbumItem {
 }
 
 const List<String> _months = [
-  'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'
+  'января',
+  'февраля',
+  'марта',
+  'апреля',
+  'мая',
+  'июня',
+  'июля',
+  'августа',
+  'сентября',
+  'октября',
+  'ноября',
+  'декабря'
 ];
 
 String _two(int n) => n < 10 ? '0$n' : '$n';
@@ -131,7 +167,9 @@ String prettyDate(DateTime d) =>
     '${d.day} ${_months[d.month - 1]} ${d.year}, ${_two(d.hour)}:${_two(d.minute)}';
 
 String prettySize(int bytes) {
-  if (bytes >= 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} МБ';
+  if (bytes >= 1024 * 1024) {
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} МБ';
+  }
   if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(0)} КБ';
   return '$bytes Б';
 }

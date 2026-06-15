@@ -168,8 +168,8 @@ class LanService extends ChangeNotifier {
       _failCount = 0;
       // запоминаем устройство и выдаём ему ПОСТОЯННЫЙ токен — больше PIN
       // не понадобится: при следующих подключениях входит сразу по токену
-      final tc = LanStore.instance
-          .trustClient(clientId, clientName ?? 'Устройство');
+      final tc =
+          LanStore.instance.trustClient(clientId, clientName ?? 'Устройство');
       notifyListeners(); // обновить список доверенных в UI
       _json(res, {
         'token': tc.token,
@@ -199,6 +199,7 @@ class LanService extends ChangeNotifier {
         'name': ph.fileName,
         'folder': ph.folderName,
         'gif': ph.isGif,
+        'video': ph.isVideo,
         'size': ph.sizeBytes,
         'mtime': ph.modified.millisecondsSinceEpoch,
       });
@@ -215,6 +216,11 @@ class LanService extends ChangeNotifier {
   Future<void> _handleThumb(HttpResponse res, Map<String, String> q) async {
     final ph = _byId(q['id']);
     if (ph == null) {
+      res.statusCode = HttpStatus.notFound;
+      await res.close();
+      return;
+    }
+    if (ph.isVideo) {
       res.statusCode = HttpStatus.notFound;
       await res.close();
       return;
@@ -295,6 +301,13 @@ class LanService extends ChangeNotifier {
     if (lower.endsWith('.gif')) return ContentType('image', 'gif');
     if (lower.endsWith('.webp')) return ContentType('image', 'webp');
     if (lower.endsWith('.bmp')) return ContentType('image', 'bmp');
+    if (lower.endsWith('.mp4') || lower.endsWith('.m4v')) {
+      return ContentType('video', 'mp4');
+    }
+    if (lower.endsWith('.mov')) return ContentType('video', 'quicktime');
+    if (lower.endsWith('.webm')) return ContentType('video', 'webm');
+    if (lower.endsWith('.mkv')) return ContentType('video', 'x-matroska');
+    if (lower.endsWith('.avi')) return ContentType('video', 'x-msvideo');
     return ContentType('image', 'jpeg');
   }
 

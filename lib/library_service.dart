@@ -64,12 +64,12 @@ class LibraryService {
     return res;
   }
 
-  /// Все изображения устройства через MediaStore (как в обычных галереях):
+  /// Все изображения и видео устройства через MediaStore (как в обычных галереях):
   /// без выбора папок и без доступа ко всем файлам. Внутренняя память + SD.
   static Future<List<PhotoItem>> scanDeviceMedia() async {
     final albums = await PhotoManager.getAssetPathList(
       onlyAll: true,
-      type: RequestType.image,
+      type: RequestType.common,
     ).timeout(const Duration(seconds: 20), onTimeout: () => const []);
     if (albums.isEmpty) return const [];
     final all = albums.first;
@@ -220,6 +220,11 @@ Future<File?> _assetFileFast(AssetEntity a) async {
   }
 }
 
+String _extensionOf(String lowerPath) {
+  final dot = lowerPath.lastIndexOf('.');
+  return dot < 0 ? '' : lowerPath.substring(dot);
+}
+
 PhotoItem _makePhoto(String path, int size, int mtimeMs, {String? assetId}) {
   const sep = '/';
   final cut = path.lastIndexOf(sep);
@@ -229,6 +234,7 @@ PhotoItem _makePhoto(String path, int size, int mtimeMs, {String? assetId}) {
   return PhotoItem(
     path: path,
     isGif: lower.endsWith('.gif'),
+    isVideo: kVideoExtensions.contains(_extensionOf(lower)),
     folderPath: folderPath,
     folderName: segs.isNotEmpty ? segs.last : folderPath,
     modified: DateTime.fromMillisecondsSinceEpoch(mtimeMs),
@@ -348,8 +354,9 @@ List<PhotoItem> _scanWholePc(PcScanConfig cfg) {
         // 1) отсев по размеру файла — иконки крошечные
         if (st.size < cfg.minBytes) continue;
         // 2) отсев по размеру в пикселях (читаем только заголовок).
-        //    проекты (KRA/PSD) не трогаем — у них нет обычного заголовка.
-        if (!kProjectExtensions.contains(ext)) {
+        //    проекты и видео не трогаем — у них нет обычного заголовка картинки.
+        if (!kProjectExtensions.contains(ext) &&
+            !kVideoExtensions.contains(ext)) {
           final dims = _quickDims(ent);
           if (dims != null && (dims[0] < cfg.minDim || dims[1] < cfg.minDim)) {
             continue;
@@ -360,6 +367,7 @@ List<PhotoItem> _scanWholePc(PcScanConfig cfg) {
         out.add(PhotoItem(
           path: ent.path,
           isGif: lower.endsWith('.gif'),
+          isVideo: kVideoExtensions.contains(ext),
           folderPath: folderPath,
           folderName: segs.isNotEmpty ? segs.last : folderPath,
           modified: st.modified,
@@ -480,6 +488,7 @@ Future<List<PhotoItem>> _scanFolder(String root) async {
       out.add(PhotoItem(
         path: ent.path,
         isGif: lower.endsWith('.gif'),
+        isVideo: kVideoExtensions.contains(lower.substring(dot)),
         folderPath: folderPath,
         folderName: segs.isNotEmpty ? segs.last : folderPath,
         modified: st.modified,

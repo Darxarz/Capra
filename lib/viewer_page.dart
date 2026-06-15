@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 import 'theme.dart';
 import 'model.dart';
 import 'editor_service.dart';
@@ -21,7 +23,8 @@ void openViewer(BuildContext context, List<PhotoItem> photos, int index) {
 class ViewerPage extends StatefulWidget {
   final List<PhotoItem> photos;
   final int initialIndex;
-  const ViewerPage({super.key, required this.photos, required this.initialIndex});
+  const ViewerPage(
+      {super.key, required this.photos, required this.initialIndex});
 
   @override
   State<ViewerPage> createState() => _ViewerPageState();
@@ -57,24 +60,14 @@ class _ViewerPageState extends State<ViewerPage> {
             controller: _controller,
             itemCount: widget.photos.length,
             onPageChanged: (i) => setState(() => _index = i),
-            itemBuilder: (ctx, i) => InteractiveViewer(
-              minScale: 1,
-              maxScale: 5,
-              child: Center(
-                child: Image(
-                  image: widget.photos[i].full,
-                  fit: BoxFit.contain,
-                  errorBuilder: (c2, e, s) =>
-                      const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
-                ),
-              ),
-            ),
+            itemBuilder: (ctx, i) => _ViewerMedia(photo: widget.photos[i]),
           ),
         ),
         Positioned(
           top: 14,
           left: 14,
-          child: _RoundBtn(icon: Icons.close, onTap: () => Navigator.pop(context)),
+          child:
+              _RoundBtn(icon: Icons.close, onTap: () => Navigator.pop(context)),
         ),
         // кнопка «инфо» — открывает/прячет выезжающую панель
         Positioned(
@@ -134,12 +127,118 @@ class _ViewerPageState extends State<ViewerPage> {
                 child: ClipRRect(
                   borderRadius:
                       const BorderRadius.vertical(top: Radius.circular(20)),
-                  child: _InfoPanel(
-                      photo: photo, colors: c, showHandle: true),
+                  child: _InfoPanel(photo: photo, colors: c, showHandle: true),
                 ),
               ),
           ]);
         }),
+      ),
+    );
+  }
+}
+
+class _ViewerMedia extends StatelessWidget {
+  final PhotoItem photo;
+  const _ViewerMedia({required this.photo});
+
+  @override
+  Widget build(BuildContext context) {
+    if (photo.isVideo) return _VideoPlayerPane(photo: photo);
+    return InteractiveViewer(
+      minScale: 1,
+      maxScale: 5,
+      child: Center(
+        child: Image(
+          image: photo.full,
+          fit: BoxFit.contain,
+          errorBuilder: (c2, e, s) => const Icon(Icons.broken_image_outlined,
+              color: Colors.white54, size: 48),
+        ),
+      ),
+    );
+  }
+}
+
+class _VideoPlayerPane extends StatefulWidget {
+  final PhotoItem photo;
+  const _VideoPlayerPane({required this.photo});
+
+  @override
+  State<_VideoPlayerPane> createState() => _VideoPlayerPaneState();
+}
+
+class _VideoPlayerPaneState extends State<_VideoPlayerPane> {
+  Player? _player;
+  VideoController? _controller;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(_VideoPlayerPane old) {
+    super.didUpdateWidget(old);
+    if (old.photo.path != widget.photo.path) _load();
+  }
+
+  Future<void> _load() async {
+    final old = _player;
+    _player = null;
+    _controller = null;
+    _error = null;
+    await old?.dispose();
+    final player = Player();
+    final controller = VideoController(player);
+    final source = widget.photo.isRemote
+        ? '${widget.photo.remoteBase}/file?token=${widget.photo.remoteToken}&id=${widget.photo.remoteId}'
+        : widget.photo.path;
+    try {
+      await player.open(Media(source), play: false);
+      if (!mounted) {
+        await player.dispose();
+        return;
+      }
+      setState(() {
+        _player = player;
+        _controller = controller;
+      });
+    } catch (e) {
+      await player.dispose();
+      if (mounted) setState(() => _error = '$e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _player?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ctl = _controller;
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Text('Не удалось открыть видео\n$_error',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70, fontSize: 13)),
+        ),
+      );
+    }
+    if (ctl == null) {
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.white70),
+      );
+    }
+    return Center(
+      child: Video(
+        controller: ctl,
+        controls: AdaptiveVideoControls,
       ),
     );
   }
@@ -180,13 +279,17 @@ class _InfoPanel extends StatelessWidget {
     final c = colors;
     Widget row(String k, String v) => Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          child:
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             Text(k, style: TextStyle(color: c.muted, fontSize: 13)),
             const SizedBox(width: 12),
             Flexible(
               child: Text(v,
                   textAlign: TextAlign.right,
-                  style: TextStyle(color: c.text, fontSize: 13, fontWeight: FontWeight.w600)),
+                  style: TextStyle(
+                      color: c.text,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600)),
             ),
           ]),
         );
@@ -234,9 +337,11 @@ class _InfoPanel extends StatelessWidget {
             ),
           ),
         Text(photo.fileName,
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: c.text)),
+            style: TextStyle(
+                fontSize: 17, fontWeight: FontWeight.w800, color: c.text)),
         const SizedBox(height: 4),
-        Text(prettyDate(photo.modified), style: TextStyle(fontSize: 13, color: c.muted)),
+        Text(prettyDate(photo.modified),
+            style: TextStyle(fontSize: 13, color: c.muted)),
         if (photo.isProject) ...[
           const SizedBox(height: 14),
           FilledButton.icon(
@@ -246,7 +351,8 @@ class _InfoPanel extends StatelessWidget {
             ),
             onPressed: () => MediaActions.openInEditor(context, photo),
             icon: const Icon(Icons.open_in_new_rounded),
-            label: Text('Открыть ${photo.extension.replaceFirst('.', '').toUpperCase()} '
+            label: Text(
+                'Открыть ${photo.extension.replaceFirst('.', '').toUpperCase()} '
                 'в редакторе'),
           ),
         ],
@@ -361,7 +467,10 @@ class _OpenInRowState extends State<_OpenInRow> {
           _chip(null, app.badge, app.name, app.color,
               () => EditorService.openIn(app, path)),
         if (Platform.isWindows)
-          _chip(Icons.more_horiz_rounded, null, tr('Другое…', 'Other…'),
+          _chip(
+              Icons.more_horiz_rounded,
+              null,
+              tr('Другое…', 'Other…'),
               const Color(0xFF6B7280),
               () => EditorService.openWithDialog(path)),
       ]),
@@ -457,7 +566,8 @@ class _MetaSectionState extends State<_MetaSection> {
             borderRadius: BorderRadius.circular(11),
             border: Border.all(color: c.line),
           ),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(label,
                 style: TextStyle(
                     color: c.muted,
@@ -518,7 +628,8 @@ class _MetaSectionState extends State<_MetaSection> {
       }
     }
 
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: children);
+    return Column(
+        crossAxisAlignment: CrossAxisAlignment.start, children: children);
   }
 }
 
@@ -652,11 +763,12 @@ class _TagsSectionState extends State<_TagsSection> {
               style: TextStyle(
                   color: c.text, fontSize: 14, fontWeight: FontWeight.w700)),
           const Spacer(),
-          if (!_busy)
+          if (!_busy && !widget.photo.isVideo)
             GestureDetector(
               onTap: _autoTag,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
                 decoration: BoxDecoration(
                   color: c.accent,
                   borderRadius: BorderRadius.circular(9),
@@ -691,7 +803,9 @@ class _TagsSectionState extends State<_TagsSection> {
           if (_busyProgress != null) ...[
             const SizedBox(height: 6),
             LinearProgressIndicator(
-                value: _busyProgress, color: c.accent, backgroundColor: c.surface2),
+                value: _busyProgress,
+                color: c.accent,
+                backgroundColor: c.surface2),
           ],
         ],
         const SizedBox(height: 10),

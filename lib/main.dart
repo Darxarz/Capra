@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:media_kit/media_kit.dart';
 import 'theme.dart';
 import 'home_page.dart';
 import 'favorites.dart';
@@ -8,6 +9,7 @@ import 'lan_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  MediaKit.ensureInitialized();
   await Favorites.instance.load();
   await SettingsService.instance.load();
   await LanStore.instance.load();

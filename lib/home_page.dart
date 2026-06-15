@@ -2042,32 +2042,34 @@ class PhotoTile extends StatelessWidget {
               fit: StackFit.expand,
               children: [
                 Container(color: c.surface2),
-                Image(
-                  image: photo.thumb(cacheWidth),
-                  fit: s.squareThumbs ? BoxFit.cover : BoxFit.contain,
-                  gaplessPlayback: true,
-                  filterQuality: FilterQuality.low,
-                  frameBuilder: (ctx, child, frame, wasSync) {
-                    if (wasSync || frame != null) return child;
-                    return Container(color: c.surface2);
-                  },
-                  errorBuilder: (ctx, e, s) => Icon(Icons.broken_image_outlined,
-                      color: c.muted, size: 18),
-                ),
-                if (photo.isGif && s.showGifBadge)
-                  Positioned(
+                if (photo.isVideo)
+                  _VideoTileFace(colors: c)
+                else
+                  Image(
+                    image: photo.thumb(cacheWidth),
+                    fit: s.squareThumbs ? BoxFit.cover : BoxFit.contain,
+                    gaplessPlayback: true,
+                    filterQuality: FilterQuality.low,
+                    frameBuilder: (ctx, child, frame, wasSync) {
+                      if (wasSync || frame != null) return child;
+                      return Container(color: c.surface2);
+                    },
+                    errorBuilder: (ctx, e, s) => Icon(
+                        Icons.broken_image_outlined,
+                        color: c.muted,
+                        size: 18),
+                  ),
+                if (photo.isVideo)
+                  const Positioned(
                     right: 5,
                     bottom: 5,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Text('GIF',
-                          style: TextStyle(color: Colors.white, fontSize: 10)),
-                    ),
+                    child: _MediaBadge(label: 'VIDEO'),
+                  ),
+                if (photo.isGif && s.showGifBadge)
+                  const Positioned(
+                    right: 5,
+                    bottom: 5,
+                    child: _MediaBadge(label: 'GIF'),
                   ),
                 if (s.showFavBadge && !selecting)
                   ValueListenableBuilder<Set<String>>(
@@ -2126,6 +2128,57 @@ class PhotoTile extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _VideoTileFace extends StatelessWidget {
+  final AuroraColors colors;
+  const _VideoTileFace({required this.colors});
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            colors.surface2,
+            colors.accentSoft.withValues(alpha: 0.65),
+          ],
+        ),
+      ),
+      child: Center(
+        child: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.45),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.play_arrow_rounded,
+              color: Colors.white, size: 30),
+        ),
+      ),
+    );
+  }
+}
+
+class _MediaBadge extends StatelessWidget {
+  final String label;
+  const _MediaBadge({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: Colors.black54,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(label,
+          style: const TextStyle(color: Colors.white, fontSize: 10)),
     );
   }
 }
@@ -2652,7 +2705,9 @@ class _AlbumCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
               child: Stack(fit: StackFit.expand, children: [
                 Container(color: c.surface2),
-                if (cover != null)
+                if (cover != null && cover.isVideo)
+                  _VideoTileFace(colors: c)
+                else if (cover != null)
                   Image(
                     image: cover.thumb((190 * dpr).round().clamp(64, 512)),
                     fit: BoxFit.cover,
@@ -2768,7 +2823,9 @@ class _AlbumRow extends StatelessWidget {
           height: 76,
           child: Stack(fit: StackFit.expand, children: [
             Container(color: c.surface2),
-            if (cover != null)
+            if (cover != null && cover.isVideo)
+              _VideoTileFace(colors: c)
+            else if (cover != null)
               Image(
                 image: cover.thumb((180 * dpr).round().clamp(64, 512)),
                 fit: BoxFit.cover,

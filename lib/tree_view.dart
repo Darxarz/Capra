@@ -95,8 +95,7 @@ class _TreeViewState extends State<TreeView> {
           edges.add([n, ch]);
           rec(ch, depth + 1);
         }
-        grid[n] =
-            _GP((grid[kids.first]!.x + grid[kids.last]!.x) / 2, depth);
+        grid[n] = _GP((grid[kids.first]!.x + grid[kids.last]!.x) / 2, depth);
       }
     }
 
@@ -320,12 +319,19 @@ class _TreeViewState extends State<TreeView> {
       child: Row(
         children: [
           group([
-            seg(Icons.account_tree_outlined, 'Вертикальное',
-                _layout == TreeLayout.vertical, () => _setLayout(TreeLayout.vertical)),
-            seg(Icons.lan_outlined, 'Горизонтальное',
+            seg(
+                Icons.account_tree_outlined,
+                'Вертикальное',
+                _layout == TreeLayout.vertical,
+                () => _setLayout(TreeLayout.vertical)),
+            seg(
+                Icons.lan_outlined,
+                'Горизонтальное',
                 _layout == TreeLayout.horizontal,
                 () => _setLayout(TreeLayout.horizontal)),
-            seg(Icons.bubble_chart_outlined, 'Компактное',
+            seg(
+                Icons.bubble_chart_outlined,
+                'Компактное',
                 _layout == TreeLayout.compact,
                 () => _setLayout(TreeLayout.compact)),
           ]),
@@ -333,7 +339,9 @@ class _TreeViewState extends State<TreeView> {
           group([
             seg(Icons.unfold_more, 'Развернуть всё', _mode == TreeMode.all,
                 () => _setMode(TreeMode.all)),
-            seg(Icons.touch_app_outlined, 'По нажатию',
+            seg(
+                Icons.touch_app_outlined,
+                'По нажатию',
                 _mode == TreeMode.progressive,
                 () => _setMode(TreeMode.progressive)),
           ]),
@@ -538,16 +546,32 @@ class _NodeCard extends StatelessWidget {
                     ],
                   ),
                   clipBehavior: Clip.antiAlias,
-                  child: cover != null
-                      ? Image(
-                          image: cover
-                              .thumb((coverSide * dpr).round().clamp(64, 512)),
-                          fit: BoxFit.cover,
-                          filterQuality: FilterQuality.low,
-                          errorBuilder: (ctx, e, s) =>
-                              Icon(Icons.folder_rounded, color: c.muted, size: 26),
+                  child: cover != null && cover.isVideo
+                      ? Center(
+                          child: Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.45),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.play_arrow_rounded,
+                                color: Colors.white, size: 21),
+                          ),
                         )
-                      : Icon(Icons.folder_rounded, color: c.muted, size: 26),
+                      : cover != null
+                          ? Image(
+                              image: cover.thumb(
+                                  (coverSide * dpr).round().clamp(64, 512)),
+                              fit: BoxFit.cover,
+                              filterQuality: FilterQuality.low,
+                              errorBuilder: (ctx, e, s) => Icon(
+                                  Icons.folder_rounded,
+                                  color: c.muted,
+                                  size: 26),
+                            )
+                          : Icon(Icons.folder_rounded,
+                              color: c.muted, size: 26),
                 ),
                 // счётчик фото в углу
                 Positioned(

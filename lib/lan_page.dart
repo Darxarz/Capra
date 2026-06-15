@@ -178,70 +178,90 @@ class _HostViewState extends State<_HostView> {
         return ListView(
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
           children: [
-            _Card(c: c, child: Column(children: [
-              Row(children: [
-                Icon(on ? Icons.wifi_tethering_rounded
-                        : Icons.wifi_tethering_off_rounded,
-                    color: on ? c.accent : c.muted, size: 26),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(on ? 'Раздача включена' : 'Раздача выключена',
-                          style: TextStyle(
-                              color: c.text,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 2),
-                      Text(on
-                          ? 'Другое устройство в той же Wi-Fi сети может подключиться'
-                          : 'Включи, чтобы показать свои фото другому устройству',
-                          style: TextStyle(color: c.muted, fontSize: 12.5)),
-                    ]),
-                ),
-                Switch(
-                  value: on,
-                  activeThumbColor: c.accent,
-                  onChanged: _busy ? null : (_) => _toggle(),
-                ),
-              ]),
-            ])),
+            _Card(
+                c: c,
+                child: Column(children: [
+                  Row(children: [
+                    Icon(
+                        on
+                            ? Icons.wifi_tethering_rounded
+                            : Icons.wifi_tethering_off_rounded,
+                        color: on ? c.accent : c.muted,
+                        size: 26),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(on ? 'Раздача включена' : 'Раздача выключена',
+                                style: TextStyle(
+                                    color: c.text,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 2),
+                            Text(
+                                on
+                                    ? 'Другое устройство в той же Wi-Fi сети может подключиться'
+                                    : 'Включи, чтобы показать свои фото другому устройству',
+                                style:
+                                    TextStyle(color: c.muted, fontSize: 12.5)),
+                          ]),
+                    ),
+                    Switch(
+                      value: on,
+                      activeThumbColor: c.accent,
+                      onChanged: _busy ? null : (_) => _toggle(),
+                    ),
+                  ]),
+                ])),
             if (on) ...[
               const SizedBox(height: 16),
-              _Card(c: c, child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('PIN для подключения',
-                    style: TextStyle(color: c.muted, fontSize: 12.5,
-                        fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                Text(_spacedPin(lan.pin),
-                    style: TextStyle(
-                        color: c.accent,
-                        fontSize: 38,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 6)),
-                const SizedBox(height: 4),
-                Text('Введи этот PIN на другом устройстве. '
-                    'Он меняется при каждом включении.',
-                    style: TextStyle(color: c.muted, fontSize: 12)),
-              ])),
+              _Card(
+                  c: c,
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('PIN для подключения',
+                            style: TextStyle(
+                                color: c.muted,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 6),
+                        Text(_spacedPin(lan.pin),
+                            style: TextStyle(
+                                color: c.accent,
+                                fontSize: 38,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 6)),
+                        const SizedBox(height: 4),
+                        Text(
+                            'Введи этот PIN на другом устройстве. '
+                            'Он меняется при каждом включении.',
+                            style: TextStyle(color: c.muted, fontSize: 12)),
+                      ])),
               const SizedBox(height: 16),
-              _Card(c: c, child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Адрес устройства',
-                    style: TextStyle(color: c.muted, fontSize: 12.5,
-                        fontWeight: FontWeight.w600)),
-                const SizedBox(height: 8),
-                if (_addresses.isEmpty)
-                  Text('Не нашёл сетевой адрес. Подключён ли Wi-Fi?',
-                      style: TextStyle(color: c.muted, fontSize: 13))
-                else
-                  for (final a in _addresses)
-                    _AddressRow(adapter: a, port: lan.port, pin: lan.pin, c: c),
-                const SizedBox(height: 6),
-                Text('Раздаётся фото: ${lan.sharedCount}',
-                    style: TextStyle(color: c.muted, fontSize: 12.5)),
-              ])),
+              _Card(
+                  c: c,
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Адрес устройства',
+                            style: TextStyle(
+                                color: c.muted,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 8),
+                        if (_addresses.isEmpty)
+                          Text('Не нашёл сетевой адрес. Подключён ли Wi-Fi?',
+                              style: TextStyle(color: c.muted, fontSize: 13))
+                        else
+                          for (final a in _addresses)
+                            _AddressRow(
+                                adapter: a, port: lan.port, pin: lan.pin, c: c),
+                        const SizedBox(height: 6),
+                        Text('Раздаётся фото: ${lan.sharedCount}',
+                            style: TextStyle(color: c.muted, fontSize: 12.5)),
+                      ])),
             ],
             const SizedBox(height: 16),
             _TrustedList(c: c),
@@ -269,37 +289,42 @@ class _TrustedList extends StatelessWidget {
       builder: (ctx, _) {
         final list = LanStore.instance.trusted;
         if (list.isEmpty) return const SizedBox.shrink();
-        return _Card(c: c, child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Доверенные устройства',
-              style: TextStyle(color: c.muted, fontSize: 12.5,
-                  fontWeight: FontWeight.w600)),
-          const SizedBox(height: 2),
-          Text('Эти устройства подключаются без PIN',
-              style: TextStyle(color: c.muted, fontSize: 11.5)),
-          const SizedBox(height: 6),
-          for (final t in list)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(children: [
-                Icon(Icons.devices_rounded, size: 18, color: c.accent),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(t.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          color: c.text, fontSize: 14,
-                          fontWeight: FontWeight.w600)),
+        return _Card(
+            c: c,
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Доверенные устройства',
+                  style: TextStyle(
+                      color: c.muted,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(height: 2),
+              Text('Эти устройства подключаются без PIN',
+                  style: TextStyle(color: c.muted, fontSize: 11.5)),
+              const SizedBox(height: 6),
+              for (final t in list)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(children: [
+                    Icon(Icons.devices_rounded, size: 18, color: c.accent),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(t.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              color: c.text,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                    TextButton(
+                      onPressed: () => LanStore.instance.forgetTrusted(t.token),
+                      child: Text('Забыть',
+                          style: TextStyle(color: c.muted, fontSize: 12.5)),
+                    ),
+                  ]),
                 ),
-                TextButton(
-                  onPressed: () => LanStore.instance.forgetTrusted(t.token),
-                  child: Text('Забыть',
-                      style: TextStyle(color: c.muted, fontSize: 12.5)),
-                ),
-              ]),
-            ),
-        ]));
+            ]));
       },
     );
   }
@@ -342,14 +367,16 @@ class _AddressRow extends StatelessWidget {
         Icon(_icon, size: 20, color: adapter.private ? c.accent : c.muted),
         const SizedBox(width: 10),
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               Flexible(
                 child: Text(adapter.kind,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                        color: c.muted, fontSize: 11.5,
+                        color: c.muted,
+                        fontSize: 11.5,
                         fontWeight: FontWeight.w600)),
               ),
             ]),
@@ -568,7 +595,8 @@ class _ClientViewState extends State<_ClientView> {
         title: Text('Не дозвонился до «${host.name}»',
             style: TextStyle(color: c.text, fontSize: 17)),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('Возможно, сменился адрес устройства. Уточни IP:порт '
+          Text(
+              'Возможно, сменился адрес устройства. Уточни IP:порт '
               '(включена ли раздача на нём?).',
               style: TextStyle(color: c.muted, fontSize: 13)),
           const SizedBox(height: 12),
@@ -617,24 +645,30 @@ class _ClientViewState extends State<_ClientView> {
           children: [
             // ── запомненные устройства ──
             if (hosts.isNotEmpty) ...[
-              _Card(c: c, child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Мои устройства',
-                    style: TextStyle(color: c.muted, fontSize: 12.5,
-                        fontWeight: FontWeight.w600)),
-                const SizedBox(height: 2),
-                Text('Подключение в один тап, без PIN',
-                    style: TextStyle(color: c.muted, fontSize: 11.5)),
-                const SizedBox(height: 6),
-                for (final h in hosts)
-                  _KnownRow(
-                    host: h,
-                    busy: _busyHostId == h.hostId,
-                    c: c,
-                    onTap: () => _connectKnown(h),
-                    onForget: () => LanStore.instance.forgetHost(h.hostId),
-                  ),
-              ])),
+              _Card(
+                  c: c,
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Мои устройства',
+                            style: TextStyle(
+                                color: c.muted,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 2),
+                        Text('Подключение в один тап, без PIN',
+                            style: TextStyle(color: c.muted, fontSize: 11.5)),
+                        const SizedBox(height: 6),
+                        for (final h in hosts)
+                          _KnownRow(
+                            host: h,
+                            busy: _busyHostId == h.hostId,
+                            c: c,
+                            onTap: () => _connectKnown(h),
+                            onForget: () =>
+                                LanStore.instance.forgetHost(h.hostId),
+                          ),
+                      ])),
               const SizedBox(height: 14),
             ],
 
@@ -652,96 +686,112 @@ class _ClientViewState extends State<_ClientView> {
                     : 'Добавить новое устройство'),
               )
             else
-              _Card(c: c, child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Expanded(
-                    child: Text('Новое устройство',
-                        style: TextStyle(color: c.text, fontSize: 15,
-                            fontWeight: FontWeight.w700)),
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.close, size: 18, color: c.muted),
-                    onPressed: () => setState(() {
-                      _addOpen = false;
-                      _error = null;
-                    }),
-                  ),
-                ]),
-                const SizedBox(height: 4),
-                // быстрый путь: сканировать QR с экрана раздачи (моб. устройства)
-                if (Platform.isAndroid || Platform.isIOS) ...[
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: c.accent,
-                      side: BorderSide(color: c.accent),
-                      minimumSize: const Size.fromHeight(46),
-                    ),
-                    onPressed: _busy ? null : _scanQr,
-                    icon: const Icon(Icons.qr_code_scanner_rounded),
-                    label: const Text('Сканировать QR'),
-                  ),
-                  const SizedBox(height: 14),
-                  Row(children: [
-                    Expanded(child: Divider(color: c.line)),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      child: Text('или вручную',
-                          style: TextStyle(color: c.muted, fontSize: 12)),
-                    ),
-                    Expanded(child: Divider(color: c.line)),
-                  ]),
-                  const SizedBox(height: 14),
-                ],
-                Text('Адрес устройства',
-                    style: TextStyle(color: c.muted, fontSize: 12.5,
-                        fontWeight: FontWeight.w600)),
-                const SizedBox(height: 8),
-                _Field(
-                  controller: _ipCtl,
-                  hint: 'например 192.168.1.5',
-                  icon: Icons.lan_outlined,
-                  keyboard: TextInputType.text,
+              _Card(
                   c: c,
-                ),
-                const SizedBox(height: 16),
-                Text('PIN',
-                    style: TextStyle(color: c.muted, fontSize: 12.5,
-                        fontWeight: FontWeight.w600)),
-                const SizedBox(height: 8),
-                _Field(
-                  controller: _pinCtl,
-                  hint: '6 цифр',
-                  icon: Icons.password_rounded,
-                  keyboard: TextInputType.number,
-                  maxLen: 6,
-                  c: c,
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 12),
-                  Row(children: [
-                    Icon(Icons.error_outline_rounded, size: 17, color: c.accent),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(_error!,
-                        style: TextStyle(color: c.accent, fontSize: 13))),
-                  ]),
-                ],
-                const SizedBox(height: 18),
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: c.accent,
-                    minimumSize: const Size.fromHeight(48),
-                  ),
-                  onPressed: _busy ? null : _pairNew,
-                  icon: _busy
-                      ? const SizedBox(
-                          width: 18, height: 18,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.link_rounded),
-                  label: Text(_busy ? 'Сопрягаю…' : 'Сопрячь устройство'),
-                ),
-              ])),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          Expanded(
+                            child: Text('Новое устройство',
+                                style: TextStyle(
+                                    color: c.text,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700)),
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.close, size: 18, color: c.muted),
+                            onPressed: () => setState(() {
+                              _addOpen = false;
+                              _error = null;
+                            }),
+                          ),
+                        ]),
+                        const SizedBox(height: 4),
+                        // быстрый путь: сканировать QR с экрана раздачи (моб. устройства)
+                        if (Platform.isAndroid || Platform.isIOS) ...[
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: c.accent,
+                              side: BorderSide(color: c.accent),
+                              minimumSize: const Size.fromHeight(46),
+                            ),
+                            onPressed: _busy ? null : _scanQr,
+                            icon: const Icon(Icons.qr_code_scanner_rounded),
+                            label: const Text('Сканировать QR'),
+                          ),
+                          const SizedBox(height: 14),
+                          Row(children: [
+                            Expanded(child: Divider(color: c.line)),
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 10),
+                              child: Text('или вручную',
+                                  style:
+                                      TextStyle(color: c.muted, fontSize: 12)),
+                            ),
+                            Expanded(child: Divider(color: c.line)),
+                          ]),
+                          const SizedBox(height: 14),
+                        ],
+                        Text('Адрес устройства',
+                            style: TextStyle(
+                                color: c.muted,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 8),
+                        _Field(
+                          controller: _ipCtl,
+                          hint: 'например 192.168.1.5',
+                          icon: Icons.lan_outlined,
+                          keyboard: TextInputType.text,
+                          c: c,
+                        ),
+                        const SizedBox(height: 16),
+                        Text('PIN',
+                            style: TextStyle(
+                                color: c.muted,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 8),
+                        _Field(
+                          controller: _pinCtl,
+                          hint: '6 цифр',
+                          icon: Icons.password_rounded,
+                          keyboard: TextInputType.number,
+                          maxLen: 6,
+                          c: c,
+                        ),
+                        if (_error != null) ...[
+                          const SizedBox(height: 12),
+                          Row(children: [
+                            Icon(Icons.error_outline_rounded,
+                                size: 17, color: c.accent),
+                            const SizedBox(width: 8),
+                            Expanded(
+                                child: Text(_error!,
+                                    style: TextStyle(
+                                        color: c.accent, fontSize: 13))),
+                          ]),
+                        ],
+                        const SizedBox(height: 18),
+                        FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: c.accent,
+                            minimumSize: const Size.fromHeight(48),
+                          ),
+                          onPressed: _busy ? null : _pairNew,
+                          icon: _busy
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white))
+                              : const Icon(Icons.link_rounded),
+                          label:
+                              Text(_busy ? 'Сопрягаю…' : 'Сопрячь устройство'),
+                        ),
+                      ])),
             const SizedBox(height: 14),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -783,17 +833,22 @@ class _KnownRow extends StatelessWidget {
         child: Row(children: [
           busy
               ? SizedBox(
-                  width: 20, height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: c.accent))
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: c.accent))
               : Icon(Icons.devices_rounded, size: 20, color: c.accent),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(host.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                      color: c.text, fontSize: 14.5, fontWeight: FontWeight.w600)),
+                      color: c.text,
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w600)),
               Text('${host.ip}:${host.port}',
                   style: TextStyle(color: c.muted, fontSize: 12)),
             ]),
@@ -913,7 +968,8 @@ class _ScanPageState extends State<_ScanPage> {
                   customBorder: const CircleBorder(),
                   onTap: () => Navigator.pop(context),
                   child: const SizedBox(
-                    width: 44, height: 44,
+                    width: 44,
+                    height: 44,
                     child: Icon(Icons.close, color: Colors.white),
                   ),
                 ),
@@ -949,7 +1005,8 @@ class _RemoteGalleryPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: c.bg,
       body: SafeArea(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
             child: Row(children: [
@@ -960,31 +1017,34 @@ class _RemoteGalleryPage extends StatelessWidget {
               ),
               const SizedBox(width: 4),
               Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(children: [
-                      Icon(Icons.cast_connected_rounded, size: 16, color: c.accent),
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Text(hostName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w800,
-                                color: c.text)),
-                      ),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Icon(Icons.cast_connected_rounded,
+                            size: 16, color: c.accent),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(hostName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800,
+                                  color: c.text)),
+                        ),
+                      ]),
+                      Text('${photos.length} фото · по сети',
+                          style: TextStyle(fontSize: 12, color: c.muted)),
                     ]),
-                    Text('${photos.length} фото · по сети',
-                        style: TextStyle(fontSize: 12, color: c.muted)),
-                  ]),
               ),
             ]),
           ),
           Expanded(
             child: photos.isEmpty
-                ? Center(child: Text('У этого устройства нет фото',
-                    style: TextStyle(color: c.muted)))
+                ? Center(
+                    child: Text('У этого устройства нет фото',
+                        style: TextStyle(color: c.muted)))
                 : GridView.builder(
                     padding: const EdgeInsets.fromLTRB(16, 6, 16, 18),
                     gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
@@ -1026,30 +1086,60 @@ class _RemoteTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(s.gridRadius),
         child: Stack(fit: StackFit.expand, children: [
           Container(color: c.surface2),
-          Image(
-            image: photo.thumb(cacheWidth),
-            fit: s.squareThumbs ? BoxFit.cover : BoxFit.contain,
-            gaplessPlayback: true,
-            filterQuality: FilterQuality.low,
-            frameBuilder: (ctx, child, frame, wasSync) {
-              if (wasSync || frame != null) return child;
-              return Container(
-                color: c.surface2,
-                child: Center(
-                  child: SizedBox(
-                    width: 16, height: 16,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 1.6, color: c.muted),
-                  ),
+          if (photo.isVideo)
+            Center(
+              child: Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  shape: BoxShape.circle,
                 ),
-              );
-            },
-            errorBuilder: (ctx, e, st) =>
-                Icon(Icons.broken_image_outlined, color: c.muted, size: 18),
-          ),
+                child: const Icon(Icons.play_arrow_rounded,
+                    color: Colors.white, size: 30),
+              ),
+            )
+          else
+            Image(
+              image: photo.thumb(cacheWidth),
+              fit: s.squareThumbs ? BoxFit.cover : BoxFit.contain,
+              gaplessPlayback: true,
+              filterQuality: FilterQuality.low,
+              frameBuilder: (ctx, child, frame, wasSync) {
+                if (wasSync || frame != null) return child;
+                return Container(
+                  color: c.surface2,
+                  child: Center(
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 1.6, color: c.muted),
+                    ),
+                  ),
+                );
+              },
+              errorBuilder: (ctx, e, st) =>
+                  Icon(Icons.broken_image_outlined, color: c.muted, size: 18),
+            ),
+          if (photo.isVideo)
+            Positioned(
+              right: 5,
+              bottom: 5,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text('VIDEO',
+                    style: TextStyle(color: Colors.white, fontSize: 10)),
+              ),
+            ),
           if (photo.isGif && s.showGifBadge)
             Positioned(
-              right: 5, bottom: 5,
+              right: 5,
+              bottom: 5,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                 decoration: BoxDecoration(

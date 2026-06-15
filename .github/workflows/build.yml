@@ -49,14 +49,18 @@ jobs:
           Set-Content $app $c
           # кросс-дисковый pub-кэш (C:) vs проект (D:) ломает kotlin incremental
           Add-Content android/gradle.properties "`nkotlin.incremental=false"
-          # доступ к фото устройства через MediaStore (как обычные галереи):
-          # READ_MEDIA_IMAGES (Android 13+), READ_MEDIA_VISUAL_USER_SELECTED
+          # доступ к фото и видео устройства через MediaStore (как обычные галереи):
+          # READ_MEDIA_IMAGES/VIDEO (Android 13+), READ_MEDIA_VISUAL_USER_SELECTED
           # (частичный доступ, Android 14), READ_EXTERNAL_STORAGE (до Android 12).
           $m = 'android/app/src/main/AndroidManifest.xml'
           $mc = Get-Content $m -Raw
           if ($mc -notmatch 'READ_MEDIA_IMAGES') {
-            $perms = "    <uses-permission android:name=`"android.permission.INTERNET`"/>`n    <uses-permission android:name=`"android.permission.CAMERA`"/>`n    <uses-permission android:name=`"android.permission.READ_MEDIA_IMAGES`"/>`n    <uses-permission android:name=`"android.permission.READ_MEDIA_VISUAL_USER_SELECTED`"/>`n    <uses-permission android:name=`"android.permission.READ_EXTERNAL_STORAGE`" android:maxSdkVersion=`"32`"/>`n    "
+            $perms = "    <uses-permission android:name=`"android.permission.INTERNET`"/>`n    <uses-permission android:name=`"android.permission.CAMERA`"/>`n    <uses-permission android:name=`"android.permission.READ_MEDIA_IMAGES`"/>`n    <uses-permission android:name=`"android.permission.READ_MEDIA_VIDEO`"/>`n    <uses-permission android:name=`"android.permission.READ_MEDIA_VISUAL_USER_SELECTED`"/>`n    <uses-permission android:name=`"android.permission.READ_EXTERNAL_STORAGE`" android:maxSdkVersion=`"32`"/>`n    "
             $mc = $mc -replace '(<manifest[^>]*>\s*)', "`$1$perms"
+          }
+          if ($mc -notmatch 'READ_MEDIA_VIDEO') {
+            $vperm = "    <uses-permission android:name=`"android.permission.READ_MEDIA_VIDEO`"/>`n    "
+            $mc = $mc -replace '(<manifest[^>]*>\s*)', "`$1$vperm"
           }
           # «Доступ ко всем файлам» — опционально, ТОЛЬКО для секретных
           # .nomedia-папок (их прячет MediaStore). Запрашивается из настроек.

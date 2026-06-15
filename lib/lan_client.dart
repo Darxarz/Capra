@@ -120,7 +120,8 @@ class LanClient {
           .get(Uri.parse('$base/auth?token=$token'))
           .timeout(const Duration(seconds: 6));
       if (r.statusCode == 401) {
-        throw LanError('Устройство больше не помнит этот ключ — нужен PIN заново.',
+        throw LanError(
+            'Устройство больше не помнит этот ключ — нужен PIN заново.',
             needRepair: true);
       }
       if (r.statusCode != 200) {
@@ -159,7 +160,8 @@ class LanClient {
     } on LanError {
       rethrow;
     } catch (_) {
-      throw LanError('Не удалось связаться. Проверь адрес и одну ли вы Wi-Fi сеть.');
+      throw LanError(
+          'Не удалось связаться. Проверь адрес и одну ли вы Wi-Fi сеть.');
     }
   }
 
@@ -186,9 +188,11 @@ class LanClient {
         out.add(PhotoItem(
           path: (m['name'] ?? '') as String,
           isGif: (m['gif'] ?? false) as bool,
+          isVideo: (m['video'] ?? false) as bool,
           folderPath: (m['folder'] ?? '') as String,
           folderName: (m['folder'] ?? '') as String,
-          modified: DateTime.fromMillisecondsSinceEpoch((m['mtime'] ?? 0) as int),
+          modified:
+              DateTime.fromMillisecondsSinceEpoch((m['mtime'] ?? 0) as int),
           sizeBytes: (m['size'] ?? 0) as int,
           remoteBase: conn.base,
           remoteToken: conn.token,

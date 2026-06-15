@@ -69,8 +69,9 @@ class BatchTagger extends ChangeNotifier {
     }
 
     final already = TagService.instance.taggedPaths();
-    final todo =
-        photos.where((ph) => !already.contains(ph.path)).toList(growable: false);
+    final todo = photos
+        .where((ph) => !ph.isVideo && !already.contains(ph.path))
+        .toList(growable: false);
     total = todo.length;
     notifyListeners();
 
