@@ -50,6 +50,25 @@ class _HomePageState extends State<HomePage> {
 
   List<PhotoItem> _photos = []; // всё, что просканировано
   List<PhotoItem> _shown = []; // с учётом скрытых папок
+
+  // кэш производных списков: пересчитываются ТОЛЬКО при смене входных данных
+  // (фото/фильтр/поиск/теги/избранное), а НЕ на каждый build. Иначе смена темы
+  // или языка гоняла фильтрацию 100к фото впустую и вешала UI на секунды.
+  List<PhotoItem>? _mediaShownCache;
+  List<AlbumItem>? _mediaAlbumsCache;
+  List<PhotoItem>? _visibleCache;
+
+  /// Сбросить весь производный кэш (после смены набора фото/фильтра медиа).
+  void _invalidateLists() {
+    _mediaShownCache = null;
+    _mediaAlbumsCache = null;
+    _visibleCache = null;
+    _treeCache = null;
+    _treeCacheFilter = null;
+  }
+
+  /// Сбросить только видимый список (после смены поиска/тегов/избранного/проектов).
+  void _invalidateVisible() => _visibleCache = null;
   List<String> _folders = []; // папки библиотеки (можно несколько)
   bool _loading = false;
   UpdateInfo? _update; // доступное обновление (null = нет)
@@ -98,15 +117,15 @@ class _HomePageState extends State<HomePage> {
   }
 
   List<PhotoItem> get _mediaShown =>
-      _shown.where(_matchesMedia).toList(growable: false);
+      _mediaShownCache ??= _shown.where(_matchesMedia).toList(growable: false);
 
-  List<AlbumItem> get _mediaAlbums => LibraryService.albums(_mediaShown);
+  List<AlbumItem> get _mediaAlbums =>
+      _mediaAlbumsCache ??= LibraryService.albums(_mediaShown);
 
   void _setMediaFilter(MediaKindFilter v) {
     setState(() {
       _mediaFilter = v;
-      _treeCache = null;
-      _treeCacheFilter = null;
+      _invalidateLists();
     });
   }
 
@@ -132,14 +151,15 @@ class _HomePageState extends State<HomePage> {
     } else {
       _shown = _photos.where((p) => !_isHiddenPath(p.folderPath)).toList();
     }
-    _treeCache = null;
-    _treeCacheFilter = null;
+    _invalidateLists();
     // по сети раздаём только показываемое (секретные папки не уходят)
     LanService.instance.setLibrary(_shown);
   }
 
   /// Фото с учётом поиска и фильтра «только избранное».
-  List<PhotoItem> get _visiblePhotos {
+  List<PhotoItem> get _visiblePhotos => _visibleCache ??= _computeVisible();
+
+  List<PhotoItem> _computeVisible() {
     Iterable<PhotoItem> r = _mediaShown;
     // отдельный режим: только проекты (KRA/PSD) или, наоборот, без них
     if (_projectsOnly) {
@@ -319,6 +339,7 @@ class _HomePageState extends State<HomePage> {
       _filterTags = tags;
       _filterPaths =
           tags.isEmpty ? const {} : TagService.instance.pathsWithAllTags(tags);
+      _invalidateVisible();
     });
   }
 
@@ -649,7 +670,10 @@ class _HomePageState extends State<HomePage> {
           tile(
               _favOnly ? Icons.favorite_rounded : Icons.favorite_border_rounded,
               tr('Только избранное', 'Favorites only', 'Solo favoritos'),
-              () => setState(() => _favOnly = !_favOnly),
+              () => setState(() {
+              _favOnly = !_favOnly;
+              _invalidateVisible();
+            }),
               on: _favOnly),
           tile(
               Icons.brush_outlined,
@@ -657,6 +681,7 @@ class _HomePageState extends State<HomePage> {
               () => setState(() {
                     _projectsOnly = !_projectsOnly;
                     if (_projectsOnly) _mode = ViewMode.all;
+                    _invalidateVisible();
                   }),
               on: _projectsOnly),
           tile(Icons.sell_outlined, tr('Теги', 'Tags', 'Etiquetas'),
@@ -989,6 +1014,7 @@ class _HomePageState extends State<HomePage> {
             _tagMatchPaths = q.trim().isEmpty
                 ? const {}
                 : TagService.instance.pathsMatchingTag(q);
+            _invalidateVisible();
           }),
           onMode: (m) => setState(() => _mode = m),
           onCell: SettingsService.instance.setCellSize,
@@ -1045,7 +1071,11 @@ class _HomePageState extends State<HomePage> {
             child: Stack(children: [
               ValueListenableBuilder<Set<String>>(
                 valueListenable: Favorites.instance.notifier,
-                builder: (_, __, ___) => _body(c),
+                builder: (_, __, ___) {
+                  // в режиме «только избранное» смена избранного меняет состав
+                  if (_favOnly) _invalidateVisible();
+                  return _body(c);
+                },
               ),
               AnimatedBuilder(
                 animation: Selection.instance,
@@ -1082,11 +1112,15 @@ class _HomePageState extends State<HomePage> {
           showSections: _showSideSections,
           onMode: (m) => setState(() => _mode = m),
           favOnly: _favOnly,
-          onFav: () => setState(() => _favOnly = !_favOnly),
+          onFav: () => setState(() {
+              _favOnly = !_favOnly;
+              _invalidateVisible();
+            }),
           projectsOnly: _projectsOnly,
           onProjects: () => setState(() {
             _projectsOnly = !_projectsOnly;
             if (_projectsOnly) _mode = ViewMode.all;
+            _invalidateVisible();
           }),
           onTags: () => setState(() => _tagsPanelOpen = !_tagsPanelOpen),
           tagsOpen: _tagsPanelOpen,
@@ -1120,7 +1154,10 @@ class _HomePageState extends State<HomePage> {
           favOnly: _favOnly,
           tagFiltered: _filterTags.isNotEmpty,
           onMode: (m) => setState(() => _mode = m),
-          onFav: () => setState(() => _favOnly = !_favOnly),
+          onFav: () => setState(() {
+              _favOnly = !_favOnly;
+              _invalidateVisible();
+            }),
           onTags: _openTagsSheet,
           onMore: _openMobileTools,
         ),
