@@ -12,6 +12,7 @@ import 'tagger_service.dart';
 import 'metadata_service.dart';
 import 'settings_service.dart';
 import 'media_actions.dart';
+import 'similar_page.dart';
 
 /// Открыть просмотрщик на конкретном фото.
 void openViewer(BuildContext context, List<PhotoItem> photos, int index) {
@@ -183,7 +184,8 @@ class _ViewerPageState extends State<ViewerPage> {
                 bottom: 0,
                 right: _infoOpen ? 0 : -panelW,
                 width: panelW,
-                child: _InfoPanel(photo: photo, colors: c),
+                child: _InfoPanel(
+                    photo: photo, colors: c, pool: widget.photos),
               )
             else
               AnimatedPositioned(
@@ -196,7 +198,11 @@ class _ViewerPageState extends State<ViewerPage> {
                 child: ClipRRect(
                   borderRadius:
                       const BorderRadius.vertical(top: Radius.circular(20)),
-                  child: _InfoPanel(photo: photo, colors: c, showHandle: true),
+                  child: _InfoPanel(
+                      photo: photo,
+                      colors: c,
+                      pool: widget.photos,
+                      showHandle: true),
                 ),
               ),
           ]);
@@ -417,9 +423,13 @@ class _RoundBtn extends StatelessWidget {
 class _InfoPanel extends StatelessWidget {
   final PhotoItem photo;
   final AuroraColors colors;
+  final List<PhotoItem> pool; // среди чего искать «похожие»
   final bool showHandle; // показывать «ручку» сверху (лист на телефоне)
   const _InfoPanel(
-      {required this.photo, required this.colors, this.showHandle = false});
+      {required this.photo,
+      required this.colors,
+      required this.pool,
+      this.showHandle = false});
 
   @override
   Widget build(BuildContext context) {
@@ -526,8 +536,11 @@ class _InfoPanel extends StatelessWidget {
                 onTap: () => Favorites.instance.toggle(photo.path),
                 active: fav,
               ),
-              action(Icons.folder_outlined,
-                  tr('В альбом', 'To album', 'Al álbum')),
+              action(Icons.image_search_rounded,
+                  tr('Похожие', 'Similar', 'Similares'), onTap: () {
+                Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => SimilarPage(photo: photo, pool: pool)));
+              }),
               action(Icons.ios_share, tr('Поделиться', 'Share', 'Compartir'),
                   onTap: () => MediaActions.share([photo])),
             ]);

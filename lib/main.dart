@@ -9,6 +9,7 @@ import 'settings_service.dart';
 import 'lan_store.dart';
 import 'error_log.dart';
 import 'perf_monitor.dart';
+import 'embed_store.dart';
 
 Future<void> main() async {
   // Перехватываем все ошибки в файловый журнал — для диагностики крашей на
@@ -34,6 +35,11 @@ Future<void> main() async {
       await TagService.instance.init();
     } catch (e, s) {
       // если база не открылась — приложение всё равно работает (без тегов)
+      ErrorLog.recordError(e, s);
+    }
+    try {
+      await EmbedStore.instance.init();
+    } catch (e, s) {
       ErrorLog.recordError(e, s);
     }
     PerfMonitor.instance.start(); // авто-детект слабого устройства по плавности
