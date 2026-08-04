@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'package:flutter/widgets.dart';
+import 'package:photo_manager/photo_manager.dart';
 import 'preview_service.dart';
 import 'settings_service.dart';
+import 'asset_image.dart';
 import 'i18n.dart';
 
 /// Расширения, которые считаем изображениями.
@@ -79,6 +81,23 @@ class PhotoItem {
   /// true — фото получено с другого устройства, файла на диске нет.
   bool get isRemote => remoteBase != null;
 
+  /// Читаемый файл для операций, которым нужны пиксели/байты (поделиться,
+  /// тегирование, метаданные). На Android с MediaStore прямой путь может быть
+  /// недоступен — тогда берём файл через ассет (система отдаёт читаемую копию).
+  Future<File?> resolveFile() async {
+    if (isRemote) return null;
+    if (Platform.isAndroid && assetId != null) {
+      try {
+        final a = await AssetEntity.fromId(assetId!);
+        return await a?.file;
+      } catch (_) {
+        return null;
+      }
+    }
+    final f = File(path);
+    return f.existsSync() ? f : null;
+  }
+
   /// Расширение в нижнем регистре (с точкой), напр. '.kra'.
   String get extension {
     final i = path.lastIndexOf('.');
@@ -108,6 +127,10 @@ class PhotoItem {
           full: false,
           cacheWidth: cacheWidth);
     }
+    // Android: миниатюра прямо из MediaStore (быстро, без чтения файла).
+    if (assetId != null && Platform.isAndroid) {
+      return AssetThumbImage(assetId!, size: cacheWidth);
+    }
     return CachedThumbImage(
       path,
       mtime: modified.millisecondsSinceEpoch,
@@ -129,6 +152,10 @@ class PhotoItem {
     if (isProject) {
       return ProjectImage(path,
           mtime: modified.millisecondsSinceEpoch, full: true);
+    }
+    // Android: крупный кадр из MediaStore (с потолком, без чтения файла).
+    if (assetId != null && Platform.isAndroid) {
+      return AssetThumbImage(assetId!, size: _kFullDecodeMax);
     }
     return ResizeImage(
       FileImage(File(path)),

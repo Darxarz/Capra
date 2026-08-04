@@ -43,10 +43,13 @@ class MediaActions {
 
   /// Отправить файлы системным «Поделиться». Удалённые (по сети) пропускаются.
   static Future<int> share(List<PhotoItem> photos) async {
-    final files = [
-      for (final ph in photos)
-        if (!ph.isRemote) XFile(ph.path)
-    ];
+    final files = <XFile>[];
+    for (final ph in photos) {
+      if (ph.isRemote) continue;
+      // на Android путь может быть недоступен — берём читаемый файл через ассет
+      final f = await ph.resolveFile();
+      if (f != null) files.add(XFile(f.path));
+    }
     if (files.isEmpty) return 0;
     await SharePlus.instance.share(ShareParams(files: files));
     return files.length;

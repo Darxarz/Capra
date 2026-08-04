@@ -535,7 +535,8 @@ class _InfoPanel extends StatelessWidget {
         ),
         const SizedBox(height: 22),
         Divider(color: c.line, height: 1),
-        row(tr('Размер', 'Size', 'Tamaño'), prettySize(photo.sizeBytes)),
+        if (photo.sizeBytes > 0)
+          row(tr('Размер', 'Size', 'Tamaño'), prettySize(photo.sizeBytes)),
         Divider(color: c.line, height: 1),
         row(tr('Папка', 'Folder', 'Carpeta'), photo.folderName),
         const SizedBox(height: 16),

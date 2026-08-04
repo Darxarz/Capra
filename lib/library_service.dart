@@ -77,67 +77,20 @@ class LibraryService {
         .timeout(const Duration(seconds: 20), onTimeout: () => 0);
     if (count == 0) return const [];
 
-    // 1) перечисляем ассеты постранично, восстанавливаем путь из relativePath+title
+    // Быстрый путь как у обычных галерей: берём метаданные ПРЯМО из MediaStore
+    // (дата/тип/id) и НЕ трогаем файлы на диске — ни stat, ни originFile.
+    // Раньше именно проверка 100к файлов и заставляла галерею «пыхтеть».
+    // Миниатюры и полный кадр грузятся из MediaStore по assetId (см. AssetThumbImage).
     const page = 1000;
-    final candidates = <String, AssetEntity>{}; // путь → ассет
-    final unresolved = <AssetEntity>[];
+    final out = <PhotoItem>[];
     for (var pg = 0; pg * page < count; pg++) {
       final assets = await all
           .getAssetListPaged(page: pg, size: page)
           .timeout(const Duration(seconds: 20), onTimeout: () => const []);
       if (assets.isEmpty) break;
       for (final a in assets) {
-        final path = _reconstructPath(a);
-        if (path != null) {
-          candidates[path] = a;
-        } else {
-          unresolved.add(a);
-        }
+        out.add(_photoFromAsset(a));
       }
-    }
-
-    // 2) stat путей в изоляте (существование/размер/дата) — UI не виснет
-    final stats = await compute(_statPaths, candidates.keys.toList());
-    final out = <PhotoItem>[];
-    for (final s in stats) {
-      final path = s[0] as String;
-      final exists = s[1] as bool;
-      if (exists) {
-        out.add(_makePhoto(path, s[2] as int, s[3] as int,
-            assetId: candidates[path]?.id));
-      } else {
-        final a = candidates[path];
-        if (a != null) unresolved.add(a);
-      }
-    }
-
-    // 3) то, что не удалось восстановить путём (например, SD) — через originFile
-    // На части телефонов этот вызов может зависать на отдельных файлах, поэтому
-    // берём его маленькими порциями и с лимитом времени.
-    final fallbackTimer = Stopwatch()..start();
-    var emptyFallbackChunks = 0;
-    for (var i = 0; i < unresolved.length; i += 24) {
-      if (fallbackTimer.elapsed > const Duration(seconds: 60) ||
-          emptyFallbackChunks >= 3) {
-        break;
-      }
-      final chunk = unresolved.skip(i).take(24).toList();
-      final files = await Future.wait(chunk.map(_assetFileFast));
-      var foundInChunk = 0;
-      for (var j = 0; j < chunk.length; j++) {
-        final f = files[j];
-        if (f == null) continue;
-        try {
-          if (f.existsSync()) {
-            foundInChunk++;
-            final st = f.statSync();
-            out.add(_makePhoto(
-                f.path, st.size, st.modified.millisecondsSinceEpoch,
-                assetId: chunk[j].id));
-          }
-        } catch (_) {}
-      }
-      emptyFallbackChunks = foundInChunk == 0 ? emptyFallbackChunks + 1 : 0;
     }
 
     out.sort((a, b) => b.modified.compareTo(a.modified));
@@ -202,30 +155,11 @@ String? _reconstructPath(AssetEntity a) {
   return '/storage/emulated/0/$r$title';
 }
 
-Future<File?> _assetFileFast(AssetEntity a) async {
-  try {
-    final f =
-        await a.originFile.timeout(const Duration(seconds: 3), onTimeout: () {
-      throw TimeoutException('originFile timeout');
-    });
-    return f;
-  } catch (_) {
-    try {
-      return await a.file.timeout(const Duration(seconds: 3), onTimeout: () {
-        throw TimeoutException('file timeout');
-      });
-    } catch (_) {
-      return null;
-    }
-  }
-}
-
-String _extensionOf(String lowerPath) {
-  final dot = lowerPath.lastIndexOf('.');
-  return dot < 0 ? '' : lowerPath.substring(dot);
-}
-
-PhotoItem _makePhoto(String path, int size, int mtimeMs, {String? assetId}) {
+/// Собрать PhotoItem прямо из ассета MediaStore — без обращения к файлу.
+/// Дата/тип/id берутся из системного индекса; размер в байтах = 0 (тянем лениво
+/// в просмотрщике, чтобы не делать stat по 100к файлов).
+PhotoItem _photoFromAsset(AssetEntity a) {
+  final path = _reconstructPath(a) ?? _looseDisplayPath(a);
   const sep = '/';
   final cut = path.lastIndexOf(sep);
   final folderPath = cut >= 0 ? path.substring(0, cut) : path;
@@ -234,33 +168,33 @@ PhotoItem _makePhoto(String path, int size, int mtimeMs, {String? assetId}) {
   return PhotoItem(
     path: path,
     isGif: lower.endsWith('.gif'),
-    isVideo: kVideoExtensions.contains(_extensionOf(lower)),
+    isVideo: a.type == AssetType.video ||
+        kVideoExtensions.contains(_extensionOf(lower)),
     folderPath: folderPath,
     folderName: segs.isNotEmpty ? segs.last : folderPath,
-    modified: DateTime.fromMillisecondsSinceEpoch(mtimeMs),
-    sizeBytes: size,
-    assetId: assetId,
+    modified: a.modifiedDateTime,
+    sizeBytes: 0,
+    assetId: a.id,
   );
 }
 
-/// stat списка путей в изоляте: [path, exists, size, mtimeMs].
-List<List<dynamic>> _statPaths(List<String> paths) {
-  final out = <List<dynamic>>[];
-  for (final path in paths) {
-    try {
-      final f = File(path);
-      if (f.existsSync()) {
-        final st = f.statSync();
-        out.add([path, true, st.size, st.modified.millisecondsSinceEpoch]);
-      } else {
-        out.add([path, false, 0, 0]);
-      }
-    } catch (_) {
-      out.add([path, false, 0, 0]);
-    }
-  }
-  return out;
+/// Приблизительный путь для группировки/имени, когда точный не восстановить
+/// (например, карта памяти). Показ идёт через миниатюру MediaStore, поэтому
+/// читаемость этого пути не важна.
+String _looseDisplayPath(AssetEntity a) {
+  final title = (a.title != null && a.title!.isNotEmpty) ? a.title! : a.id;
+  var rel = (a.relativePath ?? '').replaceAll('\\', '/').trim();
+  if (rel.isNotEmpty && !rel.endsWith('/')) rel = '$rel/';
+  if (rel.startsWith('/')) rel = rel.substring(1);
+  return '/storage/emulated/0/$rel$title';
 }
+
+String _extensionOf(String lowerPath) {
+  final dot = lowerPath.lastIndexOf('.');
+  return dot < 0 ? '' : lowerPath.substring(dot);
+}
+
+
 
 /// Сканирует список корней в одном изоляте, объединяя без дублей по пути.
 Future<List<PhotoItem>> _scanFolders(List<String> roots) async {
