@@ -81,7 +81,10 @@ class BatchTagger extends ChangeNotifier {
     for (final ph in todo) {
       if (_stop) break;
       try {
-        final n = await Tagger.instance.tagAndStoreAsync(ph.path);
+        // на Android читаем пиксели из доступной копии MediaStore
+        final rf = await ph.resolveFile();
+        final n = await Tagger.instance
+            .tagAndStoreAsync(ph.path, readFrom: rf?.path);
         if (n > 0) tagged++;
       } catch (_) {
         // битые/недоступные файлы просто пропускаем

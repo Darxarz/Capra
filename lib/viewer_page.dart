@@ -666,7 +666,8 @@ class _MetaSectionState extends State<_MetaSection> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final m = await readMetadata(widget.photo.path);
+    final rf = await widget.photo.resolveFile();
+    final m = await readMetadata(rf?.path ?? widget.photo.path);
     if (mounted) {
       setState(() {
         _meta = m;
@@ -886,7 +887,9 @@ class _TagsSectionState extends State<_TagsSection> {
       _busyProgress = null;
     });
     try {
-      final n = await tagger.tagAndStore(widget.photo.path);
+      final rf = await widget.photo.resolveFile();
+      final n =
+          await tagger.tagAndStore(widget.photo.path, readFrom: rf?.path);
       _snack(tr(
           'Добавлено тегов: $n', 'Tags added: $n', 'Etiquetas añadidas: $n'));
     } catch (e) {

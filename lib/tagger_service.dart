@@ -132,9 +132,12 @@ class Tagger {
     String path, {
     double generalThreshold = 0.35,
     double characterThreshold = 0.75,
+    String? readFrom,
   }) async {
     await load();
-    final bytes = await File(path).readAsBytes();
+    // теги храним по оригинальному [path], а пиксели читаем из [readFrom]
+    // (на Android — доступная копия из MediaStore, см. PhotoItem.resolveFile)
+    final bytes = await File(readFrom ?? path).readAsBytes();
     _storeSha(path, bytes);
     final input = preprocessBytes(bytes);
     if (input == null) return const [];
@@ -161,9 +164,10 @@ class Tagger {
     String path, {
     double generalThreshold = 0.35,
     double characterThreshold = 0.75,
+    String? readFrom,
   }) async {
     await load();
-    final bytes = await File(path).readAsBytes();
+    final bytes = await File(readFrom ?? path).readAsBytes();
     _storeSha(path, bytes);
     final input = await compute(preprocessBytes, bytes);
     if (input == null) return const [];
@@ -186,16 +190,19 @@ class Tagger {
   }
 
   /// Синхронно прогнать и записать в базу (одиночное тегирование).
-  Future<int> tagAndStore(String path, {double generalThreshold = 0.35}) async {
-    final tags = await infer(path, generalThreshold: generalThreshold);
+  Future<int> tagAndStore(String path,
+      {double generalThreshold = 0.35, String? readFrom}) async {
+    final tags =
+        await infer(path, generalThreshold: generalThreshold, readFrom: readFrom);
     _store(path, tags);
     return tags.length;
   }
 
   /// Асинхронно прогнать и записать в базу (для пакетного тегирования).
   Future<int> tagAndStoreAsync(String path,
-      {double generalThreshold = 0.35}) async {
-    final tags = await inferAsync(path, generalThreshold: generalThreshold);
+      {double generalThreshold = 0.35, String? readFrom}) async {
+    final tags = await inferAsync(path,
+        generalThreshold: generalThreshold, readFrom: readFrom);
     _store(path, tags);
     return tags.length;
   }
