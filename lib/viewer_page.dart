@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'theme.dart';
@@ -38,6 +41,9 @@ class _ViewerPageState extends State<ViewerPage> {
   bool _zoomed = false; // текущее фото увеличено
   bool _chrome = true; // показывать кнопки/счётчик (тап по фото переключает)
   int _fingers = 0; // активных касаний на экране
+  Timer? _slideTimer; // авто-перелистывание (слайдшоу)
+
+  bool get _slideshow => _slideTimer != null;
 
   @override
   void initState() {
@@ -48,8 +54,72 @@ class _ViewerPageState extends State<ViewerPage> {
 
   @override
   void dispose() {
+    _slideTimer?.cancel();
     _controller.dispose();
     super.dispose();
+  }
+
+  /// Перейти на delta кадров (с зацикливанием). Плавно.
+  void _go(int delta, {int ms = 260}) {
+    final n = widget.photos.length;
+    if (n <= 1) return;
+    var next = (_index + delta) % n;
+    if (next < 0) next += n;
+    _controller.animateToPage(next,
+        duration: Duration(milliseconds: ms), curve: Curves.easeOutCubic);
+  }
+
+  void _openAt(int index) {
+    _controller.animateToPage(index,
+        duration: const Duration(milliseconds: 260), curve: Curves.easeOutCubic);
+  }
+
+  void _random() {
+    final n = widget.photos.length;
+    if (n <= 1) return;
+    var r = math.Random().nextInt(n);
+    if (r == _index) r = (r + 1) % n;
+    _openAt(r);
+  }
+
+  void _toggleSlideshow() {
+    setState(() {
+      if (_slideTimer != null) {
+        _slideTimer!.cancel();
+        _slideTimer = null;
+      } else {
+        _slideTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+          if (mounted) _go(1, ms: 600);
+        });
+      }
+    });
+  }
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent e) {
+    if (e is! KeyDownEvent && e is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final k = e.logicalKey;
+    if (k == LogicalKeyboardKey.arrowRight || k == LogicalKeyboardKey.pageDown) {
+      _go(1);
+    } else if (k == LogicalKeyboardKey.arrowLeft ||
+        k == LogicalKeyboardKey.pageUp) {
+      _go(-1);
+    } else if (k == LogicalKeyboardKey.escape ||
+        k == LogicalKeyboardKey.backspace) {
+      Navigator.of(context).maybePop();
+    } else if (k == LogicalKeyboardKey.space) {
+      _toggleSlideshow();
+    } else if (k == LogicalKeyboardKey.keyF) {
+      Favorites.instance.toggle(widget.photos[_index].path);
+    } else if (k == LogicalKeyboardKey.keyR) {
+      _random();
+    } else if (k == LogicalKeyboardKey.keyI) {
+      setState(() => _infoOpen = !_infoOpen);
+    } else {
+      return KeyEventResult.ignored;
+    }
+    return KeyEventResult.handled;
   }
 
   // пока на экране 2+ пальца (щипок) или фото увеличено — НЕ листаем,
@@ -139,11 +209,29 @@ class _ViewerPageState extends State<ViewerPage> {
               Positioned(
                 top: 14,
                 right: 14,
-                child: _RoundBtn(
-                  icon: _infoOpen ? Icons.info : Icons.info_outline,
-                  tip: tr('Сведения', 'Info', 'Información'),
-                  onTap: () => setState(() => _infoOpen = !_infoOpen),
-                ),
+                child: Row(children: [
+                  if (widget.photos.length > 1) ...[
+                    _RoundBtn(
+                      icon: Icons.shuffle_rounded,
+                      tip: tr('Случайное', 'Random', 'Aleatorio'),
+                      onTap: _random,
+                    ),
+                    const SizedBox(width: 8),
+                    _RoundBtn(
+                      icon: _slideshow
+                          ? Icons.pause_rounded
+                          : Icons.slideshow_rounded,
+                      tip: tr('Слайдшоу', 'Slideshow', 'Presentación'),
+                      onTap: _toggleSlideshow,
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  _RoundBtn(
+                    icon: _infoOpen ? Icons.info : Icons.info_outline,
+                    tip: tr('Сведения', 'Info', 'Información'),
+                    onTap: () => setState(() => _infoOpen = !_infoOpen),
+                  ),
+                ]),
               ),
             ]),
           ),
@@ -153,7 +241,10 @@ class _ViewerPageState extends State<ViewerPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF100D0B),
-      body: SafeArea(
+      body: Focus(
+        autofocus: true,
+        onKeyEvent: _onKey,
+        child: SafeArea(
         child: LayoutBuilder(builder: (ctx, cns) {
           final wide = cns.maxWidth > 720;
           final dur = SettingsService.instance.motionReduced
@@ -207,6 +298,7 @@ class _ViewerPageState extends State<ViewerPage> {
               ),
           ]);
         }),
+        ),
       ),
     );
   }
