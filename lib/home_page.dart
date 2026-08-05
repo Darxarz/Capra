@@ -79,6 +79,21 @@ class _HomePageState extends State<HomePage> {
   bool _tagsPanelOpen = false; // открыта боковая панель тегов
   bool _favOnly = false; // показывать только избранное
   bool _projectsOnly = false; // показывать только проекты (KRA/PSD)
+  int _nsfwMode = 0; // 0 — все, 1 — только 18+, 2 — без 18+ (по тегам рейтинга)
+  Set<String> _nsfwPaths = const {}; // пути с рейтингом questionable/explicit
+
+  void _cycleNsfw() {
+    setState(() {
+      _nsfwMode = (_nsfwMode + 1) % 3;
+      _nsfwPaths = _nsfwMode == 0
+          ? const {}
+          : {
+              ...TagService.instance.pathsMatchingTag('rating:questionable'),
+              ...TagService.instance.pathsMatchingTag('rating:explicit'),
+            };
+      _invalidateVisible();
+    });
+  }
   MediaKindFilter _mediaFilter = MediaKindFilter.all;
   FolderView _folderView = FolderView.grid; // вид раздела «Альбомы»
   FolderNode? _treeCache; // построенное древо папок (кэш)
@@ -170,6 +185,11 @@ class _HomePageState extends State<HomePage> {
     if (_favOnly) {
       final favs = Favorites.instance.paths;
       r = r.where((p) => favs.contains(p.path));
+    }
+    if (_nsfwMode == 1) {
+      r = r.where((p) => _nsfwPaths.contains(p.path));
+    } else if (_nsfwMode == 2) {
+      r = r.where((p) => !_nsfwPaths.contains(p.path));
     }
     if (_filterTags.isNotEmpty) {
       r = r.where((p) => _filterPaths.contains(p.path));
@@ -1039,6 +1059,8 @@ class _HomePageState extends State<HomePage> {
           compact: compact,
           sort: SettingsService.instance.sortMode,
           onSort: _setSort,
+          nsfwMode: _nsfwMode,
+          onNsfw: _cycleNsfw,
           folder: _folders.isNotEmpty
               ? (_folders.length == 1
                   ? _folders.first
@@ -2277,6 +2299,8 @@ class _CountBar extends StatelessWidget {
   final bool compact;
   final SortMode sort;
   final ValueChanged<SortMode> onSort;
+  final int nsfwMode; // 0 все, 1 только 18+, 2 без 18+
+  final VoidCallback onNsfw;
   const _CountBar({
     required this.mode,
     required this.total,
@@ -2284,6 +2308,8 @@ class _CountBar extends StatelessWidget {
     required this.folder,
     required this.sort,
     required this.onSort,
+    required this.nsfwMode,
+    required this.onNsfw,
     this.compact = false,
   });
 
@@ -2317,6 +2343,32 @@ class _CountBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
+          // быстрый фильтр рейтинга: все → только 18+ → без 18+ (по тегам)
+          if (mode != ViewMode.albums)
+            InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: onNsfw,
+              child: Tooltip(
+                message: switch (nsfwMode) {
+                  1 => tr('Только 18+', 'Only 18+', 'Solo 18+'),
+                  2 => tr('Без 18+', 'Hide 18+', 'Sin 18+'),
+                  _ => tr('Рейтинг: все', 'Rating: all', 'Clasificación: todo'),
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Icon(
+                    switch (nsfwMode) {
+                      1 => Icons.local_fire_department_rounded,
+                      2 => Icons.shield_rounded,
+                      _ => Icons.shield_outlined,
+                    },
+                    size: 17,
+                    color: nsfwMode == 0 ? c.muted : c.accent,
+                  ),
+                ),
+              ),
+            ),
+          if (mode != ViewMode.albums) const SizedBox(width: 4),
           // сортировка — доступна в режимах с лентой (Все/По датам)
           if (mode != ViewMode.albums)
             PopupMenuButton<SortMode>(
