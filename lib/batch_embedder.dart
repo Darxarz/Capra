@@ -72,9 +72,11 @@ class BatchEmbedder extends ChangeNotifier {
       return;
     }
 
+    // одним запросом, а не 100к отдельных проверок в базе
+    final already = EmbedStore.instance.embeddedPaths();
     final todo = photos
         .where((ph) =>
-            !ph.isVideo && !ph.isRemote && !EmbedStore.instance.has(ph.path))
+            !ph.isVideo && !ph.isRemote && !already.contains(ph.path))
         .toList(growable: false);
     total = todo.length;
     notifyListeners();

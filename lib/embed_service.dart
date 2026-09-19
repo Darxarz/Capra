@@ -112,7 +112,9 @@ class EmbedService {
   List<String> searchSimilar(Float32List query, {int k = 200, String? exclude}) {
     final all = EmbedStore.instance.all();
     final scored = <(String, double)>[];
-    for (final (path, vec) in all) {
+    for (final entry in all.entries) {
+      final path = entry.key;
+      final vec = entry.value;
       if (path == exclude) continue;
       if (vec.length != query.length) continue;
       var dot = 0.0;

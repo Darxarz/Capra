@@ -14,6 +14,11 @@ class EmbedStore {
   Database? _db;
   bool get ready => _db != null;
 
+  // Индекс векторов в памяти. Собирается ОДИН раз при первом поиске: иначе
+  // каждый «Похожие» заново читал и декодировал всю таблицу на UI-потоке
+  // (на 100к это заморозка на секунды).
+  Map<String, Float32List>? _index;
+
   Future<void> init() async {
     if (_db != null) return;
     final base = await getApplicationSupportDirectory();
@@ -30,10 +35,22 @@ class EmbedStore {
   }
 
   bool has(String path) {
+    final idx = _index;
+    if (idx != null) return idx.containsKey(path);
     final db = _db;
     if (db == null) return false;
     final r = db.select('SELECT 1 FROM emb WHERE path = ? LIMIT 1', [path]);
     return r.isNotEmpty;
+  }
+
+  /// Только пути уже посчитанных (без тяжёлых BLOB-ов). Для пакетной
+  /// индексации: одним запросом вместо 100к отдельных проверок.
+  Set<String> embeddedPaths() {
+    final db = _db;
+    if (db == null) return const {};
+    return {
+      for (final r in db.select('SELECT path FROM emb')) r['path'] as String
+    };
   }
 
   int get count {
@@ -48,11 +65,17 @@ class EmbedStore {
     if (db == null) return;
     db.execute('INSERT OR REPLACE INTO emb(path, dim, vec) VALUES (?, ?, ?)',
         [path, vec.length, vec.buffer.asUint8List()]);
+    _index?[path] = vec; // держим индекс в актуальном состоянии
   }
 
-  void remove(String path) => _db?.execute('DELETE FROM emb WHERE path = ?', [path]);
+  void remove(String path) {
+    _db?.execute('DELETE FROM emb WHERE path = ?', [path]);
+    _index?.remove(path);
+  }
 
   Float32List? vectorOf(String path) {
+    final idx = _index;
+    if (idx != null) return idx[path];
     final db = _db;
     if (db == null) return null;
     final r = db.select('SELECT vec FROM emb WHERE path = ? LIMIT 1', [path]);
@@ -60,17 +83,24 @@ class EmbedStore {
     return _decode(r.first['vec'] as Uint8List);
   }
 
-  /// Все векторы (путь → вектор). Для поиска: держим в памяти и считаем косинус.
-  /// На 100к × 512 float ≈ 200 МБ — приемлемо; при нужде вынесем в mmap/ANN.
-  List<(String, Float32List)> all() {
+  /// Все векторы (путь → вектор) для косинусного поиска. Читаем из БД один
+  /// раз, дальше — из памяти. ПАМЯТЬ: 100к × 768 float ≈ 300 МБ, поэтому есть
+  /// [releaseIndex] — освобождать, когда поиск больше не нужен.
+  Map<String, Float32List> all() {
+    final cached = _index;
+    if (cached != null) return cached;
     final db = _db;
-    if (db == null) return const [];
-    final out = <(String, Float32List)>[];
+    if (db == null) return const {};
+    final out = <String, Float32List>{};
     for (final row in db.select('SELECT path, vec FROM emb')) {
-      out.add((row['path'] as String, _decode(row['vec'] as Uint8List)));
+      out[row['path'] as String] = _decode(row['vec'] as Uint8List);
     }
+    _index = out;
     return out;
   }
+
+  /// Отпустить индекс из памяти (экран поиска закрыт / мало памяти).
+  void releaseIndex() => _index = null;
 
   static Float32List _decode(Uint8List bytes) =>
       bytes.buffer.asFloat32List(bytes.offsetInBytes, bytes.length ~/ 4);
