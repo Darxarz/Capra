@@ -25,6 +25,24 @@ void openViewer(BuildContext context, List<PhotoItem> photos, int index) {
   ));
 }
 
+/// Общий Hero-тег для миниатюры (`PhotoTile` в home_page.dart) и полноэкранного
+/// фото в просмотрщике — по нему плитка плавно "вырастает" на весь экран.
+String photoHeroTag(PhotoItem photo) => 'photo:${photo.path}';
+
+/// "Полёт" Hero между плиткой (обычно BoxFit.cover) и просмотрщиком
+/// (BoxFit.contain): на время перелёта всегда показываем полноразмерное фото
+/// с BoxFit.contain, чтобы не было рывка при смене вида на середине анимации.
+HeroFlightShuttleBuilder photoHeroShuttle(PhotoItem photo) {
+  return (flightContext, animation, direction, fromHeroContext, toHeroContext) {
+    return Image(
+      image: photo.full,
+      fit: BoxFit.contain,
+      gaplessPlayback: true,
+      errorBuilder: (c, e, s) => const SizedBox.shrink(),
+    );
+  };
+}
+
 class ViewerPage extends StatefulWidget {
   final List<PhotoItem> photos;
   final int initialIndex;
@@ -35,7 +53,8 @@ class ViewerPage extends StatefulWidget {
   State<ViewerPage> createState() => _ViewerPageState();
 }
 
-class _ViewerPageState extends State<ViewerPage> {
+class _ViewerPageState extends State<ViewerPage>
+    with SingleTickerProviderStateMixin {
   late final PageController _controller;
   late int _index;
   bool _infoOpen = false; // боковая панель свёрнута по умолчанию
@@ -45,6 +64,24 @@ class _ViewerPageState extends State<ViewerPage> {
   Timer? _slideTimer; // авто-перелистывание (слайдшоу)
 
   bool get _slideshow => _slideTimer != null;
+
+  // ── свайп вниз закрывает просмотрщик (как в Google Фото) ──
+  // Следим за пальцем через сырые Listener-события (как и счётчик _fingers
+  // ниже), а не через GestureDetector.onVerticalDrag* — иначе жест конкурирует
+  // за арену жестов с внутренним ScaleGestureRecognizer у InteractiveViewer
+  // (он «съедает» одиночный палец ещё до нашего распознавателя) и не срабатывает.
+  late final AnimationController _dismissCtrl = AnimationController(vsync: this);
+  double _dismissDy = 0; // смещение фото вниз во время жеста (0 — на месте)
+  bool _dismissDragging = false; // уже определили, что это жест закрытия
+  int? _dismissPointer; // id пальца, за которым следим
+  Offset _dismissStartPos = Offset.zero;
+  Offset _dismissLastPos = Offset.zero;
+  bool _dismissAxisDecided = false; // решили, вертикальный жест или нет
+  bool _dismissClosing = false; // идёт анимация "улетело — сейчас закроемся"
+
+  // тянуть вниз можно только когда фото не увеличено, одним пальцем и это не видео
+  bool get _canDismissDrag =>
+      !_zoomed && _fingers < 2 && !widget.photos[_index].isVideo;
 
   @override
   void initState() {
@@ -57,7 +94,82 @@ class _ViewerPageState extends State<ViewerPage> {
   void dispose() {
     _slideTimer?.cancel();
     _controller.dispose();
+    _dismissCtrl.dispose();
     super.dispose();
+  }
+
+  void _dismissPointerDown(PointerDownEvent e) {
+    // следим только за первым пальцем — если он уже есть, это не тот случай
+    if (_dismissPointer != null) return;
+    // новый палец лёг поверх ещё не доигравшего возврата на место — считаем,
+    // что фото уже вернулось, и отдаём смещение под новый жест
+    if (_dismissCtrl.isAnimating && !_dismissClosing) {
+      _dismissCtrl.stop();
+      setState(() => _dismissDy = 0);
+    }
+    _dismissPointer = e.pointer;
+    _dismissStartPos = e.position;
+    _dismissLastPos = e.position;
+    _dismissAxisDecided = false;
+  }
+
+  void _dismissPointerMove(PointerMoveEvent e) {
+    if (e.pointer != _dismissPointer) return;
+    final delta = e.position - _dismissLastPos;
+    _dismissLastPos = e.position;
+
+    if (_dismissDragging) {
+      if (!_canDismissDrag) {
+        _dismissDragging = false;
+        _dismissPointer = null;
+        _settleDismiss(cancel: true);
+        return;
+      }
+      setState(() => _dismissDy = math.max(0.0, _dismissDy + delta.dy));
+      return;
+    }
+
+    if (_dismissAxisDecided) return; // уже поняли, что это не наш жест
+    final total = e.position - _dismissStartPos;
+    if (total.distance < 10) return; // ждём, пока наберётся заметное движение
+    _dismissAxisDecided = true;
+    final isVerticalDown = total.dy > 0 && total.dy.abs() > total.dx.abs() * 1.2;
+    if (isVerticalDown && _canDismissDrag) {
+      _dismissDragging = true;
+      setState(() => _dismissDy = math.max(0.0, total.dy));
+    }
+  }
+
+  void _dismissPointerUp(PointerEvent e, {bool cancelled = false}) {
+    if (e.pointer != _dismissPointer) return;
+    _dismissPointer = null;
+    if (!_dismissDragging) return;
+    _dismissDragging = false;
+    final shouldClose = !cancelled && _dismissDy > 110;
+    _settleDismiss(cancel: !shouldClose);
+  }
+
+  // cancel: true — вернуть фото на место; false — доиграть уход вниз и закрыть
+  void _settleDismiss({required bool cancel}) {
+    _dismissClosing = !cancel;
+    final reduced = SettingsService.instance.motionReduced;
+    final begin = _dismissDy;
+    final end = cancel ? 0.0 : begin + 260;
+    final tween = Tween<double>(begin: begin, end: end);
+    void listener() {
+      if (mounted) setState(() => _dismissDy = tween.evaluate(_dismissCtrl));
+    }
+
+    _dismissCtrl
+      ..stop()
+      ..value = 0
+      ..duration = Duration(milliseconds: reduced ? 0 : (cancel ? 220 : 180))
+      ..addListener(listener);
+    _dismissCtrl.forward().whenCompleteOrCancel(() {
+      _dismissCtrl.removeListener(listener);
+      _dismissClosing = false;
+      if (!cancel && mounted) Navigator.of(context).maybePop();
+    });
   }
 
   /// Перейти на delta кадров (с зацикливанием). Плавно.
@@ -135,15 +247,27 @@ class _ViewerPageState extends State<ViewerPage> {
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
     final photo = widget.photos[_index];
-    final locked = _zoomed || _fingers >= 2;
+    // во время подтверждённого свайпа-закрытия листание тоже блокируем —
+    // иначе фото ещё и уедет вбок, поверх вертикального жеста
+    final locked = _zoomed || _fingers >= 2 || _dismissDragging;
 
     final stage = Stack(
       children: [
         Positioned.fill(
           child: Listener(
-            onPointerDown: (_) => _changeFingers(1),
-            onPointerUp: (_) => _changeFingers(-1),
-            onPointerCancel: (_) => _changeFingers(-1),
+            onPointerDown: (e) {
+              _changeFingers(1);
+              _dismissPointerDown(e);
+            },
+            onPointerMove: _dismissPointerMove,
+            onPointerUp: (e) {
+              _changeFingers(-1);
+              _dismissPointerUp(e);
+            },
+            onPointerCancel: (e) {
+              _changeFingers(-1);
+              _dismissPointerUp(e, cancelled: true);
+            },
             child: PageView.builder(
               controller: _controller,
               physics: locked
@@ -153,13 +277,20 @@ class _ViewerPageState extends State<ViewerPage> {
               onPageChanged: (i) => setState(() {
                 _index = i;
                 _zoomed = false;
+                _dismissDy = 0;
               }),
               itemBuilder: (ctx, i) {
                 final p = widget.photos[i];
                 if (p.isVideo) return _VideoPlayerPane(photo: p);
+                // Hero — только для текущей страницы, иначе PageView строит
+                // соседние кадры заранее и получаются два героя с одним тегом
+                final heroTag = (i == _index && !SettingsService.instance.motionReduced)
+                    ? photoHeroTag(p)
+                    : null;
                 return _ZoomableImage(
                   key: ValueKey(p.path),
                   photo: p,
+                  heroTag: heroTag,
                   onZoomChanged: (z) {
                     if (i == _index && z != _zoomed) {
                       setState(() => _zoomed = z);
@@ -240,6 +371,20 @@ class _ViewerPageState extends State<ViewerPage> {
       ],
     );
 
+    // прогресс жеста «свайп вниз»: 0 — на месте, 1 — уже почти закрыто.
+    // Само отслеживание пальца — в Listener внутри stage (см. выше), поэтому
+    // тут только визуальный эффект: смещение/уменьшение/лёгкое затухание.
+    final dismissT = (_dismissDy / 280).clamp(0.0, 1.0);
+    final stageWithDismiss = Transform.translate(
+      offset: Offset(0, _dismissDy),
+      child: Transform.scale(
+        scale: 1 - dismissT * 0.22,
+        alignment: Alignment.center,
+        // не гасим до нуля — иначе на миг будет "дыра" ещё до закрытия
+        child: Opacity(opacity: 1 - dismissT * 0.55, child: stage),
+      ),
+    );
+
     return Scaffold(
       backgroundColor: const Color(0xFF100D0B),
       body: Focus(
@@ -256,7 +401,7 @@ class _ViewerPageState extends State<ViewerPage> {
           final panelH = wide ? cns.maxHeight : cns.maxHeight * 0.78;
 
           return Stack(children: [
-            Positioned.fill(child: stage),
+            Positioned.fill(child: stageWithDismiss),
 
             // затемнение-подложка: тап мимо панели закрывает её
             if (_infoOpen)
@@ -312,11 +457,16 @@ class _ZoomableImage extends StatefulWidget {
   final PhotoItem photo;
   final ValueChanged<bool> onZoomChanged;
   final VoidCallback onTap;
+  // не null — фото на текущей странице просмотрщика: можно Hero-анимировать
+  // из плитки; null — соседние (заранее построенные) страницы PageView, чтобы
+  // не получить два героя с одинаковым тегом одновременно
+  final String? heroTag;
   const _ZoomableImage(
       {super.key,
       required this.photo,
       required this.onZoomChanged,
-      required this.onTap});
+      required this.onTap,
+      this.heroTag});
 
   @override
   State<_ZoomableImage> createState() => _ZoomableImageState();
@@ -381,6 +531,20 @@ class _ZoomableImageState extends State<_ZoomableImage>
 
   @override
   Widget build(BuildContext context) {
+    Widget image = Image(
+      image: widget.photo.full,
+      fit: BoxFit.contain,
+      errorBuilder: (c2, e, s) => const Icon(Icons.broken_image_outlined,
+          color: Colors.white54, size: 48),
+    );
+    final heroTag = widget.heroTag;
+    if (heroTag != null) {
+      image = Hero(
+        tag: heroTag,
+        flightShuttleBuilder: photoHeroShuttle(widget.photo),
+        child: image,
+      );
+    }
     return GestureDetector(
       onTap: widget.onTap,
       onDoubleTapDown: (d) => _tapPos = d.localPosition,
@@ -389,14 +553,10 @@ class _ZoomableImageState extends State<_ZoomableImage>
         transformationController: _tc,
         minScale: 1,
         maxScale: 6,
-        child: Center(
-          child: Image(
-            image: widget.photo.full,
-            fit: BoxFit.contain,
-            errorBuilder: (c2, e, s) => const Icon(Icons.broken_image_outlined,
-                color: Colors.white54, size: 48),
-          ),
-        ),
+        // панораму включаем только при увеличении: при scale==1 всё равно
+        // некуда панорамировать, а так честнее отражаем реальное поведение
+        panEnabled: _zoomed,
+        child: Center(child: image),
       ),
     );
   }
