@@ -351,6 +351,18 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Восстановить защиту из резервной копии: в копии лежит не сам PIN, а его
+  /// соль и хеш — они переносятся как есть, иначе после восстановления скрытые
+  /// папки оказались бы открыты без кода.
+  void restorePin(String? hash, String? salt) {
+    if (hash == null || salt == null || hash.isEmpty || salt.isEmpty) return;
+    pinHash = hash;
+    pinSalt = salt;
+    _p.setString(_kPinHash, hash);
+    _p.setString(_kPinSalt, salt);
+    notifyListeners();
+  }
+
   /// Проверить введённый PIN против сохранённого хеша.
   bool verifyPin(String pin) {
     if (!hasPin) return false;

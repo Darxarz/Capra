@@ -87,6 +87,10 @@ class BackupService {
         'showGifBadge': s.showGifBadge,
         'hiddenFolders': s.hiddenFolders.toList(),
         'showHidden': s.showHidden,
+        // защита скрытых папок: переносим соль и ХЕШ (не сам PIN), иначе после
+        // восстановления секретные папки остались бы без кода
+        'pinHash': s.pinHash,
+        'pinSalt': s.pinSalt,
         'gapStyle': s.gapStyle.name,
         'gapColorValue': s.gapColorValue,
         'pcScanMinDim': s.pcScanMinDim,
@@ -172,7 +176,15 @@ class BackupService {
         if (startSection != null) s.setStartSection(startSection);
         if (m['showFavBadge'] is bool) s.setShowFavBadge(m['showFavBadge']);
         if (m['showGifBadge'] is bool) s.setShowGifBadge(m['showGifBadge']);
-        if (m['showHidden'] is bool) s.setShowHidden(m['showHidden']);
+        // сначала восстанавливаем защиту, потом решаем про показ скрытого
+        s.restorePin(
+            m['pinHash'] is String ? m['pinHash'] as String : null,
+            m['pinSalt'] is String ? m['pinSalt'] as String : null);
+        // при заданном PIN скрытое всегда остаётся закрытым — копия не должна
+        // открывать секретные папки в обход кода
+        if (m['showHidden'] is bool) {
+          s.setShowHidden(s.hasPin ? false : m['showHidden'] as bool);
+        }
         final gapStyle = enumOf(GapStyle.values, 'gapStyle');
         if (gapStyle != null) s.setGapStyle(gapStyle);
         if (m['gapColorValue'] is int) s.setGapColor(m['gapColorValue']);
