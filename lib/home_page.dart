@@ -1314,10 +1314,14 @@ class _HomePageState extends State<HomePage> {
     switch (_mode) {
       case ViewMode.all:
         return _AllGrid(
-            photos: visible, cell: SettingsService.instance.cellSize);
+            photos: visible,
+            cell: SettingsService.instance.cellSize,
+            scrollKey: ViewMode.all);
       case ViewMode.dates:
         return _DatesView(
-            photos: visible, cell: SettingsService.instance.cellSize);
+            photos: visible,
+            cell: SettingsService.instance.cellSize,
+            scrollKey: ViewMode.dates);
       case ViewMode.albums:
         return const SizedBox.shrink(); // обработано выше
     }
@@ -2633,12 +2637,163 @@ class _MediaBadge extends StatelessWidget {
 }
 
 // ───────────────────────── сетки ─────────────────────────
+
+/// Память позиции прокрутки на время сеанса — своя для каждого режима
+/// просмотра (Все / По датам / Альбомы), задаётся ключом [key] (обычно —
+/// значение [ViewMode]). Живёт вне дерева виджетов, поэтому переживает
+/// пересоздание экрана (возврат из просмотрщика/настроек) и не требует
+/// записи в БД/настройки — только пока открыто приложение. Экраны, для
+/// которых ключ не задан (например, содержимое отдельной папки), в этой
+/// памяти не участвуют — иначе их прокрутка путалась бы с главной лентой.
+class _ScrollMemory {
+  static final Map<Object, double> _offsets = {};
+  static double? take(Object key) => _offsets[key];
+  static void save(Object key, double offset) => _offsets[key] = offset;
+}
+
+/// Подключает [controller] к памяти прокрутки под ключом [key]: запоминает
+/// смещение при каждом скролле и один раз (после первой отрисовки) пытается
+/// восстановить сохранённое — но только когда контент уже раскладён
+/// (`hasClients` и известен `maxScrollExtent`), чтобы не дёргать экран.
+/// [key] равен `null` — экран не участвует в памяти прокрутки (ничего не
+/// делает).
+void _attachScrollMemory(
+  ScrollController controller,
+  Object? key,
+  bool Function() isMounted,
+) {
+  if (key == null) return;
+  controller.addListener(() {
+    if (controller.hasClients) _ScrollMemory.save(key, controller.offset);
+  });
+  final saved = _ScrollMemory.take(key);
+  if (saved == null || saved <= 0) return;
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!isMounted() || !controller.hasClients) return;
+    final max = controller.position.maxScrollExtent;
+    if (max <= 0) return;
+    controller.jumpTo(saved.clamp(0.0, max));
+  });
+}
+
+/// Общий бегунок-скролл справа: тянешь — мгновенно прыгаешь по ленте, рядом
+/// пузырь с подписью (дата/буква/размер — считает [labelAt]). Появляется,
+/// только когда фото много и реально есть куда скроллить. Используется и в
+/// квадратной сетке, и в мозаике — раскладки разные, а бегунок один.
+class _Scrubber extends StatefulWidget {
+  final ScrollController scroll;
+  final double viewH;
+  final int itemCount;
+  final String Function(double offset) labelAt;
+  const _Scrubber({
+    required this.scroll,
+    required this.viewH,
+    required this.itemCount,
+    required this.labelAt,
+  });
+
+  @override
+  State<_Scrubber> createState() => _ScrubberState();
+}
+
+class _ScrubberState extends State<_Scrubber> {
+  bool _scrubbing = false;
+  String _scrubLabel = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final scroll = widget.scroll;
+    return AnimatedBuilder(
+      animation: scroll,
+      builder: (ctx, _) {
+        if (!scroll.hasClients || !scroll.position.hasContentDimensions) {
+          return const SizedBox.shrink();
+        }
+        final maxExt = scroll.position.maxScrollExtent;
+        if (maxExt <= 0 || widget.itemCount < 80) {
+          return const SizedBox.shrink();
+        }
+        const margin = 8.0, handleH = 56.0;
+        final trackH = widget.viewH - margin * 2 - handleH;
+        if (trackH <= 0) return const SizedBox.shrink();
+        final frac = (scroll.offset / maxExt).clamp(0.0, 1.0);
+        final c = AuroraTheme.of(ctx).colors;
+        return Positioned(
+          top: margin + frac * trackH,
+          right: 0,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onVerticalDragStart: (_) => setState(() {
+              _scrubbing = true;
+              _scrubLabel = widget.labelAt(scroll.offset);
+            }),
+            onVerticalDragUpdate: (d) {
+              final next =
+                  (scroll.offset + (d.primaryDelta ?? 0) / trackH * maxExt)
+                      .clamp(0.0, maxExt);
+              scroll.jumpTo(next);
+              setState(() => _scrubLabel = widget.labelAt(next));
+            },
+            onVerticalDragEnd: (_) => setState(() => _scrubbing = false),
+            onVerticalDragCancel: () => setState(() => _scrubbing = false),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              if (_scrubbing)
+                Container(
+                  margin: const EdgeInsets.only(right: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: c.accent,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: const [
+                      BoxShadow(
+                          color: Colors.black38,
+                          blurRadius: 10,
+                          offset: Offset(0, 3)),
+                    ],
+                  ),
+                  child: Text(_scrubLabel,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14)),
+                ),
+              SizedBox(
+                width: 34,
+                height: handleH,
+                child: Center(
+                  child: Container(
+                    width: _scrubbing ? 8 : 5,
+                    height: handleH,
+                    decoration: BoxDecoration(
+                      color: _scrubbing
+                          ? c.accent
+                          : c.muted.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+              ),
+            ]),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _AllGrid extends StatefulWidget {
   final List<PhotoItem> photos;
   final double cell;
   final bool selectable; // включён ли «паровозик»/выделение
+  // ключ памяти прокрутки (обычно ViewMode.all); null — не запоминать
+  // (например, для содержимого отдельной папки, чтобы не путать с главной лентой)
+  final Object? scrollKey;
   const _AllGrid(
-      {required this.photos, required this.cell, this.selectable = true});
+      {required this.photos,
+      required this.cell,
+      this.selectable = true,
+      this.scrollKey});
 
   @override
   State<_AllGrid> createState() => _AllGridState();
@@ -2655,9 +2810,11 @@ class _AllGridState extends State<_AllGrid> {
   double _viewH = 0;
   bool _painting = false; // идёт покраска правой кнопкой мыши (ПК)
 
-  // состояние быстрого бегунка-скролла
-  bool _scrubbing = false;
-  String _scrubLabel = '';
+  @override
+  void initState() {
+    super.initState();
+    _attachScrollMemory(_scroll, widget.scrollKey, () => mounted);
+  }
 
   @override
   void dispose() {
@@ -2783,92 +2940,14 @@ class _AllGridState extends State<_AllGrid> {
     }
   }
 
-  /// Бегунок справа: тянешь — мгновенно прыгаешь по ленте, рядом пузырь с датой.
-  /// Появляется только когда листать действительно много.
-  Widget _scrubber(double viewH) {
-    return AnimatedBuilder(
-      animation: _scroll,
-      builder: (ctx, _) {
-        if (!_scroll.hasClients || !_scroll.position.hasContentDimensions) {
-          return const SizedBox.shrink();
-        }
-        final maxExt = _scroll.position.maxScrollExtent;
-        if (maxExt <= 0 || widget.photos.length < 80) {
-          return const SizedBox.shrink();
-        }
-        const margin = 8.0, handleH = 56.0;
-        final trackH = viewH - margin * 2 - handleH;
-        if (trackH <= 0) return const SizedBox.shrink();
-        final frac = (_scroll.offset / maxExt).clamp(0.0, 1.0);
-        final c = AuroraTheme.of(ctx).colors;
-        return Positioned(
-          top: margin + frac * trackH,
-          right: 0,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onVerticalDragStart: (_) => setState(() {
-              _scrubbing = true;
-              _scrubLabel = _labelAt(_scroll.offset);
-            }),
-            onVerticalDragUpdate: (d) {
-              final next =
-                  (_scroll.offset + (d.primaryDelta ?? 0) / trackH * maxExt)
-                      .clamp(0.0, maxExt);
-              _scroll.jumpTo(next);
-              setState(() => _scrubLabel = _labelAt(next));
-            },
-            onVerticalDragEnd: (_) => setState(() => _scrubbing = false),
-            onVerticalDragCancel: () => setState(() => _scrubbing = false),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              if (_scrubbing)
-                Container(
-                  margin: const EdgeInsets.only(right: 6),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                  decoration: BoxDecoration(
-                    color: c.accent,
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: const [
-                      BoxShadow(
-                          color: Colors.black38,
-                          blurRadius: 10,
-                          offset: Offset(0, 3)),
-                    ],
-                  ),
-                  child: Text(_scrubLabel,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14)),
-                ),
-              SizedBox(
-                width: 34,
-                height: handleH,
-                child: Center(
-                  child: Container(
-                    width: _scrubbing ? 8 : 5,
-                    height: handleH,
-                    decoration: BoxDecoration(
-                      color: _scrubbing
-                          ? c.accent
-                          : c.muted.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ),
-              ),
-            ]),
-          ),
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final s = SettingsService.instance;
     if (s.gridLayout == GridLayout.mosaic) {
-      return _MosaicGrid(photos: widget.photos, cell: widget.cell);
+      return _MosaicGrid(
+          photos: widget.photos,
+          cell: widget.cell,
+          scrollKey: widget.scrollKey);
     }
     final gap = s.tileSpacing;
     return LayoutBuilder(builder: (ctx, cns) {
@@ -2917,7 +2996,12 @@ class _AllGridState extends State<_AllGrid> {
       }
       return Stack(children: [
         Positioned.fill(child: content),
-        _scrubber(cns.maxHeight),
+        _Scrubber(
+          scroll: _scroll,
+          viewH: cns.maxHeight,
+          itemCount: widget.photos.length,
+          labelAt: _labelAt,
+        ),
       ]);
     });
   }
@@ -2929,18 +3013,22 @@ class _AllGridState extends State<_AllGrid> {
 class _MosaicGrid extends StatefulWidget {
   final List<PhotoItem> photos;
   final double cell;
-  const _MosaicGrid({required this.photos, required this.cell});
+  final Object? scrollKey; // см. _AllGrid.scrollKey
+  const _MosaicGrid({required this.photos, required this.cell, this.scrollKey});
 
   @override
   State<_MosaicGrid> createState() => _MosaicGridState();
 }
 
 class _MosaicGridState extends State<_MosaicGrid> {
+  final _scroll = ScrollController();
+
   @override
   void initState() {
     super.initState();
     // запустить фоновое заполнение размеров (если ещё не знаем)
     DimsService.instance.ensureFilled(widget.photos);
+    _attachScrollMemory(_scroll, widget.scrollKey, () => mounted);
   }
 
   @override
@@ -2951,11 +3039,39 @@ class _MosaicGridState extends State<_MosaicGrid> {
     }
   }
 
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
   static const _pad = EdgeInsets.fromLTRB(16, 6, 16, 18);
 
   // кэш раскладки, чтобы не пересчитывать упаковку каждый кадр
   _QuiltLayout? _layout;
   String _sig = '';
+
+  /// Подпись «пузыря» бегунка для данного смещения прокрутки — как в
+  /// квадратной сетке (дата/буква/размер), но индекс плитки ищем по готовой
+  /// упаковке квилта (mainOff), а не формулой «ряд×колонки» — в мозаике у
+  /// плиток разная высота/ширина.
+  String _labelAt(double offset) {
+    final layout = _layout;
+    if (layout == null || widget.photos.isEmpty) return '';
+    final contentOffset = math.max(0.0, offset - _pad.top);
+    var idx = layout.firstIndexAtOrAfter(contentOffset);
+    if (idx < 0) idx = 0;
+    if (idx >= widget.photos.length) idx = widget.photos.length - 1;
+    final ph = widget.photos[idx];
+    switch (SettingsService.instance.sortMode) {
+      case SortMode.nameAsc:
+        return ph.fileName.isNotEmpty ? ph.fileName[0].toUpperCase() : '';
+      case SortMode.sizeDesc:
+        return prettySize(ph.sizeBytes);
+      default:
+        return dateGroupOf(ph.modified);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2977,8 +3093,9 @@ class _MosaicGridState extends State<_MosaicGrid> {
             _sig = sig;
           }
 
-          return GapBackground(
+          final grid = GapBackground(
             child: GridView.custom(
+              controller: _scroll,
               padding: _pad,
               gridDelegate: _QuiltDelegate(_layout!),
               childrenDelegate: SliverChildBuilderDelegate(
@@ -2993,6 +3110,15 @@ class _MosaicGridState extends State<_MosaicGrid> {
               ),
             ),
           );
+          return Stack(children: [
+            Positioned.fill(child: grid),
+            _Scrubber(
+              scroll: _scroll,
+              viewH: cns.maxHeight,
+              itemCount: widget.photos.length,
+              labelAt: _labelAt,
+            ),
+          ]);
         });
       },
     );
@@ -3092,6 +3218,11 @@ class _QuiltLayout extends SliverGridLayout {
   @override
   double computeMaxScrollOffset(int childCount) => maxScroll;
 
+  /// Индекс первой плитки с mainOff >= [offset] (mainOff неубывающий, поэтому
+  /// это корректно определяет «верхнюю» плитку для данного смещения прокрутки
+  /// — используется бегунком, чтобы показать подпись под пальцем в мозаике).
+  int firstIndexAtOrAfter(double offset) => _lowerBound(offset);
+
   @override
   SliverGridGeometry getGeometryForChildIndex(int index) => SliverGridGeometry(
         scrollOffset: mainOff[index],
@@ -3146,7 +3277,8 @@ class _QuiltLayout extends SliverGridLayout {
 class _DatesView extends StatefulWidget {
   final List<PhotoItem> photos;
   final double cell;
-  const _DatesView({required this.photos, required this.cell});
+  final Object? scrollKey; // см. _AllGrid.scrollKey
+  const _DatesView({required this.photos, required this.cell, this.scrollKey});
 
   @override
   State<_DatesView> createState() => _DatesViewState();
@@ -3168,6 +3300,7 @@ class _DateRowEntry {
 }
 
 class _DatesViewState extends State<_DatesView> {
+  final _scroll = ScrollController();
   List<_DateRowEntry> _entries = const [];
   List<PhotoItem>? _lastPhotos;
   double _lastCell = -1;
@@ -3176,6 +3309,18 @@ class _DatesViewState extends State<_DatesView> {
   AppLang? _lastLang;
   int _lastColumns = 0;
   double _tile = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _attachScrollMemory(_scroll, widget.scrollKey, () => mounted);
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
 
   void _rebuild(double width) {
     final gap = SettingsService.instance.tileSpacing;
@@ -3228,6 +3373,7 @@ class _DatesViewState extends State<_DatesView> {
       final gap = SettingsService.instance.tileSpacing;
       return GapBackground(
         child: ListView.builder(
+          controller: _scroll,
           padding: const EdgeInsets.only(bottom: 18),
           scrollCacheExtent: SettingsService.instance.lowEndMode
               ? const ScrollCacheExtent.pixels(160)
@@ -3285,7 +3431,7 @@ class _DatesViewState extends State<_DatesView> {
 }
 
 // ───────────────────────── альбомы (папки) ─────────────────────────
-class _AlbumsView extends StatelessWidget {
+class _AlbumsView extends StatefulWidget {
   final List<AlbumItem> albums;
   final List<PhotoItem> photos;
   final double cell;
@@ -3298,8 +3444,28 @@ class _AlbumsView extends StatelessWidget {
   });
 
   @override
+  State<_AlbumsView> createState() => _AlbumsViewState();
+}
+
+class _AlbumsViewState extends State<_AlbumsView> {
+  final _scroll = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _attachScrollMemory(_scroll, ViewMode.albums, () => mounted);
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return GridView.builder(
+      controller: _scroll,
       padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 190,
@@ -3307,18 +3473,19 @@ class _AlbumsView extends StatelessWidget {
         crossAxisSpacing: 16,
         childAspectRatio: 0.82,
       ),
-      itemCount: albums.length,
+      itemCount: widget.albums.length,
       itemBuilder: (ctx, i) {
-        final a = albums[i];
+        final a = widget.albums[i];
         return _AlbumCard(
           album: a,
-          onHideToggle: () => onHideToggle(a),
+          onHideToggle: () => widget.onHideToggle(a),
           onTap: () {
-            final inFolder =
-                photos.where((p) => p.folderPath == a.folderPath).toList();
+            final inFolder = widget.photos
+                .where((p) => p.folderPath == a.folderPath)
+                .toList();
             Navigator.of(ctx).push(MaterialPageRoute(
               builder: (_) =>
-                  _FolderPage(album: a, photos: inFolder, cell: cell),
+                  _FolderPage(album: a, photos: inFolder, cell: widget.cell),
             ));
           },
         );
@@ -3420,7 +3587,7 @@ class _AlbumCard extends StatelessWidget {
 }
 
 // ───────────── альбомы списком (миниатюра-фон + имя/путь поверх) ─────────────
-class _AlbumsList extends StatelessWidget {
+class _AlbumsList extends StatefulWidget {
   final List<AlbumItem> albums;
   final List<PhotoItem> photos;
   final ValueChanged<AlbumItem> onOpen;
@@ -3433,15 +3600,35 @@ class _AlbumsList extends StatelessWidget {
   });
 
   @override
+  State<_AlbumsList> createState() => _AlbumsListState();
+}
+
+class _AlbumsListState extends State<_AlbumsList> {
+  final _scroll = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _attachScrollMemory(_scroll, ViewMode.albums, () => mounted);
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ListView.separated(
+      controller: _scroll,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 18),
-      itemCount: albums.length,
+      itemCount: widget.albums.length,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (ctx, i) => _AlbumRow(
-        album: albums[i],
-        onTap: () => onOpen(albums[i]),
-        onHideToggle: () => onHideToggle(albums[i]),
+        album: widget.albums[i],
+        onTap: () => widget.onOpen(widget.albums[i]),
+        onHideToggle: () => widget.onHideToggle(widget.albums[i]),
       ),
     );
   }
