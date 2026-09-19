@@ -28,4 +28,12 @@ class Favorites {
     final p = await SharedPreferences.getInstance();
     await p.setStringList(_key, next.toList());
   }
+
+  /// Полностью заменить избранное набором [paths] и сохранить (для восстановления
+  /// из резервной копии).
+  Future<void> setAll(Set<String> paths) async {
+    notifier.value = Set<String>.from(paths);
+    final p = await SharedPreferences.getInstance();
+    await p.setStringList(_key, paths.toList());
+  }
 }

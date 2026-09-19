@@ -12,6 +12,7 @@ import 'update_service.dart';
 import 'library_service.dart';
 import 'error_log.dart';
 import 'i18n.dart';
+import 'backup_service.dart';
 
 /// Полноэкранный раздел настроек: внешний вид, сетка, теги, о приложении.
 class SettingsPage extends StatefulWidget {
@@ -352,6 +353,38 @@ class _Sections extends StatelessWidget {
               ])),
           const SizedBox(height: 22),
         ],
+        _SectionTitle(
+            tr('Резервная копия', 'Backup', 'Copia de seguridad')),
+        _Card(
+            c: c,
+            child: Column(children: [
+              _ActionRow(
+                icon: Icons.save_outlined,
+                title: tr('Сохранить резервную копию', 'Save a backup',
+                    'Guardar copia de seguridad'),
+                subtitle: tr(
+                    'Избранное, настройки, скрытые папки, коллекции, папки '
+                        'библиотеки и теги — одним файлом',
+                    'Favorites, settings, hidden folders, collections, '
+                        'library folders and tags — in one file',
+                    'Favoritos, ajustes, carpetas ocultas, colecciones, '
+                        'carpetas de la biblioteca y etiquetas en un solo archivo'),
+                onTap: () => _exportBackup(context),
+                c: c,
+              ),
+              _ActionRow(
+                icon: Icons.settings_backup_restore_outlined,
+                title: tr('Восстановить из копии', 'Restore from backup',
+                    'Restaurar desde una copia'),
+                subtitle: tr(
+                    'Загрузить ранее сохранённый файл резервной копии',
+                    'Load a previously saved backup file',
+                    'Cargar un archivo de copia de seguridad guardado antes'),
+                onTap: () => _importBackup(context),
+                c: c,
+              ),
+            ])),
+        const SizedBox(height: 22),
         _SectionTitle(tr('Теги', 'Tags', 'Etiquetas')),
         _Card(
             c: c,
@@ -423,6 +456,106 @@ class _Sections extends StatelessWidget {
       messenger.showSnackBar(SnackBar(
           content: Text(tr('Журнал скопирован в буфер обмена',
               'Log copied to clipboard', 'Registro copiado al portapapeles'))));
+    }
+  }
+
+  Future<void> _exportBackup(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final json = await BackupService.exportAll();
+      final name =
+          'goat-backup-${DateTime.now().toIso8601String().substring(0, 10)}.json';
+      String? dest;
+      if (!Platform.isAndroid) {
+        dest = await FilePicker.platform.saveFile(
+            dialogTitle: tr('Сохранить резервную копию', 'Save backup',
+                'Guardar copia de seguridad'),
+            fileName: name);
+      }
+      dest ??= p.join((await getApplicationDocumentsDirectory()).path, name);
+      await File(dest).writeAsString(json);
+      messenger.showSnackBar(SnackBar(
+          content: Text(
+              '${tr('Резервная копия сохранена', 'Backup saved', 'Copia de seguridad guardada')}: $dest')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+          content: Text(
+              '${tr('Не удалось сохранить', 'Could not save', 'No se pudo guardar')}: $e')));
+    }
+  }
+
+  Future<void> _importBackup(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final res = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+      );
+      final path = res?.files.single.path;
+      if (path == null) return;
+      if (!context.mounted) return;
+      final c = AuroraTheme.of(context).colors;
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: c.surface,
+          title: Text(
+              tr('Восстановить из копии?', 'Restore from backup?',
+                  '¿Restaurar desde la copia?'),
+              style: TextStyle(color: c.text)),
+          content: Text(
+            tr(
+                'Избранное, настройки внешнего вида, скрытые папки, папки '
+                    'библиотеки и коллекции будут заменены содержимым файла. '
+                    'Теги — добавлены/обновлены, ничего не удаляя.',
+                'Favorites, appearance settings, hidden folders, library '
+                    'folders and collections will be replaced with the '
+                    'file\'s contents. Tags are merged in, nothing is deleted.',
+                'Los favoritos, ajustes de apariencia, carpetas ocultas, '
+                    'carpetas de la biblioteca y colecciones se reemplazarán '
+                    'con el contenido del archivo. Las etiquetas se combinan, '
+                    'sin borrar nada.'),
+            style: TextStyle(color: c.muted),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(tr('Отмена', 'Cancel', 'Cancelar'),
+                  style: TextStyle(color: c.muted)),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: c.accent),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(tr('Восстановить', 'Restore', 'Restaurar')),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+      final json = await File(path).readAsString();
+      final result = await BackupService.importAll(json);
+      parent.widget.onTagsImported?.call();
+      if (result.isEmpty) {
+        messenger.showSnackBar(SnackBar(
+            content: Text(tr(
+                'Не удалось распознать файл резервной копии',
+                'Could not recognize the backup file',
+                'No se pudo reconocer el archivo de copia de seguridad'))));
+        return;
+      }
+      messenger.showSnackBar(SnackBar(
+          content: Text(
+              '${tr('Восстановлено', 'Restored', 'Restaurado')}: '
+              '${tr('избранное', 'favorites', 'favoritos')} ${result.favorites}, '
+              '${tr('коллекции', 'collections', 'colecciones')} ${result.collections}, '
+              '${tr('папки библиотеки', 'library folders', 'carpetas de biblioteca')} ${result.libraryFolders}, '
+              '${tr('теги', 'tags', 'etiquetas')} ${result.tags}. '
+              '${tr('Часть изменений применится после перезапуска приложения.', 'Some changes take effect after restarting the app.', 'Algunos cambios se aplicarán tras reiniciar la aplicación.')}'),
+          duration: const Duration(seconds: 6)));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+          content: Text(
+              '${tr('Не удалось восстановить', 'Could not restore', 'No se pudo restaurar')}: $e')));
     }
   }
 
