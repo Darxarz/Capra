@@ -13,6 +13,7 @@ import 'library_service.dart';
 import 'error_log.dart';
 import 'i18n.dart';
 import 'backup_service.dart';
+import 'pin_lock.dart';
 
 /// Полноэкранный раздел настроек: внешний вид, сетка, теги, о приложении.
 class SettingsPage extends StatefulWidget {
@@ -297,9 +298,44 @@ class _Sections extends StatelessWidget {
                         'Long-press / right-click a folder to hide or show it.',
                     'Los álbumes secretos (marcados con .nomedia) se mostrarán en la galería. Mantén pulsado / clic derecho en una carpeta para ocultarla o mostrarla.'),
                 value: s.showHidden,
-                onChanged: s.setShowHidden,
+                onChanged: (v) => _onToggleShowHidden(context, s, v),
                 c: c,
               ),
+              const SizedBox(height: 10),
+              if (!s.hasPin)
+                _ActionRow(
+                  icon: Icons.pin_outlined,
+                  title: tr('Задать PIN', 'Set a PIN', 'Establecer PIN'),
+                  subtitle: tr(
+                      'Защитить показ скрытых папок PIN-кодом',
+                      'Protect showing hidden folders with a PIN',
+                      'Proteger la visualización de carpetas ocultas con un PIN'),
+                  onTap: () => _onSetPin(context),
+                  c: c,
+                )
+              else ...[
+                _ActionRow(
+                  icon: Icons.password_outlined,
+                  title: tr('Сменить PIN', 'Change PIN', 'Cambiar PIN'),
+                  subtitle: tr(
+                      'Задать новый код взамен текущего',
+                      'Set a new code instead of the current one',
+                      'Establecer un nuevo código en lugar del actual'),
+                  onTap: () => _onChangePin(context),
+                  c: c,
+                ),
+                _ActionRow(
+                  icon: Icons.lock_open_outlined,
+                  title: tr('Снять защиту', 'Remove protection',
+                      'Quitar protección'),
+                  subtitle: tr(
+                      'Убрать PIN — скрытые папки перестанут быть защищены',
+                      'Remove the PIN — hidden folders will no longer be protected',
+                      'Quitar el PIN: las carpetas ocultas dejarán de estar protegidas'),
+                  onTap: () => _onRemovePin(context),
+                  c: c,
+                ),
+              ],
               if (s.hiddenFolders.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
@@ -623,6 +659,54 @@ class _Sections extends StatelessWidget {
                 'Nothing to relink right now — all tags are in place',
                 'No hay nada que revincular ahora: todas las etiquetas están en su sitio')
             : '${tr('Перепривязано файлов', 'Files relinked', 'Archivos revinculados')}: $n')));
+  }
+
+  Future<void> _onToggleShowHidden(
+      BuildContext context, SettingsService s, bool v) async {
+    if (!v) {
+      // выключение не требует PIN
+      s.setShowHidden(false);
+      return;
+    }
+    if (!s.hasPin) {
+      // PIN ещё не задан — сперва предлагаем его задать
+      final created = await setNewPin(context);
+      if (!created) return;
+      if (!context.mounted) return;
+      s.setShowHidden(true);
+      return;
+    }
+    final ok = await requestPin(context);
+    if (ok) s.setShowHidden(true);
+  }
+
+  Future<void> _onSetPin(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await setNewPin(context);
+    if (ok) {
+      messenger.showSnackBar(SnackBar(
+          content: Text(tr('PIN задан', 'PIN set', 'PIN establecido'))));
+    }
+  }
+
+  Future<void> _onChangePin(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await changePin(context);
+    if (ok) {
+      messenger.showSnackBar(SnackBar(
+          content:
+              Text(tr('PIN изменён', 'PIN changed', 'PIN modificado'))));
+    }
+  }
+
+  Future<void> _onRemovePin(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await removePin(context);
+    if (ok) {
+      messenger.showSnackBar(SnackBar(
+          content: Text(tr('Защита PIN-ом снята', 'PIN protection removed',
+              'Protección por PIN eliminada'))));
+    }
   }
 }
 
