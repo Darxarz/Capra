@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:math';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -63,6 +66,8 @@ class SettingsService extends ChangeNotifier {
   static const _kSortSeed = 'goat_sort_seed';
   static const _kPerfMode = 'goat_perf_mode';
   static const _kAutoWeak = 'goat_auto_weak_detected';
+  static const _kPinHash = 'goat_pin_hash';
+  static const _kPinSalt = 'goat_pin_salt';
 
   late SharedPreferences _p;
   bool _ready = false;
@@ -96,8 +101,13 @@ class SettingsService extends ChangeNotifier {
   int sortSeed = 1; // зерно для случайного порядка (стабильное между кадрами)
   PerfMode perfMode = PerfMode.auto; // режим производительности
   bool autoWeakDetected = false; // авто-детект определил слабое устройство
+  String? pinHash; // хеш PIN-кода для доступа к скрытым папкам (соль+PIN, sha256)
+  String? pinSalt; // случайная соль для хеша PIN-а
 
   bool get ready => _ready;
+
+  /// Задан ли PIN для защиты скрытых папок.
+  bool get hasPin => pinHash != null && pinHash!.isNotEmpty;
 
   /// Эффективно ли включён режим слабого устройства (учитывая авто-детект).
   bool get lowEndMode => switch (perfMode) {
@@ -127,7 +137,15 @@ class SettingsService extends ChangeNotifier {
     showFavBadge = _p.getBool(_kShowFav) ?? showFavBadge;
     showGifBadge = _p.getBool(_kShowGif) ?? showGifBadge;
     hiddenFolders = (_p.getStringList(_kHiddenFolders) ?? const []).toSet();
+    pinHash = _p.getString(_kPinHash);
+    pinSalt = _p.getString(_kPinSalt);
     showHidden = _p.getBool(_kShowHidden) ?? showHidden;
+    // если PIN задан, защита бессмысленна, если скрытое остаётся открытым
+    // между запусками — при каждом старте скрытые папки закрыты снова
+    if (hasPin && showHidden) {
+      showHidden = false;
+      _p.setBool(_kShowHidden, false);
+    }
     gapStyle = GapStyle.values.firstWhere(
         (e) => e.name == _p.getString(_kGapStyle),
         orElse: () => GapStyle.none);
@@ -312,6 +330,41 @@ class SettingsService extends ChangeNotifier {
     _p.setBool(_kAvoidCloudThumbDownloads, v);
     notifyListeners();
   }
+
+  /// Задать (или сменить) PIN. Сохраняется только соль + sha256-хеш, сам
+  /// PIN нигде не хранится и не логируется.
+  void setPin(String pin) {
+    final salt = _generateSalt();
+    pinSalt = salt;
+    pinHash = _hashPin(pin, salt);
+    _p.setString(_kPinSalt, salt);
+    _p.setString(_kPinHash, pinHash!);
+    notifyListeners();
+  }
+
+  /// Снять защиту PIN-ом.
+  void clearPin() {
+    pinSalt = null;
+    pinHash = null;
+    _p.remove(_kPinSalt);
+    _p.remove(_kPinHash);
+    notifyListeners();
+  }
+
+  /// Проверить введённый PIN против сохранённого хеша.
+  bool verifyPin(String pin) {
+    if (!hasPin) return false;
+    return _hashPin(pin, pinSalt!) == pinHash;
+  }
+
+  String _generateSalt() {
+    final rnd = Random.secure();
+    final bytes = List<int>.generate(16, (_) => rnd.nextInt(256));
+    return base64Url.encode(bytes);
+  }
+
+  String _hashPin(String pin, String salt) =>
+      sha256.convert(utf8.encode('$salt$pin')).toString();
 
   bool isHidden(String folderPath) => hiddenFolders.contains(folderPath);
 
