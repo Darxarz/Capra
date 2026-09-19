@@ -2463,21 +2463,25 @@ class PhotoTile extends StatelessWidget {
                 if (photo.isVideo)
                   _VideoTileFace(colors: c)
                 else
-                  Image(
-                    image: photo.thumb(cacheWidth),
-                    fit: s.squareThumbs ? BoxFit.cover : BoxFit.contain,
-                    gaplessPlayback: true,
-                    filterQuality: FilterQuality.low,
-                    frameBuilder: (ctx, child, frame, wasSync) {
-                      if (wasSync || frame != null) return child;
-                      return Container(color: c.surface2);
-                    },
-                    errorBuilder: (ctx, e, st) => Icon(
-                        s.avoidCloudThumbnailDownloads
-                            ? Icons.cloud_off_outlined
-                            : Icons.broken_image_outlined,
-                        color: c.muted,
-                        size: 18),
+                  _HeroableThumb(
+                    photo: photo,
+                    heroEnabled: !s.motionReduced,
+                    child: Image(
+                      image: photo.thumb(cacheWidth),
+                      fit: s.squareThumbs ? BoxFit.cover : BoxFit.contain,
+                      gaplessPlayback: true,
+                      filterQuality: FilterQuality.low,
+                      frameBuilder: (ctx, child, frame, wasSync) {
+                        if (wasSync || frame != null) return child;
+                        return Container(color: c.surface2);
+                      },
+                      errorBuilder: (ctx, e, st) => Icon(
+                          s.avoidCloudThumbnailDownloads
+                              ? Icons.cloud_off_outlined
+                              : Icons.broken_image_outlined,
+                          color: c.muted,
+                          size: 18),
+                    ),
                   ),
                 if (photo.isVideo)
                   const Positioned(
@@ -2548,6 +2552,27 @@ class PhotoTile extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Оборачивает миниатюру в Hero с тегом, общим с просмотрщиком (viewer_page.dart),
+/// чтобы плитка плавно "вырастала" в полноэкранное фото и обратно. Без Hero,
+/// если включено "меньше анимаций" (SettingsService.motionReduced).
+class _HeroableThumb extends StatelessWidget {
+  final PhotoItem photo;
+  final bool heroEnabled;
+  final Widget child;
+  const _HeroableThumb(
+      {required this.photo, required this.heroEnabled, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!heroEnabled) return child;
+    return Hero(
+      tag: photoHeroTag(photo),
+      flightShuttleBuilder: photoHeroShuttle(photo),
+      child: child,
     );
   }
 }
