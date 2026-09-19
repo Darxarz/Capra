@@ -16,6 +16,7 @@ import 'metadata_service.dart';
 import 'settings_service.dart';
 import 'media_actions.dart';
 import 'similar_page.dart';
+import 'collections_page.dart';
 
 /// Открыть просмотрщик на конкретном фото.
 void openViewer(BuildContext context, List<PhotoItem> photos, int index) {
@@ -635,6 +636,9 @@ class _InfoPanel extends StatelessWidget {
               }),
               action(Icons.ios_share, tr('Поделиться', 'Share', 'Compartir'),
                   onTap: () => MediaActions.share([photo])),
+              action(Icons.collections_bookmark_outlined,
+                  tr('В альбом', 'To album', 'A álbum'),
+                  onTap: () => showAddToCollectionSheet(context, [photo.path])),
             ]);
           },
         ),

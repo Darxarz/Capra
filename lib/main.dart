@@ -10,6 +10,7 @@ import 'lan_store.dart';
 import 'error_log.dart';
 import 'perf_monitor.dart';
 import 'embed_store.dart';
+import 'collections_service.dart';
 
 Future<void> main() async {
   // Перехватываем все ошибки в файловый журнал — для диагностики крашей на
@@ -39,6 +40,11 @@ Future<void> main() async {
     }
     try {
       await EmbedStore.instance.init();
+    } catch (e, s) {
+      ErrorLog.recordError(e, s);
+    }
+    try {
+      await CollectionsService.instance.init();
     } catch (e, s) {
       ErrorLog.recordError(e, s);
     }
