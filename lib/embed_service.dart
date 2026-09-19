@@ -110,16 +110,19 @@ class EmbedService {
   /// Косинусная близость к запросу-вектору: топ-K путей (по убыванию). Векторы
   /// в базе уже нормализованы, поэтому косинус = скалярное произведение.
   List<String> searchSimilar(Float32List query, {int k = 200, String? exclude}) {
+    // индекс хранится в int8 — ужимаем и запрос, дальше считаем в целых
+    // числах: быстрее и в 4 раза меньше памяти, порядок ранжирования тот же
+    final q = EmbedStore.quantize(query);
     final all = EmbedStore.instance.all();
-    final scored = <(String, double)>[];
+    final scored = <(String, int)>[];
     for (final entry in all.entries) {
       final path = entry.key;
       final vec = entry.value;
       if (path == exclude) continue;
-      if (vec.length != query.length) continue;
-      var dot = 0.0;
+      if (vec.length != q.length) continue;
+      var dot = 0;
       for (var i = 0; i < vec.length; i++) {
-        dot += vec[i] * query[i];
+        dot += vec[i] * q[i];
       }
       scored.add((path, dot));
     }

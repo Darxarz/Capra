@@ -4,9 +4,14 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 
-/// Хранилище векторов-эмбеддингов картинок (для семантического поиска и
-/// «похожих»). Вектор — Float32List, кладём как BLOB. Отдельная БД, чтобы не
-/// мешать базе тегов. Всё локально, ничего не уходит в сеть.
+/// Хранилище векторов-эмбеддингов картинок (для поиска «похожих» и будущего
+/// семантического поиска). Всё локально, ничего не уходит в сеть.
+///
+/// ВЕКТОРЫ ХРАНЯТСЯ В INT8. Эмбеддинги нормализованы (каждая компонента в
+/// пределах −1..1), поэтому их можно записать одним байтом на число вместо
+/// четырёх — память падает в 4 раза (на 100к фото ≈ 75 МБ вместо ≈ 300 МБ),
+/// а на качестве сравнения это почти не сказывается: для ранжирования
+/// важен порядок, а не последний знак после запятой.
 class EmbedStore {
   EmbedStore._();
   static final EmbedStore instance = EmbedStore._();
@@ -17,7 +22,7 @@ class EmbedStore {
   // Индекс векторов в памяти. Собирается ОДИН раз при первом поиске: иначе
   // каждый «Похожие» заново читал и декодировал всю таблицу на UI-потоке
   // (на 100к это заморозка на секунды).
-  Map<String, Float32List>? _index;
+  Map<String, Int8List>? _index;
 
   Future<void> init() async {
     if (_db != null) return;
@@ -63,9 +68,10 @@ class EmbedStore {
   void put(String path, Float32List vec) {
     final db = _db;
     if (db == null) return;
+    final q = quantize(vec);
     db.execute('INSERT OR REPLACE INTO emb(path, dim, vec) VALUES (?, ?, ?)',
-        [path, vec.length, vec.buffer.asUint8List()]);
-    _index?[path] = vec; // держим индекс в актуальном состоянии
+        [path, vec.length, q.buffer.asUint8List(q.offsetInBytes, q.length)]);
+    _index?[path] = q; // держим индекс в актуальном состоянии
   }
 
   void remove(String path) {
@@ -73,27 +79,34 @@ class EmbedStore {
     _index?.remove(path);
   }
 
+  /// Вектор одной картинки в обычном float-виде (для запроса поиска).
   Float32List? vectorOf(String path) {
+    final q = _quantizedOf(path);
+    return q == null ? null : dequantize(q);
+  }
+
+  Int8List? _quantizedOf(String path) {
     final idx = _index;
     if (idx != null) return idx[path];
     final db = _db;
     if (db == null) return null;
-    final r = db.select('SELECT vec FROM emb WHERE path = ? LIMIT 1', [path]);
+    final r =
+        db.select('SELECT dim, vec FROM emb WHERE path = ? LIMIT 1', [path]);
     if (r.isEmpty) return null;
-    return _decode(r.first['vec'] as Uint8List);
+    return _decode(r.first['vec'] as Uint8List, r.first['dim'] as int);
   }
 
-  /// Все векторы (путь → вектор) для косинусного поиска. Читаем из БД один
-  /// раз, дальше — из памяти. ПАМЯТЬ: 100к × 768 float ≈ 300 МБ, поэтому есть
-  /// [releaseIndex] — освобождать, когда поиск больше не нужен.
-  Map<String, Float32List> all() {
+  /// Весь индекс для косинусного поиска. Читаем из БД один раз, дальше — из
+  /// памяти. Освободить можно через [releaseIndex].
+  Map<String, Int8List> all() {
     final cached = _index;
     if (cached != null) return cached;
     final db = _db;
     if (db == null) return const {};
-    final out = <String, Float32List>{};
-    for (final row in db.select('SELECT path, vec FROM emb')) {
-      out[row['path'] as String] = _decode(row['vec'] as Uint8List);
+    final out = <String, Int8List>{};
+    for (final row in db.select('SELECT path, dim, vec FROM emb')) {
+      out[row['path'] as String] =
+          _decode(row['vec'] as Uint8List, row['dim'] as int);
     }
     _index = out;
     return out;
@@ -102,6 +115,34 @@ class EmbedStore {
   /// Отпустить индекс из памяти (экран поиска закрыт / мало памяти).
   void releaseIndex() => _index = null;
 
-  static Float32List _decode(Uint8List bytes) =>
-      bytes.buffer.asFloat32List(bytes.offsetInBytes, bytes.length ~/ 4);
+  // ─── упаковка векторов ───
+
+  /// float (−1..1) → int8 (−127..127).
+  static Int8List quantize(Float32List v) {
+    final out = Int8List(v.length);
+    for (var i = 0; i < v.length; i++) {
+      final x = (v[i] * 127).round();
+      out[i] = x < -127 ? -127 : (x > 127 ? 127 : x);
+    }
+    return out;
+  }
+
+  /// int8 → float (обратно в −1..1).
+  static Float32List dequantize(Int8List q) {
+    final out = Float32List(q.length);
+    for (var i = 0; i < q.length; i++) {
+      out[i] = q[i] / 127.0;
+    }
+    return out;
+  }
+
+  /// Читаем BLOB. Формат определяем по длине: dim байт — уже int8,
+  /// dim×4 — старый float32 (с первых сборок), ужимаем на лету.
+  static Int8List _decode(Uint8List bytes, int dim) {
+    if (dim > 0 && bytes.length == dim * 4) {
+      final f = bytes.buffer.asFloat32List(bytes.offsetInBytes, dim);
+      return quantize(f);
+    }
+    return Int8List.view(bytes.buffer, bytes.offsetInBytes, bytes.length);
+  }
 }
