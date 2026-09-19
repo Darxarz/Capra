@@ -28,6 +28,7 @@ import 'dims_service.dart';
 import 'selection.dart';
 import 'media_actions.dart';
 import 'gap_background.dart';
+import 'collections_page.dart';
 import 'i18n.dart';
 
 enum ViewMode { all, dates, albums }
@@ -707,6 +708,9 @@ class _HomePageState extends State<HomePage> {
           tile(Icons.sell_outlined, tr('Теги', 'Tags', 'Etiquetas'),
               _openTagsSheet,
               on: _filterTags.isNotEmpty),
+          tile(Icons.collections_bookmark_outlined,
+              tr('Коллекции', 'Collections', 'Colecciones'),
+              _openCollections),
           tile(Icons.content_copy_outlined,
               tr('Дубликаты', 'Duplicates', 'Duplicados'), _openDedup),
           tile(Icons.wifi_tethering_rounded,
@@ -731,6 +735,12 @@ class _HomePageState extends State<HomePage> {
   void _openLan() {
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => const LanPage(),
+    ));
+  }
+
+  void _openCollections() {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => CollectionsPage(library: _photos),
     ));
   }
 
@@ -1114,6 +1124,7 @@ class _HomePageState extends State<HomePage> {
                           onCopy: () => _selCopyMove(move: false),
                           onMove: () => _selCopyMove(move: true),
                           onShare: _selShare,
+                          onCollections: _selCollections,
                           onDelete: _selDelete,
                         ),
                       )
@@ -1146,6 +1157,7 @@ class _HomePageState extends State<HomePage> {
           }),
           onTags: () => setState(() => _tagsPanelOpen = !_tagsPanelOpen),
           tagsOpen: _tagsPanelOpen,
+          onCollections: _openCollections,
           onDedup: _openDedup,
           onLan: _openLan,
           onTrash: _openTrash,
@@ -1222,6 +1234,12 @@ class _HomePageState extends State<HomePage> {
           content: Text(tr(
               'Нечего отправить', 'Nothing to share', 'Nada para compartir'))));
     }
+    Selection.instance.clear();
+  }
+
+  Future<void> _selCollections() async {
+    final paths = [for (final ph in _selectedPhotos()) ph.path];
+    await showAddToCollectionSheet(context, paths);
     Selection.instance.clear();
   }
 
@@ -1381,6 +1399,7 @@ class _Rail extends StatelessWidget {
   final VoidCallback onProjects;
   final VoidCallback onTags;
   final bool tagsOpen;
+  final VoidCallback onCollections;
   final VoidCallback onDedup;
   final VoidCallback onLan;
   final VoidCallback onTrash;
@@ -1395,6 +1414,7 @@ class _Rail extends StatelessWidget {
     required this.onProjects,
     required this.onTags,
     required this.tagsOpen,
+    required this.onCollections,
     required this.onDedup,
     required this.onLan,
     required this.onTrash,
@@ -1469,6 +1489,9 @@ class _Rail extends StatelessWidget {
               onTap: onTags,
               active: tagsOpen,
               tip: tr('Теги', 'Tags', 'Etiquetas')),
+          item(Icons.collections_bookmark_outlined, null,
+              onTap: onCollections,
+              tip: tr('Коллекции', 'Collections', 'Colecciones')),
           item(Icons.content_copy_outlined, null,
               onTap: onDedup, tip: tr('Дубликаты', 'Duplicates', 'Duplicados')),
           // активная подсветка, пока раздаём по сети
@@ -1606,6 +1629,7 @@ class _SelectionBar extends StatelessWidget {
   final VoidCallback onCopy;
   final VoidCallback onMove;
   final VoidCallback onShare;
+  final VoidCallback onCollections;
   final VoidCallback onDelete;
   const _SelectionBar({
     required this.count,
@@ -1616,6 +1640,7 @@ class _SelectionBar extends StatelessWidget {
     required this.onCopy,
     required this.onMove,
     required this.onShare,
+    required this.onCollections,
     required this.onDelete,
   });
 
@@ -1681,6 +1706,10 @@ class _SelectionBar extends StatelessWidget {
                   onMove),
               act(Icons.ios_share_rounded,
                   tr('Отправить', 'Share', 'Compartir'), onShare),
+              act(
+                  Icons.collections_bookmark_outlined,
+                  tr('В альбом', 'To album', 'A álbum'),
+                  onCollections),
               act(Icons.delete_outline_rounded,
                   tr('Удалить', 'Delete', 'Eliminar'), onDelete,
                   color: c.accent),
