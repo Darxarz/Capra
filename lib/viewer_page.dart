@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'theme.dart';
+import 'gx.dart';
 import 'model.dart';
 import 'editor_service.dart';
 import 'i18n.dart';
@@ -17,6 +18,16 @@ import 'settings_service.dart';
 import 'media_actions.dart';
 import 'similar_page.dart';
 import 'collections_page.dart';
+
+// Свои значки просмотрщика — в том же начертании, что и в gx.dart.
+const _gPlay = GxGlyph('M8 5.5v13l10.5-6.5z', true);
+const _gPause = GxGlyph('M8.5 5.5v13M15.5 5.5v13');
+const _gShuffle = GxGlyph(
+    'M4 7h3c5 0 5 10 10 10h3M17.5 14.5L20 17l-2.5 2.5M4 17h3c1.5 0 2.600-.700 3.500-1.800M13.500 8.300C14.300 7.500 15.300 7 17 7h3M17.500 4.500L20 7l-2.500 2.500');
+const _gSparkle = GxGlyph(
+    'M12 4l1.800 4.700 4.700 1.800-4.700 1.800L12 17l-1.800-4.700L5.500 10.500l4.700-1.800zM18 4.500v3M16.500 6h3');
+const _gOpenExt = GxGlyph(
+    'M14 4.500h5.500V10M19.500 4.500L11 13M17.500 13.500V18a1.500 1.500 0 0 1-1.500 1.500H6A1.500 1.500 0 0 1 4.500 18V8A1.500 1.500 0 0 1 6 6.500h4.500');
 
 /// Открыть просмотрщик на конкретном фото.
 void openViewer(BuildContext context, List<PhotoItem> photos, int index) {
@@ -310,25 +321,26 @@ class _ViewerPageState extends State<ViewerPage>
             duration: const Duration(milliseconds: 160),
             child: Stack(children: [
               Positioned(
-                top: 14,
-                left: 14,
-                child: _RoundBtn(
-                    icon: Icons.close,
+                top: 10,
+                left: 10,
+                child: _ViewerBtn(
+                    glyph: GxGlyph.close,
                     tip: tr('Закрыть', 'Close', 'Cerrar'),
                     onTap: () => Navigator.pop(context)),
               ),
               if (widget.photos.length > 1)
                 Positioned(
-                  top: 20,
+                  top: 10,
                   left: 0,
                   right: 0,
                   child: Center(
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 5),
+                      height: 40,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.45),
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: gxCorner,
                       ),
                       child: Text('${_index + 1} / ${widget.photos.length}',
                           style: const TextStyle(
@@ -339,27 +351,26 @@ class _ViewerPageState extends State<ViewerPage>
                   ),
                 ),
               Positioned(
-                top: 14,
-                right: 14,
+                top: 10,
+                right: 10,
                 child: Row(children: [
                   if (widget.photos.length > 1) ...[
-                    _RoundBtn(
-                      icon: Icons.shuffle_rounded,
+                    _ViewerBtn(
+                      glyph: _gShuffle,
                       tip: tr('Случайное', 'Random', 'Aleatorio'),
                       onTap: _random,
                     ),
-                    const SizedBox(width: 8),
-                    _RoundBtn(
-                      icon: _slideshow
-                          ? Icons.pause_rounded
-                          : Icons.slideshow_rounded,
+                    const SizedBox(width: 6),
+                    _ViewerBtn(
+                      glyph: _slideshow ? _gPause : _gPlay,
                       tip: tr('Слайдшоу', 'Slideshow', 'Presentación'),
                       onTap: _toggleSlideshow,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                   ],
-                  _RoundBtn(
-                    icon: _infoOpen ? Icons.info : Icons.info_outline,
+                  _ViewerBtn(
+                    glyph: GxGlyph.info,
+                    active: _infoOpen,
                     tip: tr('Сведения', 'Info', 'Información'),
                     onTap: () => setState(() => _infoOpen = !_infoOpen),
                   ),
@@ -386,7 +397,7 @@ class _ViewerPageState extends State<ViewerPage>
     );
 
     return Scaffold(
-      backgroundColor: const Color(0xFF100D0B),
+      backgroundColor: Colors.black,
       body: Focus(
         autofocus: true,
         onKeyEvent: _onKey,
@@ -433,13 +444,13 @@ class _ViewerPageState extends State<ViewerPage>
                 height: panelH,
                 bottom: _infoOpen ? 0 : -panelH,
                 child: ClipRRect(
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(20)),
+                  borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(AuroraColors.radius)),
                   child: _InfoPanel(
                       photo: photo,
                       colors: c,
                       pool: widget.photos,
-                      showHandle: true),
+                      asSheet: true),
                 ),
               ),
           ]);
@@ -534,8 +545,8 @@ class _ZoomableImageState extends State<_ZoomableImage>
     Widget image = Image(
       image: widget.photo.full,
       fit: BoxFit.contain,
-      errorBuilder: (c2, e, s) => const Icon(Icons.broken_image_outlined,
-          color: Colors.white54, size: 48),
+      errorBuilder: (c2, e, s) =>
+          const GxIcon(GxGlyph.gallery, color: Colors.white54, size: 40),
     );
     final heroTag = widget.heroTag;
     if (heroTag != null) {
@@ -635,9 +646,7 @@ class _VideoPlayerPaneState extends State<_VideoPlayerPane> {
       );
     }
     if (ctl == null) {
-      return const Center(
-        child: CircularProgressIndicator(color: Colors.white70),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
     return Center(
       child: Video(
@@ -648,24 +657,35 @@ class _VideoPlayerPaneState extends State<_VideoPlayerPane> {
   }
 }
 
-class _RoundBtn extends StatelessWidget {
-  final IconData icon;
+/// Кнопка поверх фото: те же 44×40 и скругление 7, что у GxIconBtn, но белый
+/// значок на тёмной подложке (под ней — произвольная фотография).
+class _ViewerBtn extends StatelessWidget {
+  final GxGlyph glyph;
   final VoidCallback onTap;
   final String? tip;
-  const _RoundBtn({required this.icon, required this.onTap, this.tip});
+  final bool active;
+  const _ViewerBtn(
+      {required this.glyph,
+      required this.onTap,
+      this.tip,
+      this.active = false});
 
   @override
   Widget build(BuildContext context) {
     final btn = Material(
-      color: Colors.white24,
-      shape: const CircleBorder(),
+      color: Colors.black.withValues(alpha: active ? 0.7 : 0.45),
+      shape: RoundedRectangleBorder(
+        borderRadius: gxCorner,
+        side: BorderSide(
+            color: Colors.white.withValues(alpha: active ? 0.4 : 0.12)),
+      ),
       child: InkWell(
-        customBorder: const CircleBorder(),
+        borderRadius: gxCorner,
         onTap: onTap,
         child: SizedBox(
-          width: 42,
-          height: 42,
-          child: Icon(icon, color: Colors.white, size: 20),
+          width: 44,
+          height: 40,
+          child: Center(child: GxIcon(glyph, color: Colors.white, size: 19)),
         ),
       ),
     );
@@ -677,12 +697,12 @@ class _InfoPanel extends StatelessWidget {
   final PhotoItem photo;
   final AuroraColors colors;
   final List<PhotoItem> pool; // среди чего искать «похожие»
-  final bool showHandle; // показывать «ручку» сверху (лист на телефоне)
+  final bool asSheet; // лист снизу (телефон): линия сверху, а не слева
   const _InfoPanel(
       {required this.photo,
       required this.colors,
       required this.pool,
-      this.showHandle = false});
+      this.asSheet = false});
 
   @override
   Widget build(BuildContext context) {
@@ -699,122 +719,135 @@ class _InfoPanel extends StatelessWidget {
                   style: TextStyle(
                       color: c.text,
                       fontSize: 13,
-                      fontWeight: FontWeight.w600)),
+                      fontWeight: FontWeight.w500)),
             ),
           ]),
         );
 
-    Widget action(IconData icon, String label,
+    // кнопка действия: значок над подписью, ячейки делят общую рамку
+    Widget action(GxGlyph glyph, String label,
             {VoidCallback? onTap, bool active = false}) =>
         Expanded(
-          child: GestureDetector(
-            onTap: onTap,
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              padding: const EdgeInsets.symmetric(vertical: 11),
-              decoration: BoxDecoration(
-                color: active ? c.accentSoft : c.surface2,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: active ? c.accent : c.line),
+          child: Material(
+            color: active ? c.selected : Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              child: SizedBox(
+                height: 54,
+                child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      GxIcon(glyph,
+                          size: 19, color: active ? c.current : c.muted),
+                      const SizedBox(height: 4),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        child: Text(label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: active ? c.text : c.muted)),
+                      ),
+                    ]),
               ),
-              child: Column(children: [
-                Icon(icon, size: 19, color: active ? c.accentInk : c.text),
-                const SizedBox(height: 4),
-                Text(label,
-                    style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: active ? c.accentInk : c.text)),
-              ]),
             ),
           ),
         );
 
     return Container(
-      color: c.surface,
-      padding: EdgeInsets.fromLTRB(22, showHandle ? 10 : 24, 22, 24),
-      child: ListView(children: [
-        if (showHandle)
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 14),
-              decoration: BoxDecoration(
-                color: c.line,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
+      decoration: BoxDecoration(
+        color: c.panel,
+        border: Border(
+          left: asSheet ? BorderSide.none : BorderSide(color: c.line),
+          top: asSheet ? BorderSide(color: c.line) : BorderSide.none,
+        ),
+      ),
+      child: ListView(padding: const EdgeInsets.fromLTRB(14, 14, 14, 16), children: [
         Text(photo.fileName,
             style: TextStyle(
-                fontSize: 17, fontWeight: FontWeight.w800, color: c.text)),
-        const SizedBox(height: 4),
+                fontSize: 15, fontWeight: FontWeight.w600, color: c.text)),
+        const SizedBox(height: 3),
         Text(prettyDate(photo.modified),
-            style: TextStyle(fontSize: 13, color: c.muted)),
+            style: TextStyle(fontSize: 12, color: c.muted)),
         if (photo.isProject) ...[
-          const SizedBox(height: 14),
-          FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: c.accent,
-              minimumSize: const Size.fromHeight(46),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () => MediaActions.openInEditor(context, photo),
+              icon: GxIcon(_gOpenExt, color: c.onAccent, size: 18),
+              label: Text(() {
+                final ext = photo.extension.replaceFirst('.', '').toUpperCase();
+                return tr('Открыть $ext в редакторе', 'Open $ext in editor',
+                    'Abrir $ext en el editor');
+              }()),
             ),
-            onPressed: () => MediaActions.openInEditor(context, photo),
-            icon: const Icon(Icons.open_in_new_rounded),
-            label: Text(() {
-              final ext = photo.extension.replaceFirst('.', '').toUpperCase();
-              return tr('Открыть $ext в редакторе', 'Open $ext in editor',
-                  'Abrir $ext en el editor');
-            }()),
           ),
         ],
         // «Открыть в…» — найденные в системе редакторы (ПК)
         if (!photo.isRemote && (Platform.isWindows || Platform.isLinux)) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           _OpenInRow(photo: photo, colors: c),
         ],
-        const SizedBox(height: 18),
+        const SizedBox(height: 14),
+        const GxHLine(),
+        const SizedBox(height: 12),
         _TagsSection(photo: photo, colors: c),
-        const SizedBox(height: 20),
+        const SizedBox(height: 14),
         ValueListenableBuilder<Set<String>>(
           valueListenable: Favorites.instance.notifier,
           builder: (ctx, favs, _) {
             final fav = favs.contains(photo.path);
-            return Row(children: [
-              action(
-                fav ? Icons.favorite : Icons.favorite_border,
-                fav
-                    ? tr('В избранном', 'Favorited', 'En favoritos')
-                    : tr('В избранное', 'Favorite', 'A favoritos'),
-                onTap: () => Favorites.instance.toggle(photo.path),
-                active: fav,
+            return Container(
+              decoration: BoxDecoration(
+                borderRadius: gxCorner,
+                border: Border.all(color: c.field),
               ),
-              action(Icons.image_search_rounded,
-                  tr('Похожие', 'Similar', 'Similares'), onTap: () {
-                Navigator.of(context).push(MaterialPageRoute(
-                    builder: (_) => SimilarPage(photo: photo, pool: pool)));
-              }),
-              action(Icons.ios_share, tr('Поделиться', 'Share', 'Compartir'),
-                  onTap: () => MediaActions.share([photo])),
-              action(Icons.collections_bookmark_outlined,
-                  tr('В альбом', 'To album', 'A álbum'),
-                  onTap: () => showAddToCollectionSheet(context, [photo.path])),
-            ]);
+              clipBehavior: Clip.antiAlias,
+              child: Row(children: [
+                action(
+                  GxGlyph.star,
+                  fav
+                      ? tr('В избранном', 'Favorited', 'En favoritos')
+                      : tr('В избранное', 'Favorite', 'A favoritos'),
+                  onTap: () => Favorites.instance.toggle(photo.path),
+                  active: fav,
+                ),
+                const GxVLine(),
+                action(GxGlyph.search, tr('Похожие', 'Similar', 'Similares'),
+                    onTap: () {
+                  Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => SimilarPage(photo: photo, pool: pool)));
+                }),
+                const GxVLine(),
+                action(GxGlyph.share, tr('Поделиться', 'Share', 'Compartir'),
+                    onTap: () => MediaActions.share([photo])),
+                const GxVLine(),
+                action(GxGlyph.library,
+                    tr('В альбом', 'To album', 'A álbum'),
+                    onTap: () => showAddToCollectionSheet(context, [photo.path])),
+              ]),
+            );
           },
         ),
-        const SizedBox(height: 22),
-        Divider(color: c.line, height: 1),
-        if (photo.sizeBytes > 0)
+        const SizedBox(height: 14),
+        const GxHLine(),
+        if (photo.sizeBytes > 0) ...[
           row(tr('Размер', 'Size', 'Tamaño'), prettySize(photo.sizeBytes)),
-        Divider(color: c.line, height: 1),
+          GxHLine(color: c.rowLine),
+        ],
         row(tr('Папка', 'Folder', 'Carpeta'), photo.folderName),
-        const SizedBox(height: 16),
+        GxHLine(color: c.rowLine),
+        const SizedBox(height: 10),
         Text(tr('Путь', 'Path', 'Ruta'),
             style: TextStyle(color: c.muted, fontSize: 13)),
         const SizedBox(height: 4),
         SelectableText(photo.path,
             style: TextStyle(color: c.text, fontSize: 12)),
-        const SizedBox(height: 18),
+        const SizedBox(height: 14),
+        const GxHLine(),
+        const SizedBox(height: 12),
         _MetaSection(photo: photo, colors: c),
       ]),
     );
@@ -842,27 +875,29 @@ class _OpenInRowState extends State<_OpenInRow> {
     });
   }
 
-  Widget _chip(IconData? icon, String? badge, String label, Color color,
+  Widget _chip(GxGlyph? glyph, String? badge, String label, Color color,
       VoidCallback onTap) {
     final c = widget.colors;
     return GestureDetector(
       onTap: onTap,
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Container(
-          width: 46,
-          height: 46,
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(13),
+            // у «Другое…» нет фирменного цвета — рисуем его как рамочную кнопку
+            color: glyph != null ? c.active : color,
+            borderRadius: gxCorner,
+            border: glyph != null ? Border.all(color: c.field) : null,
           ),
           alignment: Alignment.center,
-          child: icon != null
-              ? Icon(icon, color: Colors.white, size: 20)
+          child: glyph != null
+              ? GxIcon(glyph, color: c.muted, size: 19)
               : Text(badge ?? '',
                   style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800)),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600)),
         ),
         const SizedBox(height: 4),
         SizedBox(
@@ -871,7 +906,7 @@ class _OpenInRowState extends State<_OpenInRow> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: TextStyle(color: c.muted, fontSize: 10.5)),
+              style: TextStyle(color: c.muted, fontSize: 11)),
         ),
       ]),
     );
@@ -883,19 +918,14 @@ class _OpenInRowState extends State<_OpenInRow> {
     final path = widget.photo.path;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(tr('Открыть в…', 'Open in…', 'Abrir en…'),
-          style: TextStyle(
-              color: c.muted, fontSize: 12.5, fontWeight: FontWeight.w600)),
-      const SizedBox(height: 10),
-      Wrap(spacing: 12, runSpacing: 12, children: [
+          style: TextStyle(color: c.muted, fontSize: 12)),
+      const SizedBox(height: 8),
+      Wrap(spacing: 10, runSpacing: 10, children: [
         for (final app in _apps)
           _chip(null, app.badge, app.name, app.color,
               () => EditorService.openIn(app, path)),
         if (Platform.isWindows)
-          _chip(
-              Icons.more_horiz_rounded,
-              null,
-              tr('Другое…', 'Other…', 'Otra…'),
-              const Color(0xFF6B7280),
+          _chip(GxGlyph.more, null, tr('Другое…', 'Other…', 'Otra…'), c.active,
               () => EditorService.openWithDialog(path)),
       ]),
       if (_apps.isEmpty && !Platform.isWindows)
@@ -950,10 +980,10 @@ class _MetaSectionState extends State<_MetaSection> {
     final c = widget.colors;
     if (_loading) {
       return Row(children: [
-        SizedBox(
+        const SizedBox(
             width: 13,
             height: 13,
-            child: CircularProgressIndicator(strokeWidth: 2, color: c.muted)),
+            child: CircularProgressIndicator(strokeWidth: 2)),
         const SizedBox(width: 8),
         Text(tr('Читаю метаданные…', 'Reading metadata…', 'Leyendo metadatos…'),
             style: TextStyle(color: c.muted, fontSize: 12)),
@@ -981,7 +1011,7 @@ class _MetaSectionState extends State<_MetaSection> {
                       style: TextStyle(
                           color: c.text,
                           fontSize: 12.5,
-                          fontWeight: FontWeight.w600)),
+                          fontWeight: FontWeight.w500)),
                 ),
               ]),
         );
@@ -989,11 +1019,11 @@ class _MetaSectionState extends State<_MetaSection> {
     Widget promptBox(String label, String value, Color bg) => Container(
           width: double.infinity,
           margin: const EdgeInsets.only(top: 8),
-          padding: const EdgeInsets.fromLTRB(11, 9, 11, 10),
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 9),
           decoration: BoxDecoration(
             color: bg,
-            borderRadius: BorderRadius.circular(11),
-            border: Border.all(color: c.line),
+            borderRadius: gxCorner,
+            border: Border.all(color: c.field),
           ),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1001,7 +1031,7 @@ class _MetaSectionState extends State<_MetaSection> {
                 style: TextStyle(
                     color: c.muted,
                     fontSize: 11,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w600,
                     letterSpacing: 0.3)),
             const SizedBox(height: 4),
             SelectableText(value,
@@ -1011,29 +1041,29 @@ class _MetaSectionState extends State<_MetaSection> {
 
     final children = <Widget>[
       Row(children: [
-        Icon(m.isAi ? Icons.auto_awesome : Icons.info_outline,
-            size: 16, color: c.accent),
-        const SizedBox(width: 6),
+        GxIcon(m.isAi ? _gSparkle : GxGlyph.info, size: 16, color: c.accent),
+        const SizedBox(width: 8),
         Text(
             m.isAi
                 ? tr('Параметры генерации', 'Generation parameters',
                     'Parámetros de generación')
                 : tr('Метаданные', 'Metadata', 'Metadatos'),
             style: TextStyle(
-                color: c.text, fontSize: 14, fontWeight: FontWeight.w700)),
+                color: c.text, fontSize: 14, fontWeight: FontWeight.w600)),
         if (m.aiTool != null) ...[
           const Spacer(),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: c.accentSoft,
-              borderRadius: BorderRadius.circular(8),
+              color: c.selected,
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(color: c.accent.withValues(alpha: 0.5)),
             ),
             child: Text(m.aiTool!,
                 style: TextStyle(
-                    color: c.accentInk,
+                    color: c.text,
                     fontSize: 11,
-                    fontWeight: FontWeight.w700)),
+                    fontWeight: FontWeight.w500)),
           ),
         ],
       ]),
@@ -1044,10 +1074,10 @@ class _MetaSectionState extends State<_MetaSection> {
           '${m.width}×${m.height}'));
     }
     if (m.prompt != null && m.prompt!.isNotEmpty) {
-      children.add(promptBox('PROMPT', m.prompt!, c.surface2));
+      children.add(promptBox('PROMPT', m.prompt!, c.active));
     }
     if (m.negative != null && m.negative!.isNotEmpty) {
-      children.add(promptBox('NEGATIVE', m.negative!, c.surface2));
+      children.add(promptBox('NEGATIVE', m.negative!, c.active));
     }
     if (m.aiParams.isNotEmpty) {
       children.add(const SizedBox(height: 4));
@@ -1100,15 +1130,11 @@ class _TagsSectionState extends State<_TagsSection> {
     final tagger = Tagger.instance;
     if (!await tagger.isDownloaded()) {
       if (!mounted) return;
-      final c = widget.colors;
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          backgroundColor: c.surface,
-          title: Text(
-              tr('Скачать ИИ-модель?', 'Download AI model?',
-                  '¿Descargar el modelo de IA?'),
-              style: TextStyle(color: c.text)),
+          title: Text(tr('Скачать ИИ-модель?', 'Download AI model?',
+              '¿Descargar el modelo de IA?')),
           content: Text(
             tr(
                 'Для авто-тегирования нужна модель WD (danbooru/аниме/арт), '
@@ -1117,18 +1143,12 @@ class _TagsSectionState extends State<_TagsSection> {
                     '~380 MB. Downloaded once, then works offline.',
                 'El auto-etiquetado necesita el modelo WD (danbooru/anime/arte), '
                     '~380 MB. Se descarga una vez y luego funciona sin conexión.'),
-            style: TextStyle(color: c.muted),
           ),
           actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: Text(tr('Отмена', 'Cancel', 'Cancelar'),
-                    style: TextStyle(color: c.muted))),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: c.accent),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(tr('Скачать', 'Download', 'Descargar')),
-            ),
+            GxTextBtn(tr('Отмена', 'Cancel', 'Cancelar'),
+                onTap: () => Navigator.pop(ctx, false)),
+            GxTextBtn(tr('Скачать', 'Download', 'Descargar'),
+                primary: true, onTap: () => Navigator.pop(ctx, true)),
           ],
         ),
       );
@@ -1204,42 +1224,49 @@ class _TagsSectionState extends State<_TagsSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(children: [
-          Icon(Icons.sell_outlined, size: 16, color: c.muted),
-          const SizedBox(width: 6),
-          Text(tr('Теги', 'Tags', 'Etiquetas'),
-              style: TextStyle(
-                  color: c.text, fontSize: 14, fontWeight: FontWeight.w700)),
-          const Spacer(),
-          if (!_busy && !widget.photo.isVideo)
-            GestureDetector(
-              onTap: _autoTag,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-                decoration: BoxDecoration(
-                  color: c.accent,
-                  borderRadius: BorderRadius.circular(9),
+        SizedBox(
+          height: 30,
+          child: Row(children: [
+            GxIcon(GxGlyph.tag, size: 16, color: c.muted),
+            const SizedBox(width: 8),
+            Text(tr('Теги', 'Tags', 'Etiquetas'),
+                style: TextStyle(
+                    color: c.text, fontSize: 14, fontWeight: FontWeight.w600)),
+            const Spacer(),
+            if (!_busy && !widget.photo.isVideo)
+              Material(
+                color: Colors.transparent,
+                shape: RoundedRectangleBorder(
+                    borderRadius: gxCorner, side: BorderSide(color: c.field)),
+                child: InkWell(
+                  borderRadius: gxCorner,
+                  onTap: _autoTag,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: SizedBox(
+                      height: 30,
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        GxIcon(_gSparkle, size: 15, color: c.accent),
+                        const SizedBox(width: 6),
+                        Text(tr('Тегировать', 'Auto-tag', 'Auto-etiquetar'),
+                            style: TextStyle(
+                                color: c.text,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w500)),
+                      ]),
+                    ),
+                  ),
                 ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.auto_awesome, size: 15, color: Colors.white),
-                  const SizedBox(width: 6),
-                  Text(tr('Тегировать', 'Auto-tag', 'Auto-etiquetar'),
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600)),
-                ]),
               ),
-            ),
-        ]),
+          ]),
+        ),
         if (_busy) ...[
           const SizedBox(height: 10),
           Row(children: [
-            SizedBox(
+            const SizedBox(
               width: 14,
               height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2, color: c.accent),
+              child: CircularProgressIndicator(strokeWidth: 2),
             ),
             const SizedBox(width: 8),
             Text(
@@ -1250,10 +1277,7 @@ class _TagsSectionState extends State<_TagsSection> {
           ]),
           if (_busyProgress != null) ...[
             const SizedBox(height: 6),
-            LinearProgressIndicator(
-                value: _busyProgress,
-                color: c.accent,
-                backgroundColor: c.surface2),
+            LinearProgressIndicator(value: _busyProgress, minHeight: 3),
           ],
         ],
         const SizedBox(height: 10),
@@ -1270,21 +1294,23 @@ class _TagsSectionState extends State<_TagsSection> {
             runSpacing: 6,
             children: [
               for (final t in _tags)
-                Container(
-                  padding: const EdgeInsets.fromLTRB(10, 5, 6, 5),
-                  decoration: BoxDecoration(
-                    color: c.accentSoft,
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Text(t,
-                        style: TextStyle(color: c.accentInk, fontSize: 12.5)),
-                    const SizedBox(width: 4),
-                    GestureDetector(
-                      onTap: () => _remove(t),
-                      child: Icon(Icons.close, size: 14, color: c.accentInk),
+                InkWell(
+                  borderRadius: gxCorner,
+                  onTap: () => _remove(t),
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(9, 4, 6, 4),
+                    decoration: BoxDecoration(
+                      color: c.selected,
+                      borderRadius: gxCorner,
+                      border:
+                          Border.all(color: c.accent.withValues(alpha: 0.5)),
                     ),
-                  ]),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Text(t, style: TextStyle(color: c.text, fontSize: 12.5)),
+                      const SizedBox(width: 5),
+                      GxIcon(GxGlyph.close, size: 11, color: c.muted),
+                    ]),
+                  ),
                 ),
             ],
           ),
@@ -1292,40 +1318,32 @@ class _TagsSectionState extends State<_TagsSection> {
         Row(children: [
           Expanded(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+              height: 36,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: c.surface2,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: c.line),
+                borderRadius: gxCorner,
+                border: Border.all(color: c.field),
               ),
               child: TextField(
                 controller: _ctl,
                 onSubmitted: (_) => _add(),
-                cursorColor: c.accent,
-                style: TextStyle(color: c.text, fontSize: 13),
+                style: TextStyle(color: c.text, fontSize: 13.5),
                 decoration: InputDecoration(
-                  isDense: true,
+                  isCollapsed: true,
                   border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
                   hintText:
                       tr('Добавить тег…', 'Add a tag…', 'Añadir etiqueta…'),
-                  hintStyle: TextStyle(color: c.muted, fontSize: 13),
+                  hintStyle: TextStyle(color: c.dim, fontSize: 13.5),
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: _add,
-            child: Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: c.accent,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.add, color: Colors.white, size: 20),
-            ),
-          ),
+          const SizedBox(width: 4),
+          GxIconBtn(GxGlyph.plus, tr('Добавить', 'Add', 'Añadir'),
+              tint: c.accent, onTap: _add),
         ]),
       ],
     );

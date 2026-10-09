@@ -1,12 +1,18 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'theme.dart';
+import 'gx.dart';
 import 'model.dart';
 import 'embed_service.dart';
 import 'embed_store.dart';
 import 'batch_embedder.dart';
 import 'viewer_page.dart';
 import 'i18n.dart';
+
+// ── свои значки для этого экрана (24×24, линия 1.6) ──
+const _gSparkle = GxGlyph(
+    'M12 4l1.8 5.2L19 11l-5.2 1.8L12 18l-1.8-5.2L5 11l5.2-1.8z', true);
+const _gDownload = GxGlyph('M12 4v11M7 11l5 5 5-5M5 20h14');
 
 /// Экран «Похожие»: находит визуально близкие картинки через эмбеддинги CLIP.
 /// Работает среди уже проиндексированных фото; кнопка запускает индексацию всей
@@ -125,20 +131,35 @@ class _SimilarPageState extends State<SimilarPage> {
     final c = AuroraTheme.of(context).colors;
     return Scaffold(
       backgroundColor: c.bg,
-      appBar: AppBar(
-        backgroundColor: c.surface,
-        foregroundColor: c.text,
-        title: Text(tr('Похожие', 'Similar', 'Similares')),
-        actions: [
-          IconButton(
-            tooltip: tr('Проиндексировать библиотеку', 'Index library',
-                'Indexar biblioteca'),
-            icon: const Icon(Icons.auto_awesome_rounded),
-            onPressed: () => BatchEmbedder.instance.start(widget.pool),
+      body: SafeArea(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          SizedBox(
+            height: 52,
+            child: Row(children: [
+              const SizedBox(width: 4),
+              GxIconBtn(GxGlyph.back, tr('Назад', 'Back', 'Atrás'),
+                  onTap: () => Navigator.pop(context)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(tr('Похожие', 'Similar', 'Similares'),
+                    style: TextStyle(
+                        color: c.text,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600)),
+              ),
+              GxIconBtn(
+                _gSparkle,
+                tr('Проиндексировать библиотеку', 'Index library',
+                    'Indexar biblioteca'),
+                onTap: () => BatchEmbedder.instance.start(widget.pool),
+              ),
+              const SizedBox(width: 4),
+            ]),
           ),
-        ],
+          const GxHLine(),
+          Expanded(child: _body(c)),
+        ]),
       ),
-      body: _body(c),
     );
   }
 
@@ -148,7 +169,7 @@ class _SimilarPageState extends State<SimilarPage> {
         child: Padding(
           padding: const EdgeInsets.all(28),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.image_search_rounded, size: 54, color: c.accent),
+            GxIcon(GxGlyph.search, size: 48, color: c.accent),
             const SizedBox(height: 14),
             Text(
                 tr('Для поиска похожих нужна ИИ-модель (CLIP), ~350 МБ. Скачивается один раз, дальше офлайн.',
@@ -159,29 +180,27 @@ class _SimilarPageState extends State<SimilarPage> {
             const SizedBox(height: 18),
             if (_downloading)
               Column(children: [
-                LinearProgressIndicator(
-                    value: _dlProgress, color: c.accent, backgroundColor: c.surface2),
+                LinearProgressIndicator(value: _dlProgress, minHeight: 3),
                 const SizedBox(height: 8),
                 Text('${(_dlProgress * 100).round()}%',
                     style: TextStyle(color: c.muted)),
               ])
             else
               FilledButton.icon(
-                style: FilledButton.styleFrom(backgroundColor: c.accent),
                 onPressed: _download,
-                icon: const Icon(Icons.download_rounded),
+                icon: GxIcon(_gDownload, color: c.onAccent, size: 18),
                 label: Text(tr('Скачать модель', 'Download model', 'Descargar modelo')),
               ),
             if (_error != null) ...[
               const SizedBox(height: 12),
-              Text(_error!, style: TextStyle(color: c.accent, fontSize: 12)),
+              Text(_error!, style: TextStyle(color: c.danger, fontSize: 12)),
             ],
           ]),
         ),
       );
     }
     if (_loading) {
-      return Center(child: CircularProgressIndicator(color: c.accent));
+      return const Center(child: CircularProgressIndicator());
     }
     if (_error != null) {
       return Center(
@@ -195,7 +214,7 @@ class _SimilarPageState extends State<SimilarPage> {
         child: Padding(
           padding: const EdgeInsets.all(28),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.travel_explore_rounded, size: 48, color: c.muted),
+            GxIcon(GxGlyph.search, size: 48, color: c.dim),
             const SizedBox(height: 12),
             Text(
                 tr('Пока нечего сравнивать. Запусти индексацию библиотеки (кнопка сверху) — потом «Похожие» будут находиться.',
@@ -222,7 +241,7 @@ class _SimilarPageState extends State<SimilarPage> {
     }
 
     return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 20),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 20),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 120,
         mainAxisSpacing: 4,
@@ -244,9 +263,10 @@ class _SimilarPageState extends State<SimilarPage> {
               filterQuality: FilterQuality.low,
               gaplessPlayback: true,
               errorBuilder: (c2, e, s) => Container(
-                  color: AuroraTheme.of(c2).colors.surface2,
-                  child: Icon(Icons.broken_image_outlined,
-                      size: 16, color: AuroraTheme.of(c2).colors.muted)),
+                  color: AuroraTheme.of(c2).colors.active,
+                  child: Center(
+                      child: GxIcon(GxGlyph.gallery,
+                          size: 16, color: AuroraTheme.of(c2).colors.muted))),
             ),
           ),
         );

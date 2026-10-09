@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'theme.dart';
+import 'gx.dart';
 import 'settings_service.dart';
 import 'i18n.dart';
 
@@ -13,6 +14,11 @@ import 'i18n.dart';
 const int _kPinLength = 4;
 const int _kMaxAttemptsBeforeLock = 3;
 const int _kLockSeconds = 15;
+
+// свои значки (сетка 24×24, штрих как у GxGlyph)
+const _gLock = GxGlyph('M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3');
+const _gBackspace = GxGlyph(
+    'M9 5.5h10a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H9l-5.5-6.5zM12.5 9.5l5 5M17.5 9.5l-5 5');
 
 enum _PinDialogMode { verify, create }
 
@@ -245,28 +251,21 @@ class _PinDialogState extends State<_PinDialog>
       autofocus: true,
       onKeyEvent: _onKey,
       child: Dialog(
-        backgroundColor: c.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 26, 24, 14),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(color: c.accentSoft, shape: BoxShape.circle),
-              child: Icon(Icons.lock_outline_rounded, color: c.accentInk, size: 26),
-            ),
-            const SizedBox(height: 14),
+            GxIcon(_gLock, color: c.accent, size: 24),
+            const SizedBox(height: 10),
             Text(_title,
                 style: TextStyle(
-                    color: c.text, fontSize: 17, fontWeight: FontWeight.w800)),
+                    color: c.text, fontSize: 16, fontWeight: FontWeight.w600)),
             if (widget.subtitle != null) ...[
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Text(widget.subtitle!,
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: c.muted, fontSize: 12.5)),
+                  style: TextStyle(color: c.muted, fontSize: 12)),
             ],
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
             AnimatedBuilder(
               animation: _shakeCtl,
               builder: (ctx, child) {
@@ -280,20 +279,19 @@ class _PinDialogState extends State<_PinDialog>
                   final filled = i < _digits.length;
                   return AnimatedContainer(
                     duration: const Duration(milliseconds: 120),
-                    margin: const EdgeInsets.symmetric(horizontal: 7),
+                    margin: const EdgeInsets.symmetric(horizontal: 6),
                     width: 14,
                     height: 14,
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
+                      borderRadius: BorderRadius.circular(5),
                       color: filled ? c.accent : Colors.transparent,
-                      border: Border.all(
-                          color: filled ? c.accent : c.line, width: 1.4),
+                      border: Border.all(color: filled ? c.accent : c.field),
                     ),
                   );
                 }),
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
             SizedBox(
               height: 18,
               child: _locked
@@ -307,21 +305,20 @@ class _PinDialogState extends State<_PinDialog>
                     )
                   : (_error != null
                       ? Text(_error!,
-                          style: const TextStyle(
-                              color: Colors.redAccent, fontSize: 12.5))
+                          style: TextStyle(color: c.danger, fontSize: 12))
                       : const SizedBox.shrink()),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             _Keypad(
               enabled: !_locked,
               c: c,
               onDigit: _onDigit,
               onBackspace: _onBackspace,
             ),
+            const SizedBox(height: 6),
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: Text(tr('Отмена', 'Cancel', 'Cancelar'),
-                  style: TextStyle(color: c.muted)),
+              child: Text(tr('Отмена', 'Cancel', 'Cancelar')),
             ),
           ]),
         ),
@@ -364,29 +361,31 @@ class _Keypad extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: row.map((key) {
                   if (key.isEmpty) {
-                    return const SizedBox(width: 56, height: 52);
+                    return const SizedBox(width: 72, height: 48);
                   }
                   final isBackspace = key == '⌫';
                   return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
                     child: Material(
-                      color: c.surface2,
-                      shape: const CircleBorder(),
+                      color: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: gxCorner,
+                        side: BorderSide(color: c.field),
+                      ),
                       child: InkWell(
-                        customBorder: const CircleBorder(),
+                        borderRadius: gxCorner,
                         onTap: () => isBackspace ? onBackspace() : onDigit(key),
                         child: SizedBox(
-                          width: 54,
-                          height: 54,
+                          width: 64,
+                          height: 48,
                           child: Center(
                             child: isBackspace
-                                ? Icon(Icons.backspace_outlined,
-                                    color: c.text, size: 20)
+                                ? GxIcon(_gBackspace, color: c.muted, size: 20)
                                 : Text(key,
                                     style: TextStyle(
                                         color: c.text,
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w700)),
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w500)),
                           ),
                         ),
                       ),

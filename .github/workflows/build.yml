@@ -89,6 +89,18 @@ jobs:
           }
           # имя приложения на устройстве — GOAT (вместо служебного aurora_gallery)
           $mc = $mc -replace 'android:label="[^"]+"', 'android:label="GOAT"'
+          # Goat Explorer: чтобы галерея видела, что он установлен (кнопка «Проводник»)
+          if ($mc -notmatch 'dev\.filebridge\.app') {
+            $mc = $mc -replace '(<queries>)', "`$1`n        <package android:name=`"dev.filebridge.app`"/>"
+          }
+          # первый кадр при запуске — фон проводника, а не белая вспышка: переход
+          # из проводника в галерею не должен выдавать, что это другое приложение
+          foreach ($d in @('drawable', 'drawable-v21')) {
+            $lb = "android/app/src/main/res/$d/launch_background.xml"
+            if (Test-Path $lb) {
+              Set-Content $lb "<?xml version=`"1.0`" encoding=`"utf-8`"?>`n<layer-list xmlns:android=`"http://schemas.android.com/apk/res/android`">`n    <item><color android:color=`"#0B1622`"/></item>`n</layer-list>"
+            }
+          }
           Set-Content $m $mc
           Write-Host "app minSdk 24 / compileSdk 36 / доступ к фото (MediaStore) / label=GOAT"
 

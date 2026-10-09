@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'theme.dart';
+import 'gx.dart';
 import 'tag_service.dart';
 import 'batch_tagger.dart';
 import 'i18n.dart';
 
 /// Боковая панель тегов: поиск, сортировка, группировка по категориям.
 /// Тап по тегу мгновенно включает/выключает его в фильтре (живая фильтрация).
+/// Показывается внутри боковой панели главного экрана — как продолжение
+/// списка альбомов: без своего фона, рамки и крупной шапки.
 class TagsPanel extends StatefulWidget {
   final Set<String> selected;
   final ValueChanged<String> onToggle;
@@ -80,100 +83,70 @@ class _TagsPanelState extends State<TagsPanel> {
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text(
               '${tr('Скачивание модели…', 'Downloading model…', 'Descargando modelo…')} ${(b.downloadProgress * 100).round()}%',
-              style: TextStyle(
-                  color: c.text, fontSize: 12.5, fontWeight: FontWeight.w600)),
+              style: TextStyle(color: c.text, fontSize: 12.5)),
           const SizedBox(height: 7),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: b.downloadProgress,
-              color: c.accent,
-              backgroundColor: c.surface2,
-              minHeight: 6,
-            ),
-          ),
+          LinearProgressIndicator(value: b.downloadProgress, minHeight: 3),
         ]),
       );
     }
     if (b.running) {
       return Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        padding: const EdgeInsets.fromLTRB(12, 0, 8, 8),
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Row(children: [
             Expanded(
               child: Text(
                   '${tr('Тегирую', 'Tagging', 'Etiquetando')}: ${b.done} / ${b.total}',
-                  style: TextStyle(
-                      color: c.text,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600)),
+                  style: TextStyle(color: c.text, fontSize: 12.5)),
             ),
-            GestureDetector(
-              onTap: () {
-                b.stop();
-                setState(() {});
-              },
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
-                decoration: BoxDecoration(
-                  color: c.surface2,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: c.line),
-                ),
-                child: Text(tr('Стоп', 'Stop', 'Parar'),
-                    style: TextStyle(color: c.text, fontSize: 12)),
-              ),
-            ),
+            GxTextBtn(tr('Стоп', 'Stop', 'Parar'), height: 30, onTap: () {
+              b.stop();
+              setState(() {});
+            }),
           ]),
           const SizedBox(height: 7),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: b.total == 0 ? null : b.progress,
-              color: c.accent,
-              backgroundColor: c.surface2,
-              minHeight: 6,
-            ),
-          ),
+          LinearProgressIndicator(
+              value: b.total == 0 ? null : b.progress, minHeight: 3),
         ]),
       );
     }
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        GestureDetector(
-          onTap: widget.onStartBatch,
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            decoration: BoxDecoration(
-              color: c.accent,
-              borderRadius: BorderRadius.circular(11),
+        Material(
+          color: Colors.transparent,
+          shape: RoundedRectangleBorder(
+              borderRadius: gxCorner, side: BorderSide(color: c.field)),
+          child: InkWell(
+            borderRadius: gxCorner,
+            onTap: widget.onStartBatch,
+            child: SizedBox(
+              height: 34,
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                GxIcon(GxGlyph.bolt, size: 16, color: c.accent),
+                const SizedBox(width: 8),
+                Text(tr('Тегировать всё', 'Tag everything', 'Etiquetar todo'),
+                    style: TextStyle(
+                        color: c.text,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500)),
+              ]),
             ),
-            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              const Icon(Icons.auto_awesome, size: 16, color: Colors.white),
-              const SizedBox(width: 8),
-              Text(tr('Тегировать всё', 'Tag everything', 'Etiquetar todo'),
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600)),
-            ]),
           ),
         ),
         if (b.error != null)
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(b.error!,
-                style: TextStyle(color: c.muted, fontSize: 11.5)),
+                style: TextStyle(color: c.muted, fontSize: 12)),
           ),
         if (b.error == null && b.done > 0)
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(
                 '${tr('Готово', 'Done', 'Listo')}: ${tr('отмечено', 'tagged', 'etiquetadas')} ${b.tagged} ${tr('из', 'of', 'de')} ${b.done}',
-                style: TextStyle(color: c.muted, fontSize: 11.5)),
+                style: TextStyle(color: c.muted, fontSize: 12)),
           ),
       ]),
     );
@@ -195,66 +168,61 @@ class _TagsPanelState extends State<TagsPanel> {
       ...groups.keys.where((k) => !_catOrder.contains(k)),
     ];
 
-    return Container(
+    return SizedBox(
       width: widget.width ?? 290,
-      decoration: BoxDecoration(
-        color: c.surface,
-        border: Border(right: BorderSide(color: c.line)),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // шапка
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 8, 6),
-            child: Row(children: [
-              Icon(Icons.sell_outlined, size: 17, color: c.accent),
-              const SizedBox(width: 8),
-              Text(tr('Теги', 'Tags', 'Etiquetas'),
-                  style: TextStyle(
-                      color: c.text,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800)),
-              const Spacer(),
-              _SortToggle(
-                byCount: _byCount,
-                onChanged: (v) {
-                  setState(() => _byCount = v);
-                  _load();
-                },
-              ),
-              IconButton(
-                onPressed: widget.onClose,
-                icon: Icon(Icons.close, size: 18, color: c.muted),
-                tooltip: tr('Скрыть панель', 'Hide panel', 'Ocultar panel'),
-              ),
-            ]),
+          // тонкая строка управления: сортировка · сброс · скрыть
+          SizedBox(
+            height: 40,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 12, right: 4),
+              child: Row(children: [
+                _SortToggle(
+                  byCount: _byCount,
+                  onChanged: (v) {
+                    setState(() => _byCount = v);
+                    _load();
+                  },
+                ),
+                const Spacer(),
+                if (widget.selected.isNotEmpty)
+                  GxIconBtn(GxGlyph.refresh,
+                      tr('Сброс', 'Reset', 'Restablecer'),
+                      iconSize: 17, onTap: widget.onClear),
+                GxIconBtn(GxGlyph.close,
+                    tr('Скрыть панель', 'Hide panel', 'Ocultar panel'),
+                    iconSize: 17, onTap: widget.onClose),
+              ]),
+            ),
           ),
           // поиск
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+              height: 36,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
-                color: c.surface2,
-                borderRadius: BorderRadius.circular(11),
-                border: Border.all(color: c.line),
+                borderRadius: gxCorner,
+                border: Border.all(color: c.field),
               ),
               child: Row(children: [
-                Icon(Icons.search, size: 17, color: c.muted),
+                GxIcon(GxGlyph.search, size: 16, color: c.muted),
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
                     controller: _ctl,
                     onChanged: (v) => setState(() => _query = v),
-                    cursorColor: c.accent,
                     style: TextStyle(color: c.text, fontSize: 13.5),
                     decoration: InputDecoration(
-                      isDense: true,
+                      isCollapsed: true,
                       border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
                       hintText: tr(
                           'Поиск тега…', 'Search tags…', 'Buscar etiquetas…'),
-                      hintStyle: TextStyle(color: c.muted, fontSize: 13.5),
+                      hintStyle: TextStyle(color: c.dim, fontSize: 13.5),
                     ),
                   ),
                 ),
@@ -264,22 +232,12 @@ class _TagsPanelState extends State<TagsPanel> {
           _batchBar(c),
           if (widget.selected.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 12, 6),
-              child: Row(children: [
-                Text(
-                    '${tr('Выбрано', 'Selected', 'Seleccionado')}: ${widget.selected.length}',
-                    style: TextStyle(color: c.muted, fontSize: 12)),
-                const Spacer(),
-                GestureDetector(
-                  onTap: widget.onClear,
-                  child: Text(tr('Сброс', 'Reset', 'Restablecer'),
-                      style: TextStyle(
-                          color: c.muted,
-                          fontSize: 12,
-                          decoration: TextDecoration.underline)),
-                ),
-              ]),
+              padding: const EdgeInsets.fromLTRB(14, 0, 12, 4),
+              child: Text(
+                  '${tr('Выбрано', 'Selected', 'Seleccionado')}: ${widget.selected.length}',
+                  style: TextStyle(color: c.muted, fontSize: 12)),
             ),
+          const GxHLine(),
           // список тегов
           Expanded(
             child: _all.isEmpty
@@ -296,22 +254,23 @@ class _TagsPanelState extends State<TagsPanel> {
                     ),
                   )
                 : ListView(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                     children: [
                       for (final cat in orderedCats) ...[
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(2, 12, 0, 7),
+                          padding: const EdgeInsets.fromLTRB(2, 12, 0, 6),
                           child: Text(
                               '${_catLabel(cat)}  ·  ${groups[cat]!.length}',
                               style: TextStyle(
                                   color: c.muted,
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w700)),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500)),
                         ),
                         Wrap(spacing: 6, runSpacing: 6, children: [
                           for (final t in groups[cat]!)
                             _Chip(
-                              label: '${t.tag}  ${t.count}',
+                              tag: t.tag,
+                              count: t.count,
                               selected: widget.selected.contains(t.tag),
                               colors: c,
                               onTap: () => widget.onToggle(t.tag),
@@ -335,28 +294,28 @@ class _SortToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
-    Widget b(String label, bool on, VoidCallback onTap) => GestureDetector(
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-            decoration: BoxDecoration(
-              color: on ? c.surface : Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
+    Widget b(String label, bool on, VoidCallback onTap) => Material(
+          color: on ? c.active : Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            child: Container(
+              height: 28,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              alignment: Alignment.center,
+              child: Text(label,
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: on ? c.text : c.muted)),
             ),
-            child: Text(label,
-                style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                    color: on ? c.text : c.muted)),
           ),
         );
     return Container(
-      padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: c.surface2,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: c.line),
+        borderRadius: gxCorner,
+        border: Border.all(color: c.field),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         b(tr('Кол-во', 'Count', 'Cantidad'), byCount, () => onChanged(true)),
         b('А-Я', !byCount, () => onChanged(false)),
@@ -366,12 +325,14 @@ class _SortToggle extends StatelessWidget {
 }
 
 class _Chip extends StatelessWidget {
-  final String label;
+  final String tag;
+  final int count;
   final bool selected;
   final AuroraColors colors;
   final VoidCallback onTap;
   const _Chip({
-    required this.label,
+    required this.tag,
+    required this.count,
     required this.selected,
     required this.colors,
     required this.onTap,
@@ -380,20 +341,22 @@ class _Chip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = colors;
-    return GestureDetector(
+    return InkWell(
+      borderRadius: gxCorner,
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
         decoration: BoxDecoration(
-          color: selected ? c.accent : c.surface2,
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(color: selected ? c.accent : c.line),
+          color: selected ? c.selected : Colors.transparent,
+          borderRadius: gxCorner,
+          border: Border.all(
+              color: selected ? c.accent.withValues(alpha: 0.5) : c.field),
         ),
-        child: Text(label,
-            style: TextStyle(
-                color: selected ? Colors.white : c.text,
-                fontSize: 12,
-                fontWeight: FontWeight.w500)),
+        child: Text.rich(TextSpan(children: [
+          TextSpan(text: tag, style: TextStyle(color: c.text, fontSize: 12.5)),
+          TextSpan(
+              text: '  $count', style: TextStyle(color: c.dim, fontSize: 11.5)),
+        ])),
       ),
     );
   }

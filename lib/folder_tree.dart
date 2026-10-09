@@ -107,3 +107,41 @@ List<PhotoItem> collectPhotos(FolderNode n) {
   }
   return out;
 }
+
+/// Древо всех папок, в которых есть фото, — без списка корней (на Android с
+/// MediaStore корней нет вовсе). Общая «крыша» из папок без фото наверху
+/// (`/storage/emulated/0`, `D:\Арт`) срезается, чтобы дерево начиналось с дела.
+FolderNode buildAlbumTree(List<PhotoItem> photos) {
+  final sep = Platform.pathSeparator;
+  final root = FolderNode(name: '', path: '');
+  final map = <String, FolderNode>{'': root};
+
+  FolderNode ensure(String path) {
+    final existing = map[path];
+    if (existing != null) return existing;
+    final cut = path.lastIndexOf(sep);
+    final parent = cut > 0 ? ensure(path.substring(0, cut)) : root;
+    final node = FolderNode(
+        name: cut >= 0 ? path.substring(cut + 1) : path, path: path);
+    map[path] = node;
+    parent.children.add(node);
+    return node;
+  }
+
+  for (final p in photos) {
+    var fp = p.folderPath;
+    if (fp.endsWith(sep)) fp = fp.substring(0, fp.length - 1);
+    if (fp.isEmpty) continue;
+    ensure(fp).directPhotos.add(p);
+  }
+  _aggregate(root);
+
+  var top = root;
+  while (top.directCount == 0 &&
+      top.children.length == 1 &&
+      top.children.first.directCount == 0 &&
+      top.children.first.hasChildren) {
+    top = top.children.first;
+  }
+  return top;
+}

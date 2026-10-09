@@ -1,8 +1,21 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'theme.dart';
+import 'gx.dart';
 import 'folder_tree.dart';
 import 'i18n.dart';
+
+// Свои значки дерева — в том же начертании, что и в gx.dart.
+const _gPlay = GxGlyph('M8 5.5v13l10.5-6.5z', true);
+const _gMinus = GxGlyph('M5 12h14');
+const _gLayoutV = GxGlyph(
+    'M9 3.5h6v4H9zM12 7.5v3M6 10.5h12M6 10.5v3M18 10.5v3M3.5 13.5h5v4h-5zM15.5 13.5h5v4h-5z');
+const _gLayoutH = GxGlyph(
+    'M3.5 9h4v6h-4zM7.5 12h3M10.5 6v12M10.5 6h3M10.5 18h3M13.5 3.5h6v5h-6zM13.5 15.5h6v5h-6z');
+const _gCompact = GxGlyph(
+    'M12 12V6.500M12 12l5.500 3.200M12 12l-5.500 3.200M13.500 4.500a1.500 1.500 0 1 1-3 0a1.500 1.500 0 0 1 3 0M20.500 16.500a1.500 1.500 0 1 1-3 0a1.500 1.500 0 0 1 3 0M6.500 16.500a1.500 1.500 0 1 1-3 0a1.500 1.500 0 0 1 3 0');
+const _gExpandAll = GxGlyph('M7 9l5-4 5 4M7 15l5 4 5-4');
+const _gOnTap = GxGlyph('M7 4.500l10.500 6.500-4.800 1.300L10.500 17.500z', true);
 
 enum TreeLayout { vertical, horizontal, compact }
 
@@ -253,7 +266,7 @@ class _TreeViewState extends State<TreeView> {
                         painter: _BranchPainter(
                           conns,
                           _layout,
-                          c.muted.withValues(alpha: 0.55),
+                          c.dim,
                         ),
                       ),
                     ),
@@ -287,73 +300,59 @@ class _TreeViewState extends State<TreeView> {
   }
 
   Widget _controls(AuroraColors c) {
-    Widget seg(IconData icon, String tip, bool on, VoidCallback onTap) {
-      return Tooltip(
-        message: tip,
-        child: Material(
-          color: on ? c.accent : Colors.transparent,
-          borderRadius: BorderRadius.circular(9),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(9),
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-              child: Icon(icon, size: 18, color: on ? Colors.white : c.muted),
-            ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+          child: Row(
+            children: [
+              GxSegments<TreeLayout>(
+                value: _layout,
+                onChanged: _setLayout,
+                items: [
+                  (
+                    TreeLayout.vertical,
+                    _gLayoutV,
+                    tr('Вертикальное', 'Vertical', 'Vertical')
+                  ),
+                  (
+                    TreeLayout.horizontal,
+                    _gLayoutH,
+                    tr('Горизонтальное', 'Horizontal', 'Horizontal')
+                  ),
+                  (
+                    TreeLayout.compact,
+                    _gCompact,
+                    tr('Компактное', 'Compact', 'Compacto')
+                  ),
+                ],
+              ),
+              const SizedBox(width: 10),
+              GxSegments<TreeMode>(
+                value: _mode,
+                onChanged: _setMode,
+                items: [
+                  (
+                    TreeMode.all,
+                    _gExpandAll,
+                    tr('Развернуть всё', 'Expand all', 'Expandir todo')
+                  ),
+                  (
+                    TreeMode.progressive,
+                    _gOnTap,
+                    tr('По нажатию', 'On tap', 'Al tocar')
+                  ),
+                ],
+              ),
+              const Spacer(),
+              Text('${widget.root.totalCount} ${tr('фото', 'photos', 'fotos')}',
+                  style: TextStyle(color: c.muted, fontSize: 12)),
+            ],
           ),
         ),
-      );
-    }
-
-    Widget group(List<Widget> items) => Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: c.surface2,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: c.line),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: items),
-        );
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      child: Row(
-        children: [
-          group([
-            seg(
-                Icons.account_tree_outlined,
-                tr('Вертикальное', 'Vertical', 'Vertical'),
-                _layout == TreeLayout.vertical,
-                () => _setLayout(TreeLayout.vertical)),
-            seg(
-                Icons.lan_outlined,
-                tr('Горизонтальное', 'Horizontal', 'Horizontal'),
-                _layout == TreeLayout.horizontal,
-                () => _setLayout(TreeLayout.horizontal)),
-            seg(
-                Icons.bubble_chart_outlined,
-                tr('Компактное', 'Compact', 'Compacto'),
-                _layout == TreeLayout.compact,
-                () => _setLayout(TreeLayout.compact)),
-          ]),
-          const SizedBox(width: 10),
-          group([
-            seg(
-                Icons.unfold_more,
-                tr('Развернуть всё', 'Expand all', 'Expandir todo'),
-                _mode == TreeMode.all,
-                () => _setMode(TreeMode.all)),
-            seg(
-                Icons.touch_app_outlined,
-                tr('По нажатию', 'On tap', 'Al tocar'),
-                _mode == TreeMode.progressive,
-                () => _setMode(TreeMode.progressive)),
-          ]),
-          const Spacer(),
-          Text('${widget.root.totalCount} ${tr('фото', 'photos', 'fotos')}',
-              style: TextStyle(color: c.muted, fontSize: 12)),
-        ],
-      ),
+        const GxHLine(),
+      ],
     );
   }
 
@@ -361,63 +360,71 @@ class _TreeViewState extends State<TreeView> {
     final c = AuroraTheme.of(context).colors;
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: c.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
       builder: (ctx) {
-        Widget tile(IconData icon, String label, VoidCallback onTap,
+        Widget tile(GxGlyph glyph, String label, VoidCallback onTap,
             {bool danger = false}) {
-          final col = danger ? const Color(0xFFD85A30) : c.text;
-          return ListTile(
-            leading: Icon(icon, color: col, size: 20),
-            title: Text(label, style: TextStyle(color: col)),
+          final col = danger ? c.danger : c.text;
+          return InkWell(
             onTap: () {
               Navigator.pop(ctx);
               onTap();
             },
+            child: SizedBox(
+              height: 44,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: Row(children: [
+                  GxIcon(glyph, color: danger ? c.danger : c.muted, size: 18),
+                  const SizedBox(width: 12),
+                  Text(label, style: TextStyle(color: col, fontSize: 14)),
+                ]),
+              ),
+            ),
           );
         }
 
         return SafeArea(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 6),
-              child: Row(children: [
-                Icon(Icons.folder_rounded, color: c.accent, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(n.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          color: c.text,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700)),
-                ),
-                Text('${n.totalCount} ${tr('фото', 'photos', 'fotos')}',
-                    style: TextStyle(color: c.muted, fontSize: 12)),
-              ]),
+            SizedBox(
+              height: 48,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: Row(children: [
+                  GxIcon(GxGlyph.folder, color: c.accent, size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(n.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            color: c.text,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                  Text('${n.totalCount} ${tr('фото', 'photos', 'fotos')}',
+                      style: TextStyle(color: c.muted, fontSize: 12)),
+                ]),
+              ),
             ),
-            const Divider(height: 1),
-            tile(Icons.open_in_full, tr('Открыть', 'Open', 'Abrir'),
+            const GxHLine(),
+            tile(GxGlyph.folder, tr('Открыть', 'Open', 'Abrir'),
                 () => widget.onOpenFolder(n)),
             tile(
-                Icons.drive_file_rename_outline,
+                GxGlyph.pencil,
                 tr('Переименовать', 'Rename', 'Renombrar'),
                 () => _soon(tr('Переименование', 'Renaming', 'Renombrar'))),
             tile(
-                Icons.drive_file_move_outline,
+                GxGlyph.moveTo,
                 tr('Переместить', 'Move', 'Mover'),
                 () => _soon(tr('Перемещение', 'Moving', 'Mover'))),
-            tile(Icons.content_copy, tr('Копировать', 'Copy', 'Copiar'),
+            tile(GxGlyph.copy, tr('Копировать', 'Copy', 'Copiar'),
                 () => _soon(tr('Копирование', 'Copying', 'Copiar'))),
             tile(
-                Icons.delete_outline,
+                GxGlyph.bin,
                 tr('Удалить в корзину', 'Move to trash', 'Mover a la papelera'),
                 () => _soon(tr('Удаление', 'Deleting', 'Eliminar')),
                 danger: true),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
           ]),
         );
       },
@@ -458,7 +465,7 @@ class _BranchPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = color
-      ..strokeWidth = 1.8
+      ..strokeWidth = 1.2
       ..style = PaintingStyle.stroke
       ..strokeJoin = StrokeJoin.miter
       ..strokeCap = StrokeCap.round
@@ -546,31 +553,23 @@ class _NodeCard extends StatelessWidget {
               children: [
                 Container(
                   decoration: BoxDecoration(
-                    color: c.surface2,
-                    borderRadius: BorderRadius.circular(15),
-                    border: Border.all(
-                        color: isRoot ? c.accent : c.line,
-                        width: isRoot ? 2.5 : 1),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.10),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
+                    color: c.active,
+                    borderRadius: gxCorner,
+                    border: Border.all(color: isRoot ? c.accent : c.field),
                   ),
                   clipBehavior: Clip.antiAlias,
                   child: cover != null && cover.isVideo
                       ? Center(
                           child: Container(
-                            width: 28,
+                            width: 32,
                             height: 28,
+                            alignment: Alignment.center,
                             decoration: BoxDecoration(
                               color: Colors.black.withValues(alpha: 0.45),
-                              shape: BoxShape.circle,
+                              borderRadius: gxCorner,
                             ),
-                            child: const Icon(Icons.play_arrow_rounded,
-                                color: Colors.white, size: 21),
+                            child: const GxIcon(_gPlay,
+                                color: Colors.white, size: 18),
                           ),
                         )
                       : cover != null
@@ -579,13 +578,13 @@ class _NodeCard extends StatelessWidget {
                                   (coverSide * dpr).round().clamp(64, 512)),
                               fit: BoxFit.cover,
                               filterQuality: FilterQuality.low,
-                              errorBuilder: (ctx, e, s) => Icon(
-                                  Icons.folder_rounded,
-                                  color: c.muted,
-                                  size: 26),
+                              errorBuilder: (ctx, e, s) => Center(
+                                  child: GxIcon(GxGlyph.folder,
+                                      color: c.muted, size: 24)),
                             )
-                          : Icon(Icons.folder_rounded,
-                              color: c.muted, size: 26),
+                          : Center(
+                              child: GxIcon(GxGlyph.folder,
+                                  color: c.muted, size: 24)),
                 ),
                 // счётчик фото в углу
                 Positioned(
@@ -593,10 +592,10 @@ class _NodeCard extends StatelessWidget {
                   top: 6,
                   child: Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(5),
                     ),
                     child: Text('${node.totalCount}',
                         style: const TextStyle(
@@ -613,20 +612,16 @@ class _NodeCard extends StatelessWidget {
                     child: GestureDetector(
                       onTap: onToggle,
                       child: Container(
-                        width: 25,
-                        height: 25,
+                        width: 24,
+                        height: 24,
+                        alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: c.accent,
-                          borderRadius: BorderRadius.circular(8),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.2),
-                              blurRadius: 4,
-                            ),
-                          ],
+                          color: c.panel,
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(color: c.field),
                         ),
-                        child: Icon(expanded ? Icons.remove : Icons.add,
-                            color: Colors.white, size: 17),
+                        child: GxIcon(expanded ? _gMinus : GxGlyph.plus,
+                            color: c.text, size: 14),
                       ),
                     ),
                   ),
@@ -644,8 +639,8 @@ class _NodeCard extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(
                   color: c.text,
-                  fontSize: small ? 11.5 : 12.5,
-                  fontWeight: FontWeight.w600),
+                  fontSize: small ? 12 : 13,
+                  fontWeight: FontWeight.w500),
             ),
           ),
           if (!small && node.hasChildren)
@@ -656,7 +651,7 @@ class _NodeCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: c.muted, fontSize: 10.5),
+                style: TextStyle(color: c.muted, fontSize: 11),
               ),
             ),
         ],

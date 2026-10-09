@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:photo_manager/photo_manager.dart';
 import 'package:share_plus/share_plus.dart';
 import 'model.dart';
+import 'gx.dart';
 import 'theme.dart';
 import 'trash_service.dart';
 import 'tag_service.dart';
@@ -59,18 +60,15 @@ class MediaActions {
   /// assetId), ПК — в корзину GOAT. Возвращает число удалённых (−1 = отмена).
   static Future<int> delete(BuildContext context, List<PhotoItem> photos) async {
     if (photos.isEmpty) return 0;
-    final c = AuroraTheme.of(context).colors;
     final n = photos.length;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: c.surface,
         title: Text(
             n == 1
                 ? tr('Удалить фото?', 'Delete photo?', '¿Eliminar la foto?')
                 : tr('Удалить $n фото?', 'Delete $n photos?',
-                    '¿Eliminar $n fotos?'),
-            style: TextStyle(color: c.text)),
+                    '¿Eliminar $n fotos?')),
         content: Text(
           Platform.isAndroid
               ? tr(
@@ -80,19 +78,12 @@ class MediaActions {
               : tr('Переедут в корзину GOAT — их можно вернуть.',
                   'They move to the GOAT trash — recoverable.',
                   'Se mueven a la papelera de GOAT — recuperables.'),
-          style: TextStyle(color: c.muted),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(tr('Отмена', 'Cancel', 'Cancelar'),
-                style: TextStyle(color: c.muted)),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: c.accent),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(tr('Удалить', 'Delete', 'Eliminar')),
-          ),
+          GxTextBtn(tr('Отмена', 'Cancel', 'Cancelar'),
+              onTap: () => Navigator.pop(ctx, false)),
+          GxTextBtn(tr('Удалить', 'Delete', 'Eliminar'),
+              primary: true, onTap: () => Navigator.pop(ctx, true)),
         ],
       ),
     );
@@ -186,38 +177,28 @@ class MediaActions {
     final raw = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: c.surface,
-        title: Text(tr('Добавить теги', 'Add tags', 'Añadir etiquetas'),
-            style: TextStyle(color: c.text)),
+        title: Text(tr('Добавить теги', 'Add tags', 'Añadir etiquetas')),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           Text(
               tr(
                   'Через запятую или пробел. Применится ко всем выбранным (${photos.length}).',
                   'Comma- or space-separated. Applies to all selected (${photos.length}).',
                   'Separadas por comas o espacios. Se aplica a todas las seleccionadas (${photos.length}).'),
-              style: TextStyle(color: c.muted, fontSize: 12.5)),
+              style: TextStyle(color: c.muted, fontSize: 13)),
           const SizedBox(height: 12),
           TextField(
             controller: ctl,
             autofocus: true,
-            cursorColor: c.accent,
-            style: TextStyle(color: c.text),
             decoration: InputDecoration(
                 hintText: tr('например: лес, закат', 'e.g. forest, sunset',
                     'p. ej. bosque, atardecer')),
           ),
         ]),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(tr('Отмена', 'Cancel', 'Cancelar'),
-                style: TextStyle(color: c.muted)),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: c.accent),
-            onPressed: () => Navigator.pop(ctx, ctl.text),
-            child: Text(tr('Добавить', 'Add', 'Añadir')),
-          ),
+          GxTextBtn(tr('Отмена', 'Cancel', 'Cancelar'),
+              onTap: () => Navigator.pop(ctx)),
+          GxTextBtn(tr('Добавить', 'Add', 'Añadir'),
+              primary: true, onTap: () => Navigator.pop(ctx, ctl.text)),
         ],
       ),
     );

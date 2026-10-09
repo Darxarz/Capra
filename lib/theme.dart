@@ -1,23 +1,35 @@
 import 'package:flutter/material.dart';
 
 /// Палитра одной темы (то, что в итоге видит весь UI).
-/// Собирается из [AuroraBase] (нейтральная поверхность) и [AuroraAccent]
-/// (цветовая подсветка). Виджеты всё так же читают AuroraColors из
-/// [AuroraTheme.of], поэтому остальной код не меняется.
+///
+/// Цвета — те же, что в Goat Explorer (его Theme.kt), значение в значение:
+/// галерея должна выглядеть как часть проводника. Старые поля (surface,
+/// surface2, accentSoft, accentInk) оставлены, чтобы прежний код продолжал
+/// работать; новые (panel, field, active…) — словарь проводника.
 @immutable
 class AuroraColors {
   final String id; // композитный: "{baseId}+{accentId}"
   final String name;
   final Brightness brightness;
   final Color bg;
-  final Color surface;
-  final Color surface2;
+  final Color surface; // = panel проводника
+  final Color surface2; // = active проводника
   final Color text;
   final Color muted;
   final Color line;
   final Color accent;
-  final Color accentSoft; // фон активной плитки/таба
+  final Color accentSoft; // фон выбранного (= selected проводника)
   final Color accentInk; // текст/иконка поверх accentSoft
+
+  // ── словарь проводника ──
+  final Color field; // рамки полей и кнопок
+  final Color rowLine; // тонкие линии между строками
+  final Color selected; // фон выбранной строки/плитки
+  final Color strong; // то единственное, что должно выделяться из текста
+  final Color dim; // недоступное, третьестепенное
+  final Color current; // второй акцент (перивинкль): «текущее», избранное
+  final Color danger; // удаление, ошибки
+  final Color onAccent; // текст поверх залитой акцентом кнопки
 
   const AuroraColors({
     required this.id,
@@ -32,25 +44,297 @@ class AuroraColors {
     required this.accent,
     required this.accentSoft,
     required this.accentInk,
+    required this.field,
+    required this.rowLine,
+    required this.selected,
+    required this.strong,
+    required this.dim,
+    required this.current,
+    required this.danger,
+    required this.onAccent,
   });
 
-  ThemeData toThemeData() => ThemeData(
-        useMaterial3: true,
-        brightness: brightness,
-        scaffoldBackgroundColor: bg,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: accent,
-          brightness: brightness,
-        ).copyWith(surface: surface, primary: accent),
-        fontFamily: 'Roboto',
-      );
+  Color get panel => surface;
+  Color get active => surface2;
+
+  /// Скругление всего интерфейса — как в проводнике.
+  static const double radius = 7;
+
+  ThemeData toThemeData() {
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(radius),
+      side: BorderSide(color: line),
+    );
+    final plain =
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius));
+    final scheme = ColorScheme.fromSeed(
+      seedColor: accent,
+      brightness: brightness,
+    ).copyWith(
+      surface: surface,
+      onSurface: text,
+      onSurfaceVariant: muted,
+      primary: accent,
+      onPrimary: onAccent,
+      secondary: current,
+      onSecondary: onAccent,
+      error: danger,
+      outline: field,
+      outlineVariant: line,
+      surfaceContainerLowest: bg,
+      surfaceContainerLow: surface,
+      surfaceContainer: surface,
+      surfaceContainerHigh: surface2,
+      surfaceContainerHighest: surface2,
+      surfaceTint: Colors.transparent,
+    );
+    final base = ThemeData(
+      useMaterial3: true,
+      brightness: brightness,
+      scaffoldBackgroundColor: bg,
+      colorScheme: scheme,
+      fontFamily: 'Onest',
+      visualDensity: VisualDensity.compact,
+      splashFactory: NoSplash.splashFactory,
+      highlightColor: surface2.withValues(alpha: 0.6),
+      hoverColor: surface2.withValues(alpha: 0.5),
+      dividerColor: line,
+    );
+    return base.copyWith(
+      textTheme: base.textTheme.apply(bodyColor: text, displayColor: text),
+      dividerTheme: DividerThemeData(color: line, thickness: 1, space: 1),
+      iconTheme: IconThemeData(color: muted, size: 20),
+      appBarTheme: AppBarTheme(
+        backgroundColor: bg,
+        foregroundColor: text,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        toolbarHeight: 52,
+        titleSpacing: 4,
+        shape: Border(bottom: BorderSide(color: line)),
+        titleTextStyle: TextStyle(
+            fontFamily: 'Onest',
+            color: text,
+            fontSize: 15,
+            fontWeight: FontWeight.w600),
+        iconTheme: IconThemeData(color: muted, size: 20),
+      ),
+      cardTheme: CardThemeData(
+          color: surface, elevation: 0, margin: EdgeInsets.zero, shape: shape),
+      dialogTheme: DialogThemeData(
+        backgroundColor: surface,
+        elevation: 0,
+        shape: shape,
+        titleTextStyle: TextStyle(
+            fontFamily: 'Onest',
+            color: text,
+            fontSize: 16,
+            fontWeight: FontWeight.w600),
+        contentTextStyle:
+            TextStyle(fontFamily: 'Onest', color: muted, fontSize: 14),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: surface,
+        modalBackgroundColor: surface,
+        elevation: 0,
+        modalElevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(radius)),
+          side: BorderSide(color: line),
+        ),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: surface,
+        elevation: 0,
+        shape: shape,
+        textStyle: TextStyle(fontFamily: 'Onest', color: text, fontSize: 14),
+      ),
+      menuTheme: MenuThemeData(
+        style: MenuStyle(
+          backgroundColor: WidgetStatePropertyAll(surface),
+          elevation: const WidgetStatePropertyAll(0),
+          shape: WidgetStatePropertyAll(shape),
+        ),
+      ),
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: surface2,
+          borderRadius: BorderRadius.circular(5),
+          border: Border.all(color: field),
+        ),
+        textStyle: TextStyle(fontFamily: 'Onest', color: text, fontSize: 12),
+        waitDuration: const Duration(milliseconds: 500),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: surface2,
+        contentTextStyle:
+            TextStyle(fontFamily: 'Onest', color: text, fontSize: 13),
+        elevation: 0,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radius),
+          side: BorderSide(color: field),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: accent,
+          foregroundColor: onAccent,
+          elevation: 0,
+          minimumSize: const Size(0, 40),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          shape: plain,
+          textStyle: const TextStyle(
+              fontFamily: 'Onest', fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: surface2,
+          foregroundColor: text,
+          elevation: 0,
+          minimumSize: const Size(0, 40),
+          shape: plain,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: text,
+          minimumSize: const Size(0, 40),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          side: BorderSide(color: field),
+          shape: plain,
+          textStyle: const TextStyle(
+              fontFamily: 'Onest', fontSize: 14, fontWeight: FontWeight.w500),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: text,
+          minimumSize: const Size(0, 40),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          shape: plain,
+          textStyle: const TextStyle(
+              fontFamily: 'Onest', fontSize: 14, fontWeight: FontWeight.w500),
+        ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          foregroundColor: muted,
+          shape: plain,
+          minimumSize: const Size(40, 40),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        isDense: true,
+        filled: false,
+        hintStyle: TextStyle(color: dim, fontSize: 14),
+        labelStyle: TextStyle(color: muted, fontSize: 14),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(radius),
+            borderSide: BorderSide(color: field)),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(radius),
+            borderSide: BorderSide(color: field)),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(radius),
+            borderSide: BorderSide(color: accent)),
+      ),
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: accent,
+        selectionColor: accent.withValues(alpha: 0.3),
+        selectionHandleColor: accent,
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: Colors.transparent,
+        selectedColor: selected,
+        side: BorderSide(color: field),
+        shape: plain,
+        labelStyle: TextStyle(fontFamily: 'Onest', color: text, fontSize: 13),
+        elevation: 0,
+        pressElevation: 0,
+      ),
+      listTileTheme: ListTileThemeData(
+        dense: true,
+        iconColor: muted,
+        textColor: text,
+        selectedColor: strong,
+        selectedTileColor: selected,
+        shape: plain,
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((s) =>
+            s.contains(WidgetState.selected) ? onAccent : muted),
+        trackColor: WidgetStateProperty.resolveWith((s) =>
+            s.contains(WidgetState.selected) ? accent : surface2),
+        trackOutlineColor: WidgetStateProperty.resolveWith((s) =>
+            s.contains(WidgetState.selected) ? accent : field),
+      ),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith((s) =>
+            s.contains(WidgetState.selected) ? accent : Colors.transparent),
+        checkColor: WidgetStatePropertyAll(onAccent),
+        side: BorderSide(color: field, width: 1.5),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
+      ),
+      radioTheme: RadioThemeData(
+        fillColor: WidgetStateProperty.resolveWith(
+            (s) => s.contains(WidgetState.selected) ? accent : field),
+      ),
+      sliderTheme: SliderThemeData(
+        activeTrackColor: accent,
+        inactiveTrackColor: line,
+        thumbColor: accent,
+        overlayColor: accent.withValues(alpha: 0.12),
+        trackHeight: 3,
+        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: current,
+        linearTrackColor: line,
+        circularTrackColor: line,
+      ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: ButtonStyle(
+          shape: WidgetStatePropertyAll(plain),
+          side: WidgetStatePropertyAll(BorderSide(color: field)),
+          backgroundColor: WidgetStateProperty.resolveWith((s) =>
+              s.contains(WidgetState.selected) ? surface2 : Colors.transparent),
+          foregroundColor: WidgetStateProperty.resolveWith(
+              (s) => s.contains(WidgetState.selected) ? text : muted),
+        ),
+      ),
+      scrollbarTheme: ScrollbarThemeData(
+        thumbColor: WidgetStatePropertyAll(field),
+        radius: const Radius.circular(3),
+        thickness: const WidgetStatePropertyAll(5),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: accent,
+        foregroundColor: onAccent,
+        elevation: 0,
+        focusElevation: 0,
+        hoverElevation: 0,
+        highlightElevation: 0,
+        shape: plain,
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: bg,
+        elevation: 0,
+        indicatorColor: surface2,
+        indicatorShape: plain,
+      ),
+    );
+  }
 }
 
-// ─────────────────────────── базы (поверхности) ───────────────────────────
+// ─────────────────────────── базы (палитры проводника) ───────────────────────────
 
-/// Нейтральная база темы — фон, поверхности, текст. Цвета подобраны
-/// с низкой насыщенностью, чтобы не конкурировать с цветами просматриваемых
-/// изображений (правило мьюзейного хранения: нейтральный фон вокруг арта).
+/// Одна палитра Goat Explorer. Акцент — часть палитры (в проводнике он не
+/// выбирается отдельно: бирюза на тёмных, тёмная бирюза на «Бумаге»).
 @immutable
 class AuroraBase {
   final String id;
@@ -62,6 +346,15 @@ class AuroraBase {
   final Color text;
   final Color muted;
   final Color line;
+  final Color field;
+  final Color rowLine;
+  final Color selected;
+  final Color strong;
+  final Color dim;
+  final Color accent;
+  final Color current;
+  final Color danger;
+  final Color onAccent;
 
   const AuroraBase({
     required this.id,
@@ -73,156 +366,106 @@ class AuroraBase {
     required this.text,
     required this.muted,
     required this.line,
+    required this.field,
+    required this.rowLine,
+    required this.selected,
+    required this.strong,
+    required this.dim,
+    required this.accent,
+    required this.current,
+    required this.danger,
+    required this.onAccent,
   });
 }
 
-/// Светлые базы — для дневного света и ярких комнат.
+/// Светлая: не белая. Приглушённая бумага с чуть зеленоватым оттенком и
+/// тёмно-сланцевым текстом — читается лучше всего и не слепит.
 const List<AuroraBase> kLightBases = [
-  // Чистая нейтральная белая бумага — самый точный показ цвета арта.
   AuroraBase(
     id: 'paper',
     name: 'Бумага',
     brightness: Brightness.light,
-    bg: Color(0xFFF5F4F2),
-    surface: Color(0xFFFFFFFF),
-    surface2: Color(0xFFEDECEA),
-    text: Color(0xFF1B1B1A),
-    muted: Color(0xFF777573),
-    line: Color(0xFFE3E1DE),
-  ),
-  // Тёплая беж/песок — оригинальная Aurora, в духе Claude.
-  AuroraBase(
-    id: 'sand',
-    name: 'Песок',
-    brightness: Brightness.light,
-    bg: Color(0xFFEFE9E1),
-    surface: Color(0xFFFFFDF9),
-    surface2: Color(0xFFF4EEE5),
-    text: Color(0xFF2B2620),
-    muted: Color(0xFF8C8377),
-    line: Color(0xFFE6DDD0),
-  ),
-  // Кремовая — тёплая, но мягче песка, подходит при долгом просмотре.
-  AuroraBase(
-    id: 'cream',
-    name: 'Крем',
-    brightness: Brightness.light,
-    bg: Color(0xFFF6F1E8),
-    surface: Color(0xFFFFFCF6),
-    surface2: Color(0xFFEFEAE0),
-    text: Color(0xFF272219),
-    muted: Color(0xFF8A8275),
-    line: Color(0xFFE4DCCD),
-  ),
-  // Прохладный туман — нейтрально-холодный, не утомляет на крупном мониторе.
-  AuroraBase(
-    id: 'mist',
-    name: 'Туман',
-    brightness: Brightness.light,
-    bg: Color(0xFFEEF1F4),
-    surface: Color(0xFFFAFBFC),
-    surface2: Color(0xFFE6EAEE),
-    text: Color(0xFF1E2228),
-    muted: Color(0xFF707682),
-    line: Color(0xFFDADFE5),
+    bg: Color(0xFFEAEDE6),
+    surface: Color(0xFFF2F4EE),
+    surface2: Color(0xFFDCE3DA),
+    text: Color(0xFF1F2B2A),
+    muted: Color(0xFF566562),
+    line: Color(0xFFD3D9CF),
+    field: Color(0xFFC2CAC0),
+    rowLine: Color(0xFFDDE2D8),
+    selected: Color(0xFFD2E4DB),
+    strong: Color(0xFF111A19),
+    dim: Color(0xFF8A9692),
+    accent: Color(0xFF1B6F63),
+    current: Color(0xFF4558B8),
+    danger: Color(0xFFB04438),
+    onAccent: Color(0xFFF2F4EE),
   ),
 ];
 
-/// Тёмные базы — для вечерних сессий и просмотра арта в тёмной комнате.
+/// Тёмные: глубокий тёмно-синий «Ночь» и настоящий чёрный для OLED.
 const List<AuroraBase> kDarkBases = [
-  // Тёплый угольный — оригинальная тёмная Aurora.
   AuroraBase(
-    id: 'charcoal',
-    name: 'Уголь',
+    id: 'night',
+    name: 'Ночь',
     brightness: Brightness.dark,
-    bg: Color(0xFF161310),
-    surface: Color(0xFF262019),
-    surface2: Color(0xFF2F2820),
-    text: Color(0xFFF2ECE2),
-    muted: Color(0xFFA79C8C),
-    line: Color(0xFF352D24),
+    bg: Color(0xFF0B1622),
+    surface: Color(0xFF0E1B29),
+    surface2: Color(0xFF16283A),
+    text: Color(0xFFE6ECF4),
+    muted: Color(0xFF8FA3B8),
+    line: Color(0xFF1A2B3D),
+    field: Color(0xFF1F3247),
+    rowLine: Color(0xFF132131),
+    selected: Color(0xFF12283A),
+    strong: Color(0xFFFFFFFF),
+    dim: Color(0xFF56697E),
+    accent: Color(0xFF5FD6C8),
+    current: Color(0xFF8FA6FF),
+    danger: Color(0xFFFF9A8F),
+    onAccent: Color(0xFF0B1622),
   ),
-  // Холодный графит — нейтрально-серый, не сдвигает оттенки арта.
-  AuroraBase(
-    id: 'slate',
-    name: 'Графит',
-    brightness: Brightness.dark,
-    bg: Color(0xFF15171A),
-    surface: Color(0xFF1F2226),
-    surface2: Color(0xFF272B30),
-    text: Color(0xFFECEFF3),
-    muted: Color(0xFF98A0AB),
-    line: Color(0xFF2E3239),
-  ),
-  // Полуночный — глубокий синеватый чёрный, премиальный.
-  AuroraBase(
-    id: 'midnight',
-    name: 'Полночь',
-    brightness: Brightness.dark,
-    bg: Color(0xFF0F1320),
-    surface: Color(0xFF181D2C),
-    surface2: Color(0xFF1F2538),
-    text: Color(0xFFE9ECF6),
-    muted: Color(0xFF8E97B0),
-    line: Color(0xFF252B3F),
-  ),
-  // Чистый #000 — для OLED-экранов (экономит батарею + идеальный контраст).
   AuroraBase(
     id: 'oled',
-    name: 'OLED-чёрный',
+    name: 'OLED',
     brightness: Brightness.dark,
     bg: Color(0xFF000000),
-    surface: Color(0xFF0E0E0E),
-    surface2: Color(0xFF161616),
-    text: Color(0xFFF0F0F0),
-    muted: Color(0xFF8F8F8F),
-    line: Color(0xFF1F1F1F),
-  ),
-  // Сепия-тёмная — тёплый коричневатый, винтажный, мягкий на глаза.
-  AuroraBase(
-    id: 'sepia',
-    name: 'Сепия',
-    brightness: Brightness.dark,
-    bg: Color(0xFF1A130D),
-    surface: Color(0xFF26201A),
-    surface2: Color(0xFF2F2820),
-    text: Color(0xFFEBDFCB),
-    muted: Color(0xFFA89880),
-    line: Color(0xFF362C22),
+    surface: Color(0xFF050709),
+    surface2: Color(0xFF11181F),
+    text: Color(0xFFD9DEE5),
+    muted: Color(0xFF8592A0),
+    line: Color(0xFF1A2129),
+    field: Color(0xFF232C36),
+    rowLine: Color(0xFF10151B),
+    selected: Color(0xFF0B2024),
+    strong: Color(0xFFF2F4F7),
+    dim: Color(0xFF525E6A),
+    accent: Color(0xFF5FD6C8),
+    current: Color(0xFF8FA6FF),
+    danger: Color(0xFFFF9A8F),
+    onAccent: Color(0xFF000000),
   ),
 ];
 
-// ─────────────────────────── акценты (подсветка) ───────────────────────────
+// ─────────────────────────── акцент ───────────────────────────
 
-/// Цвет акцента — кнопки, активные элементы, рамки выбора.
+/// Цвет акцента. Оставлен один — «как в проводнике» (берётся из палитры):
+/// свой набор акцентов делал галерею непохожей на проводник.
 @immutable
 class AuroraAccent {
   final String id;
   final String name;
-  final Color base; // основной цвет (хорошо смотрится на нейтрале)
+  final Color base;
   const AuroraAccent({required this.id, required this.name, required this.base});
 }
 
-/// Палитра акцентов: тёплые → нейтральные → холодные → пурпурные → красные.
-/// Все приглушены до S≈0.55–0.7 и L≈0.45–0.55, чтобы выглядеть «дорого»
-/// и не резать глаз поверх миллиона миниатюр.
 const List<AuroraAccent> kAccents = [
-  AuroraAccent(id: 'coral',   name: 'Коралл',   base: Color(0xFFC96442)),
-  AuroraAccent(id: 'amber',   name: 'Янтарь',   base: Color(0xFFD08F3A)),
-  AuroraAccent(id: 'olive',   name: 'Олива',    base: Color(0xFF9A9F4A)),
-  AuroraAccent(id: 'sage',    name: 'Шалфей',   base: Color(0xFF6E9869)),
-  AuroraAccent(id: 'forest',  name: 'Хвоя',     base: Color(0xFF3F7D54)),
-  AuroraAccent(id: 'teal',    name: 'Бирюза',   base: Color(0xFF3E8C8C)),
-  AuroraAccent(id: 'ocean',   name: 'Океан',    base: Color(0xFF3D7AB8)),
-  AuroraAccent(id: 'indigo',  name: 'Индиго',   base: Color(0xFF5C5FB8)),
-  AuroraAccent(id: 'violet',  name: 'Фиалка',   base: Color(0xFF8C5FB8)),
-  AuroraAccent(id: 'plum',    name: 'Слива',    base: Color(0xFFB46FB0)),
-  AuroraAccent(id: 'magenta', name: 'Маджента', base: Color(0xFFC7508B)),
-  AuroraAccent(id: 'crimson', name: 'Алый',     base: Color(0xFFB84A57)),
+  AuroraAccent(id: 'explorer', name: 'Как в проводнике', base: Color(0xFF5FD6C8)),
 ];
 
 // ─────────────────────────── сборка палитры ───────────────────────────
 
+/// Палитра по id; незнакомый id (от прежних тем галереи) даёт первую в списке.
 AuroraBase resolveBase(String id, Brightness brightness) {
   final list = brightness == Brightness.light ? kLightBases : kDarkBases;
   return list.firstWhere((b) => b.id == id, orElse: () => list.first);
@@ -231,27 +474,10 @@ AuroraBase resolveBase(String id, Brightness brightness) {
 AuroraAccent resolveAccent(String id) =>
     kAccents.firstWhere((a) => a.id == id, orElse: () => kAccents.first);
 
-/// Производные оттенки акцента (мягкий фон и контрастная «тушь»),
-/// учитывающие яркость базы. HSL-манипуляция даёт стабильный результат
-/// на любом базовом цвете без ручных подборов.
-Color _accentSoft(Color accent, Brightness b) {
-  final h = HSLColor.fromColor(accent);
-  return b == Brightness.light
-      ? h.withLightness(0.90).withSaturation((h.saturation * 0.55).clamp(0.0, 1.0)).toColor()
-      : h.withLightness(0.20).withSaturation((h.saturation * 0.65).clamp(0.0, 1.0)).toColor();
-}
-
-Color _accentInk(Color accent, Brightness b) {
-  final h = HSLColor.fromColor(accent);
-  return b == Brightness.light
-      ? h.withLightness(0.32).toColor()
-      : h.withLightness(0.78).withSaturation((h.saturation * 0.7).clamp(0.0, 1.0)).toColor();
-}
-
 AuroraColors composeColors(AuroraBase base, AuroraAccent accent) {
   return AuroraColors(
-    id: '${base.id}+${accent.id}',
-    name: '${base.name} · ${accent.name}',
+    id: base.id,
+    name: base.name,
     brightness: base.brightness,
     bg: base.bg,
     surface: base.surface,
@@ -259,16 +485,24 @@ AuroraColors composeColors(AuroraBase base, AuroraAccent accent) {
     text: base.text,
     muted: base.muted,
     line: base.line,
-    accent: accent.base,
-    accentSoft: _accentSoft(accent.base, base.brightness),
-    accentInk: _accentInk(accent.base, base.brightness),
+    accent: base.accent,
+    accentSoft: base.selected,
+    accentInk: base.accent,
+    field: base.field,
+    rowLine: base.rowLine,
+    selected: base.selected,
+    strong: base.strong,
+    dim: base.dim,
+    current: base.current,
+    danger: base.danger,
+    onAccent: base.onAccent,
   );
 }
 
 // ─────────────────────────── InheritedWidget ───────────────────────────
 
-/// Прокидывает активную палитру вниз по дереву. Сменой темы теперь
-/// занимается SettingsService — здесь только доставка цветов.
+/// Прокидывает активную палитру вниз по дереву. Сменой темы занимается
+/// SettingsService — здесь только доставка цветов.
 class AuroraTheme extends InheritedWidget {
   final AuroraColors colors;
 

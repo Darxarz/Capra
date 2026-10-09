@@ -33,6 +33,8 @@ dependencies:
   media_kit_video: ^2.0.1
   media_kit_libs_video: ^1.0.7
   win32: ^5.15.0
+  path_drawing: ^1.0.1
+  android_intent_plus: ^5.3.0
 
 dev_dependencies:
   flutter_lints: ^4.0.0
@@ -42,6 +44,18 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # Onest (SIL OFL) — тот же шрифт, что в Goat Explorer.
+  fonts:
+    - family: Onest
+      fonts:
+        - asset: assets/fonts/Onest-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Onest-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Onest-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Onest-Bold.ttf
+          weight: 700
 
 # Иконка приложения для Android и Windows. Генерация:
 #   dart run flutter_launcher_icons

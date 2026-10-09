@@ -1,42 +1,35 @@
 import 'package:flutter/material.dart';
 import 'theme.dart';
+import 'gx.dart';
 import 'model.dart';
 import 'collections_service.dart';
 import 'settings_service.dart';
 import 'viewer_page.dart';
 import 'i18n.dart';
 
+const _gPlay = GxGlyph('M8 5.5v13l10.5-6.5z', true);
+
 /// Диалог ввода названия (создание/переименование коллекции). Общий стиль —
 /// как остальные диалоги приложения (см. media_actions.dart).
 Future<String?> _promptName(BuildContext context,
     {required String title, String initial = ''}) {
-  final c = AuroraTheme.of(context).colors;
   final ctl = TextEditingController(text: initial);
   return showDialog<String>(
     context: context,
     builder: (ctx) => AlertDialog(
-      backgroundColor: c.surface,
-      title: Text(title, style: TextStyle(color: c.text)),
+      title: Text(title),
       content: TextField(
         controller: ctl,
         autofocus: true,
-        cursorColor: c.accent,
-        style: TextStyle(color: c.text),
         decoration: InputDecoration(
             hintText: tr('Название', 'Name', 'Nombre')),
         onSubmitted: (v) => Navigator.pop(ctx, v),
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx),
-          child: Text(tr('Отмена', 'Cancel', 'Cancelar'),
-              style: TextStyle(color: c.muted)),
-        ),
-        FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: c.accent),
-          onPressed: () => Navigator.pop(ctx, ctl.text),
-          child: Text(tr('Готово', 'Done', 'Listo')),
-        ),
+        GxTextBtn(tr('Отмена', 'Cancel', 'Cancelar'),
+            onTap: () => Navigator.pop(ctx)),
+        GxTextBtn(tr('Готово', 'Done', 'Listo'),
+            primary: true, onTap: () => Navigator.pop(ctx, ctl.text)),
       ],
     ),
   );
@@ -48,14 +41,9 @@ Future<String?> _promptName(BuildContext context,
 Future<void> showAddToCollectionSheet(
     BuildContext context, List<String> paths) async {
   if (paths.isEmpty) return;
-  final c = AuroraTheme.of(context).colors;
   await showModalBottomSheet<void>(
     context: context,
-    backgroundColor: c.surface,
     isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-    ),
     builder: (_) => _AddToCollectionSheet(paths: paths),
   );
 }
@@ -95,76 +83,89 @@ class _AddToCollectionSheetState extends State<_AddToCollectionSheet> {
             'Añadido a «$name»: $n'))));
   }
 
+  Widget _row(AuroraColors c, GxGlyph glyph, Color glyphColor, String title,
+      Color titleColor, String? trailing, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      child: SizedBox(
+        height: 44,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Row(children: [
+            GxIcon(glyph, color: glyphColor, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: titleColor, fontSize: 14)),
+            ),
+            if (trailing != null)
+              Text(trailing, style: TextStyle(color: c.dim, fontSize: 12)),
+          ]),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
     return SafeArea(
       top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(0, 10, 0, 8),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-            width: 40,
-            height: 4,
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-                color: c.line, borderRadius: BorderRadius.circular(2)),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        SizedBox(
+          height: 48,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
             child: Row(children: [
-              Icon(Icons.collections_bookmark_outlined,
-                  size: 18, color: c.accent),
-              const SizedBox(width: 8),
+              GxIcon(GxGlyph.library, size: 18, color: c.accent),
+              const SizedBox(width: 10),
               Text(tr('В коллекцию', 'To a collection', 'A una colección'),
                   style: TextStyle(
                       color: c.text,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800)),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600)),
             ]),
           ),
-          const SizedBox(height: 6),
-          Flexible(
-            child: ListView(
-              shrinkWrap: true,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              children: [
-                if (_items.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
-                    child: Text(
-                        tr('Коллекций пока нет — создай первую.',
-                            'No collections yet — create the first one.',
-                            'Aún no hay colecciones — crea la primera.'),
-                        style: TextStyle(color: c.muted, fontSize: 13)),
-                  ),
-                for (final col in _items)
-                  ListTile(
-                    leading: Icon(Icons.collections_bookmark_outlined,
-                        color: c.muted),
-                    title: Text(col.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            color: c.text, fontWeight: FontWeight.w600)),
-                    subtitle: Text(
-                        '${col.count} ${tr('фото', 'photos', 'fotos')}',
-                        style: TextStyle(color: c.muted, fontSize: 12)),
-                    onTap: () => _addTo(col.id, col.name),
-                  ),
-                ListTile(
-                  leading: Icon(Icons.add, color: c.accent),
-                  title: Text(
-                      tr('Создать новую…', 'Create new…', 'Crear nueva…'),
-                      style: TextStyle(
-                          color: c.accent, fontWeight: FontWeight.w700)),
-                  onTap: _createAndAdd,
+        ),
+        const GxHLine(),
+        Flexible(
+          child: ListView(
+            shrinkWrap: true,
+            padding: EdgeInsets.zero,
+            children: [
+              if (_items.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  child: Text(
+                      tr('Коллекций пока нет — создай первую.',
+                          'No collections yet — create the first one.',
+                          'Aún no hay colecciones — crea la primera.'),
+                      style: TextStyle(color: c.muted, fontSize: 13)),
                 ),
-              ],
-            ),
+              for (final col in _items)
+                _row(
+                    c,
+                    GxGlyph.library,
+                    c.muted,
+                    col.name,
+                    c.text,
+                    '${col.count} ${tr('фото', 'photos', 'fotos')}',
+                    () => _addTo(col.id, col.name)),
+              const GxHLine(),
+              _row(
+                  c,
+                  GxGlyph.plus,
+                  c.accent,
+                  tr('Создать новую…', 'Create new…', 'Crear nueva…'),
+                  c.accent,
+                  null,
+                  _createAndAdd),
+            ],
           ),
-        ]),
-      ),
+        ),
+      ]),
     );
   }
 }
@@ -216,33 +217,21 @@ class _CollectionsPageState extends State<CollectionsPage> {
   }
 
   Future<void> _deleteCollection(CollectionInfo col) async {
-    final c = AuroraTheme.of(context).colors;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: c.surface,
-        title: Text(
-            tr('Удалить коллекцию «${col.name}»?',
-                'Delete collection “${col.name}”?',
-                '¿Eliminar la colección «${col.name}»?'),
-            style: TextStyle(color: c.text)),
-        content: Text(
-            tr(
-                'Сами фото не удалятся — пропадёт только эта подборка.',
-                'The photos themselves stay — only this collection disappears.',
-                'Las fotos no se eliminan — solo desaparece esta colección.'),
-            style: TextStyle(color: c.muted)),
+        title: Text(tr('Удалить коллекцию «${col.name}»?',
+            'Delete collection “${col.name}”?',
+            '¿Eliminar la colección «${col.name}»?')),
+        content: Text(tr(
+            'Сами фото не удалятся — пропадёт только эта подборка.',
+            'The photos themselves stay — only this collection disappears.',
+            'Las fotos no se eliminan — solo desaparece esta colección.')),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(tr('Отмена', 'Cancel', 'Cancelar'),
-                style: TextStyle(color: c.muted)),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: c.accent),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(tr('Удалить', 'Delete', 'Eliminar')),
-          ),
+          GxTextBtn(tr('Отмена', 'Cancel', 'Cancelar'),
+              onTap: () => Navigator.pop(ctx, false)),
+          GxTextBtn(tr('Удалить', 'Delete', 'Eliminar'),
+              primary: true, onTap: () => Navigator.pop(ctx, true)),
         ],
       ),
     );
@@ -270,49 +259,46 @@ class _CollectionsPageState extends State<CollectionsPage> {
       backgroundColor: c.bg,
       body: SafeArea(
         child: Column(children: [
-          Container(
-            padding: const EdgeInsets.fromLTRB(8, 8, 18, 10),
-            decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: c.line)),
-            ),
-            child: Row(children: [
-              IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: Icon(Icons.arrow_back, color: c.text),
-                tooltip: tr('Назад', 'Back', 'Atrás'),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(tr('Коллекции', 'Collections', 'Colecciones'),
-                    style: TextStyle(
-                        color: c.text,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800)),
-              ),
-              IconButton(
-                onPressed: _createCollection,
-                icon: Icon(Icons.add, color: c.accent),
-                tooltip:
+          SizedBox(
+            height: 52,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Row(children: [
+                GxIconBtn(GxGlyph.back, tr('Назад', 'Back', 'Atrás'),
+                    onTap: () => Navigator.of(context).pop()),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(tr('Коллекции', 'Collections', 'Colecciones'),
+                      style: TextStyle(
+                          color: c.text,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600)),
+                ),
+                GxIconBtn(
+                    GxGlyph.plus,
                     tr('Новая коллекция', 'New collection', 'Nueva colección'),
-              ),
-            ]),
+                    tint: c.accent,
+                    onTap: _createCollection),
+              ]),
+            ),
           ),
+          const GxHLine(),
           Expanded(
             child: _items.isEmpty
                 ? Center(
                     child: Padding(
-                      padding: const EdgeInsets.all(30),
+                      padding: const EdgeInsets.all(24),
                       child: Text(
                           tr(
                               'Пока нет коллекций.\nСоздай свой альбом кнопкой «+» вверху или добавь фото через «В альбом» в просмотрщике.',
                               'No collections yet.\nCreate an album with the “+” above, or add a photo via “To album” in the viewer.',
                               'Aún no hay colecciones.\nCrea un álbum con «+» arriba, o añade una foto con «A álbum» en el visor.'),
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: c.muted, fontSize: 13.5)),
+                          style: TextStyle(color: c.muted, fontSize: 13)),
                     ),
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
+                    padding: const EdgeInsets.only(bottom: 12),
                     itemCount: _items.length,
                     itemBuilder: (ctx, i) {
                       final col = _items[i];
@@ -354,66 +340,57 @@ class _CollectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = AuroraTheme.of(context).colors;
     final dpr = MediaQuery.of(context).devicePixelRatio;
-    const coverSize = 56.0;
+    const coverSize = 36.0;
     final cacheWidth = (coverSize * dpr).round().clamp(64, 256);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: c.surface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: c.line),
-            ),
+    Widget placeholder(GxGlyph g) => Container(
+          color: c.active,
+          alignment: Alignment.center,
+          child: GxIcon(g, color: c.muted, size: 18),
+        );
+    return Container(
+      decoration:
+          BoxDecoration(border: Border(bottom: BorderSide(color: c.rowLine))),
+      child: InkWell(
+        onTap: onTap,
+        child: SizedBox(
+          height: 48,
+          child: Padding(
+            padding: const EdgeInsets.only(left: 14),
             child: Row(children: [
               ClipRRect(
-                borderRadius: BorderRadius.circular(11),
+                borderRadius: BorderRadius.circular(5),
                 child: SizedBox(
                   width: coverSize,
                   height: coverSize,
                   child: cover == null
-                      ? Container(
-                          color: c.surface2,
-                          child: Icon(Icons.collections_bookmark_outlined,
-                              color: c.muted),
-                        )
+                      ? placeholder(GxGlyph.library)
                       : Image(
                           image: cover!.thumb(cacheWidth),
                           fit: BoxFit.cover,
                           gaplessPlayback: true,
                           filterQuality: FilterQuality.low,
-                          errorBuilder: (ctx, e, st) => Container(
-                              color: c.surface2,
-                              child: Icon(Icons.broken_image_outlined,
-                                  color: c.muted, size: 18)),
+                          errorBuilder: (ctx, e, st) =>
+                              placeholder(GxGlyph.gallery),
                         ),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(info.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              color: c.text,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 2),
-                      Text(
-                          '${info.count} ${tr('фото', 'photos', 'fotos')}',
-                          style: TextStyle(color: c.muted, fontSize: 12.5)),
-                    ]),
+                child: Text(info.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: c.text, fontSize: 14)),
               ),
+              Text('${info.count} ${tr('фото', 'photos', 'fotos')}',
+                  style: TextStyle(color: c.muted, fontSize: 12)),
               PopupMenuButton<String>(
-                icon: Icon(Icons.more_vert, size: 19, color: c.muted),
+                padding: EdgeInsets.zero,
+                child: SizedBox(
+                  width: 44,
+                  height: 40,
+                  child: Center(
+                      child: GxIcon(GxGlyph.more, size: 19, color: c.muted)),
+                ),
                 onSelected: (v) {
                   if (v == 'rename') onRename();
                   if (v == 'delete') onDelete();
@@ -421,8 +398,8 @@ class _CollectionCard extends StatelessWidget {
                 itemBuilder: (_) => [
                   PopupMenuItem(
                       value: 'rename',
-                      child: Text(
-                          tr('Переименовать', 'Rename', 'Renombrar'))),
+                      child:
+                          Text(tr('Переименовать', 'Rename', 'Renombrar'))),
                   PopupMenuItem(
                       value: 'delete',
                       child: Text(tr('Удалить', 'Delete', 'Eliminar'))),
@@ -474,30 +451,18 @@ class _CollectionContentPageState extends State<_CollectionContentPage> {
   }
 
   Future<void> _remove(PhotoItem photo) async {
-    final c = AuroraTheme.of(context).colors;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: c.surface,
-        title: Text(
-            tr('Убрать из коллекции?', 'Remove from collection?',
-                '¿Quitar de la colección?'),
-            style: TextStyle(color: c.text)),
+        title: Text(tr('Убрать из коллекции?', 'Remove from collection?',
+            '¿Quitar de la colección?')),
         content: Text(photo.fileName,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: c.muted)),
+            maxLines: 2, overflow: TextOverflow.ellipsis),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(tr('Отмена', 'Cancel', 'Cancelar'),
-                style: TextStyle(color: c.muted)),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: c.accent),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(tr('Убрать', 'Remove', 'Quitar')),
-          ),
+          GxTextBtn(tr('Отмена', 'Cancel', 'Cancelar'),
+              onTap: () => Navigator.pop(ctx, false)),
+          GxTextBtn(tr('Убрать', 'Remove', 'Quitar'),
+              primary: true, onTap: () => Navigator.pop(ctx, true)),
         ],
       ),
     );
@@ -516,32 +481,29 @@ class _CollectionContentPageState extends State<_CollectionContentPage> {
       body: SafeArea(
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
-            child: Row(children: [
-              IconButton(
-                onPressed: () => Navigator.pop(context),
-                icon: Icon(Icons.arrow_back, color: c.text),
-                tooltip: tr('Назад', 'Back', 'Atrás'),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(_info.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w800,
-                              color: c.text)),
-                      Text('${_photos.length} ${tr('фото', 'photos', 'fotos')}',
-                          style: TextStyle(fontSize: 12, color: c.muted)),
-                    ]),
-              ),
-            ]),
+          SizedBox(
+            height: 52,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 4, right: 14),
+              child: Row(children: [
+                GxIconBtn(GxGlyph.back, tr('Назад', 'Back', 'Atrás'),
+                    onTap: () => Navigator.pop(context)),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(_info.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: c.text)),
+                ),
+                Text('${_photos.length} ${tr('фото', 'photos', 'fotos')}',
+                    style: TextStyle(fontSize: 12, color: c.muted)),
+              ]),
+            ),
           ),
+          const GxHLine(),
           Expanded(
             child: _photos.isEmpty
                 ? Center(
@@ -549,9 +511,9 @@ class _CollectionContentPageState extends State<_CollectionContentPage> {
                         tr('В этой коллекции пока пусто',
                             'This collection is empty',
                             'Esta colección está vacía'),
-                        style: TextStyle(color: c.muted)))
+                        style: TextStyle(color: c.muted, fontSize: 13)))
                 : GridView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 18),
+                    padding: const EdgeInsets.all(8),
                     gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                       maxCrossAxisExtent: cell,
                       mainAxisSpacing: 4,
@@ -591,24 +553,37 @@ class _CollectionTile extends StatelessWidget {
     final s = SettingsService.instance;
     final dpr = MediaQuery.of(context).devicePixelRatio;
     final cacheWidth = (cell * dpr).round().clamp(64, 512);
+    Widget badge(String text) => Positioned(
+          right: 5,
+          bottom: 5,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(
+              color: Colors.black54,
+              borderRadius: BorderRadius.circular(5),
+            ),
+            child: Text(text,
+                style: const TextStyle(color: Colors.white, fontSize: 10)),
+          ),
+        );
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(s.gridRadius),
         child: Stack(fit: StackFit.expand, children: [
-          Container(color: c.surface2),
+          Container(color: c.active),
           if (photo.isVideo)
             Center(
               child: Container(
-                width: 42,
-                height: 42,
+                width: 40,
+                height: 34,
+                alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: Colors.black.withValues(alpha: 0.45),
-                  shape: BoxShape.circle,
+                  borderRadius: gxCorner,
                 ),
-                child: const Icon(Icons.play_arrow_rounded,
-                    color: Colors.white, size: 30),
+                child: const GxIcon(_gPlay, color: Colors.white, size: 20),
               ),
             )
           else
@@ -619,41 +594,13 @@ class _CollectionTile extends StatelessWidget {
               filterQuality: FilterQuality.low,
               frameBuilder: (ctx, child, frame, wasSync) {
                 if (wasSync || frame != null) return child;
-                return Container(color: c.surface2);
+                return Container(color: c.active);
               },
-              errorBuilder: (ctx, e, st) =>
-                  Icon(Icons.broken_image_outlined, color: c.muted, size: 18),
+              errorBuilder: (ctx, e, st) => Center(
+                  child: GxIcon(GxGlyph.gallery, color: c.muted, size: 18)),
             ),
-          if (photo.isVideo)
-            Positioned(
-              right: 5,
-              bottom: 5,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Text('VIDEO',
-                    style: TextStyle(color: Colors.white, fontSize: 10)),
-              ),
-            ),
-          if (photo.isGif && s.showGifBadge)
-            Positioned(
-              right: 5,
-              bottom: 5,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Text('GIF',
-                    style: TextStyle(color: Colors.white, fontSize: 10)),
-              ),
-            ),
+          if (photo.isVideo) badge('VIDEO'),
+          if (photo.isGif && s.showGifBadge) badge('GIF'),
         ]),
       ),
     );
