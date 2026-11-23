@@ -24,6 +24,15 @@ class BatchTagger extends ChangeNotifier {
 
   void stop() => _stop = true;
 
+  /// Что ещё предстоит тегировать: всё, кроме видео и файлов, у которых теги
+  /// уже есть ([already]). Туда входят и файлы, отмеченные в Goat Archive
+  /// (источник `goat-archive`): их теги ведёт сортировщик, своя модель их
+  /// повторно не разбирает.
+  static List<PhotoItem> pending(List<PhotoItem> photos, Set<String> already) =>
+      photos
+          .where((ph) => !ph.isVideo && !already.contains(ph.path))
+          .toList(growable: false);
+
   Future<void> start(List<PhotoItem> photos) async {
     if (running) return;
     error = null;
@@ -71,10 +80,7 @@ class BatchTagger extends ChangeNotifier {
       return;
     }
 
-    final already = TagService.instance.taggedPaths();
-    final todo = photos
-        .where((ph) => !ph.isVideo && !already.contains(ph.path))
-        .toList(growable: false);
+    final todo = pending(photos, TagService.instance.taggedPaths());
     total = todo.length;
     notifyListeners();
 

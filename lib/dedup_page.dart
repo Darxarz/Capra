@@ -7,6 +7,7 @@ import 'model.dart';
 import 'integrity_service.dart';
 import 'trash_service.dart';
 import 'i18n.dart';
+import 'archive_ui.dart';
 
 // ── свои значки для этого экрана (24×24, линия 1.6) ──
 const _gVerified = GxGlyph(
@@ -119,25 +120,16 @@ class _DupPageState extends State<DupPage> {
             '${tr('Освободится', 'Will free', 'Se liberarán')} ${prettySize(_selectedBytes)}.'
         : '${tr('Файлы переедут в корзину GOAT — их можно вернуть.', 'Files will move to the GOAT trash — you can restore them.', 'Los archivos irán a la papelera de GOAT; puedes restaurarlos.')} '
             '${tr('Освободится', 'Will free', 'Se liberarán')} ${prettySize(_selectedBytes)}.';
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(tr('Удалить $n файлов?', 'Delete $n files?',
-            '¿Eliminar $n archivos?')),
-        content: Text(desc),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(tr('Отмена', 'Cancel', 'Cancelar')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(tr('В корзину', 'To trash', 'A la papelera')),
-          ),
-        ],
-      ),
+    final inLib = archiveCount(_selected);
+    final ok = await confirmAction(
+      context,
+      title: tr('Удалить $n файлов?', 'Delete $n files?',
+          '¿Eliminar $n archivos?'),
+      body: desc,
+      notice: inLib > 0 ? archiveNotice(inLibrary: inLib, total: n) : null,
+      action: tr('В корзину', 'To trash', 'A la papelera'),
     );
-    if (ok != true) return;
+    if (!ok) return;
     final moved = await _performDelete(_selected.toList());
     // убрать перемещённые из результата
     final r = _scanner.result;

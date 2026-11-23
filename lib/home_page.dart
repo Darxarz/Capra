@@ -29,6 +29,9 @@ import 'selection.dart';
 import 'media_actions.dart';
 import 'gap_background.dart';
 import 'collections_page.dart';
+import 'archive_bridge.dart';
+import 'archive_ui.dart';
+import 'search_query.dart';
 import 'i18n.dart';
 import 'gx.dart';
 import 'package:android_intent_plus/android_intent.dart';
@@ -80,7 +83,9 @@ class _HomePageState extends State<HomePage> {
   bool _loading = false;
   UpdateInfo? _update; // доступное обновление (null = нет)
   String _query = ''; // строка поиска
-  Set<String> _tagMatchPaths = const {}; // пути, чьи теги совпали с запросом
+  SearchMatcher _matcher = SearchMatcher.none; // запрос, сверенный с тегами
+  final ArchiveBridge _bridge = ArchiveBridge.instance;
+  bool _launchHandled = false; // `--open` от Goat Archive уже выполнен
   Set<String> _filterTags = {}; // активный фильтр по тегам (И)
   Set<String> _filterPaths = const {}; // пути, подходящие под фильтр тегов
 
@@ -209,12 +214,10 @@ class _HomePageState extends State<HomePage> {
     if (_filterTags.isNotEmpty) {
       r = r.where((p) => _filterPaths.contains(p.path));
     }
-    if (_query.trim().isNotEmpty) {
-      final q = _query.trim().toLowerCase();
-      r = r.where((p) =>
-          p.fileName.toLowerCase().contains(q) ||
-          p.folderName.toLowerCase().contains(q) ||
-          _tagMatchPaths.contains(p.path));
+    if (!_matcher.isEmpty) {
+      // слово — подстрока имени/папки/тега; `-тег` исключает; `artist:имя`
+      r = r.where((p) => _matcher.matches(
+          p.path, p.fileName.toLowerCase(), p.folderName.toLowerCase()));
     }
     return r.toList();
   }
@@ -270,7 +273,7 @@ class _HomePageState extends State<HomePage> {
       albums: albums,
       photos: _mediaShown,
       cell: SettingsService.instance.cellSize,
-      onHideToggle: _toggleHideFolder,
+      onHideToggle: _showFolderMenu,
     );
   }
 
@@ -294,7 +297,7 @@ class _HomePageState extends State<HomePage> {
               cell: SettingsService.instance.cellSize),
         ));
       },
-      onHideToggle: _toggleHideFolder,
+      onHideToggle: _showFolderMenu,
     );
   }
 
@@ -305,6 +308,23 @@ class _HomePageState extends State<HomePage> {
     final s = SettingsService.instance;
     final nowHidden = !s.isHidden(album.folderPath);
     final messenger = ScaffoldMessenger.of(context);
+
+    // скрытие пишет в папку файл .nomedia — всегда спрашиваем; в библиотеке
+    // Goat Archive добавляем, что сортировщик это заметит
+    if (nowHidden) {
+      final inLib = _bridge.inLibrary(album.folderPath);
+      final ok = await confirmAction(
+        context,
+        title: tr('Скрыть папку?', 'Hide this folder?', '¿Ocultar esta carpeta?'),
+        body: tr(
+            'Папка «${album.name}» пропадёт из альбомов, и в неё запишется файл .nomedia — другие галереи её тоже не покажут. Вернуть можно в любой момент.',
+            'Folder “${album.name}” will disappear from albums and a .nomedia file will be written into it, so other galleries will not show it either. You can undo this any time.',
+            'La carpeta «${album.name}» desaparecerá de los álbumes y se escribirá en ella un archivo .nomedia, así que otras galerías tampoco la mostrarán. Puedes deshacerlo cuando quieras.'),
+        notice: inLib ? archiveNotice() : null,
+        action: tr('Скрыть', 'Hide', 'Ocultar'),
+      );
+      if (!ok || !mounted) return;
+    }
 
     // на Android, чтобы записать .nomedia и потом видеть папку только в GOAT,
     // нужен «доступ ко всем файлам». Просим один раз.
@@ -388,6 +408,7 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     SettingsService.instance.addListener(_onSettings);
+    _bridge.addListener(_onBridge);
     _restore();
     _checkUpdates();
     _checkExplorer();
@@ -396,10 +417,15 @@ class _HomePageState extends State<HomePage> {
   @override
   void dispose() {
     SettingsService.instance.removeListener(_onSettings);
+    _bridge.removeListener(_onBridge);
     super.dispose();
   }
 
   void _onSettings() => setState(_applyHidden);
+
+  void _onBridge() {
+    if (mounted) setState(() {});
+  }
 
   ViewMode _modeFromSettings() {
     switch (SettingsService.instance.startSection) {
@@ -474,7 +500,11 @@ class _HomePageState extends State<HomePage> {
       }
     }
     if (mounted) setState(() {});
-    if (_mediaGranted || _folders.isNotEmpty) await _rescan();
+    if (_mediaGranted || _folders.isNotEmpty) {
+      await _rescan();
+    } else if (mounted) {
+      await _handleLaunchOpen(); // `--open` и без папок в библиотеке
+    }
   }
 
   String? _defaultPicturesDir() {
@@ -610,6 +640,285 @@ class _HomePageState extends State<HomePage> {
       _applyHidden(); // считает _shown/_albums и отдаёт раздаче по сети
       _loading = false;
     });
+    unawaited(_archiveAfterScan(photos));
+  }
+
+  // ───────────────────────── Goat Archive ─────────────────────────
+  /// После скана: найти библиотеки Goat Archive, при новом индексе забрать из
+  /// него теги/серии (в фоне), затем выполнить `--open` от сортировщика.
+  Future<void> _archiveAfterScan(List<PhotoItem> photos) async {
+    if (_useDeviceMedia) return;
+    try {
+      final b = _bridge;
+      await b.detect({..._folders, for (final ph in photos) ph.folderPath});
+      if (!mounted) return;
+      var need = false;
+      for (final root in b.libraries) {
+        if (await b.needsImport(root)) {
+          need = true;
+          break;
+        }
+      }
+      if (need && mounted) await _syncArchive(force: false);
+    } catch (_) {
+      // связка с сортировщиком не должна мешать галерее
+    }
+    if (mounted) await _handleLaunchOpen();
+  }
+
+  /// Забрать индексы библиотек. [force] — по кнопке «Обновить из Goat Archive».
+  Future<void> _syncArchive({required bool force}) async {
+    final known = <String, List<int>>{};
+    for (final ph in _photos) {
+      if (_bridge.inLibrary(ph.path)) {
+        known[ph.path] = [ph.sizeBytes, ph.modified.millisecondsSinceEpoch];
+      }
+    }
+    final reports = await _bridge.sync(force: force, known: known);
+    if (!mounted) return;
+    if (reports.any((r) => r.ok)) _afterTagsChanged();
+    if (reports.isEmpty) {
+      if (force) {
+        _say(archiveReportText(
+            const ArchiveImportReport(root: '', error: 'no-index')));
+      }
+      return;
+    }
+    _say(reports.map(archiveReportText).join('\n'));
+  }
+
+  void _say(String text) => ScaffoldMessenger.of(context)
+      .showSnackBar(SnackBar(content: Text(text)));
+
+  /// Теги в базе изменились (импорт индекса): пересобрать всё, что от них зависит.
+  void _afterTagsChanged() {
+    setState(() {
+      _tagsRev++;
+      if (_nsfwMode != 0) {
+        _nsfwPaths = {
+          ...TagService.instance.pathsMatchingTag('rating:questionable'),
+          ...TagService.instance.pathsMatchingTag('rating:explicit'),
+        };
+      }
+      if (_filterTags.isNotEmpty) {
+        _filterPaths = TagService.instance.pathsWithAllTags(_filterTags);
+      }
+      _matcher = SearchMatcher.resolve(_query);
+      _invalidateVisible();
+    });
+  }
+
+  /// `--open <путь>`: папка — открыть её, файл — открыть папку и просмотрщик.
+  /// Прежние папки библиотеки остаются; новая просто добавляется к ним.
+  Future<void> _handleLaunchOpen() async {
+    final raw = ArchiveBridge.launchOpenPath;
+    if (raw == null || _launchHandled) return;
+    _launchHandled = true;
+    ArchiveBridge.launchOpenPath = null;
+    final plan = planOpen(raw, _folders);
+    if (plan == null) {
+      _say(tr('Goat Archive просит открыть «$raw», но такого пути нет.',
+          'Goat Archive asked to open “$raw”, but there is no such path.',
+          'Goat Archive pide abrir «$raw», pero esa ruta no existe.'));
+      return;
+    }
+    if (plan.addRoot != null) {
+      final next = [..._folders, plan.addRoot!];
+      await LibraryService.setFolders(next);
+      if (!mounted) return;
+      setState(() => _folders = next);
+      await _rescan();
+      if (!mounted) return;
+    }
+    _showFolderByPath(plan.folder, file: plan.file);
+  }
+
+  void _showFolderByPath(String folder, {String? file}) {
+    final key = archivePathKey(folder);
+    // написание папки берём у самих фото — по нему сравнивается _albumPath
+    String? spelled;
+    for (final ph in _photos) {
+      final fk = archivePathKey(ph.folderPath);
+      if (fk == key) {
+        spelled ??= ph.folderPath;
+      } else if (spelled == null && isSameOrUnder(ph.folderPath, folder)) {
+        spelled = ph.folderPath.substring(0, folder.length);
+      }
+    }
+    if (spelled == null) {
+      _say(tr('В этой папке нет картинок.',
+          'There are no pictures in this folder.',
+          'No hay imágenes en esta carpeta.'));
+      return;
+    }
+    setState(() {
+      _albumPath = spelled;
+      _albumName = p.basename(folder).isEmpty ? folder : p.basename(folder);
+      _albumDeep = true;
+      _mode = ViewMode.all;
+      _favOnly = false;
+      _projectsOnly = false;
+      _invalidateVisible();
+    });
+    if (file != null) {
+      final list = _visiblePhotos;
+      final fk = archivePathKey(file);
+      final i = list.indexWhere((ph) => archivePathKey(ph.path) == fk);
+      if (i >= 0) openViewer(context, list, i);
+    }
+  }
+
+  Widget _sheetRow(AuroraColors c, GxGlyph g, String text, VoidCallback go,
+      {bool on = true}) {
+    return InkWell(
+      onTap: on
+          ? () {
+              Navigator.pop(context);
+              go();
+            }
+          : null,
+      child: SizedBox(
+        height: 44,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(children: [
+            GxIcon(g, color: on ? c.accent : c.dim, size: 18),
+            const SizedBox(width: 12),
+            Expanded(
+                child: Text(text,
+                    style: TextStyle(
+                        color: on ? c.text : c.dim, fontSize: 14))),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  /// «Обновить из Goat Archive» / «Открыть Goat Archive».
+  void _showArchiveMenu() {
+    final c = AuroraTheme.of(context).colors;
+    final libs = _bridge.libraries;
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+            child: Row(children: [
+              GxIcon(GxGlyph.archive, color: c.current, size: 18),
+              const SizedBox(width: 10),
+              Text('Goat Archive',
+                  style: TextStyle(
+                      color: c.text,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600)),
+            ]),
+          ),
+          if (libs.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                    libs.length == 1
+                        ? '${tr('Библиотека', 'Library', 'Biblioteca')}: ${libs.first}'
+                        : '${tr('Библиотек', 'Libraries', 'Bibliotecas')}: ${libs.length}',
+                    style: TextStyle(color: c.muted, fontSize: 12)),
+              ),
+            ),
+          const GxHLine(),
+          if (Platform.isWindows)
+            _sheetRow(c, GxGlyph.openExt, openArchiveLabel,
+                () => openGoatArchive(context)),
+          _sheetRow(c, GxGlyph.refresh, refreshFromArchiveLabel,
+              () => _syncArchive(force: true),
+              on: libs.isNotEmpty && !_bridge.importing),
+          if (libs.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+              child: Text(
+                  tr(
+                      'Среди папок галереи нет библиотеки Goat Archive. Добавьте папку своей библиотеки — и теги, авторы и серии подтянутся сами.',
+                      'None of the gallery folders is a Goat Archive library. Add your library folder and its tags, artists and series will follow.',
+                      'Ninguna carpeta de la galería es una biblioteca de Goat Archive. Añade la carpeta de tu biblioteca y llegarán sus etiquetas, autores y series.'),
+                  style: TextStyle(color: c.muted, fontSize: 12.5)),
+            ),
+        ]),
+      ),
+    );
+  }
+
+  /// Меню папки (долгое нажатие / правая кнопка): скрыть и «Влить в коллекцию».
+  void _showFolderMenu(AlbumItem album) {
+    final c = AuroraTheme.of(context).colors;
+    final hidden = SettingsService.instance.isHidden(album.folderPath);
+    final canMerge = canMergeIntoArchive(album.folderPath);
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(album.name.isEmpty ? album.folderPath : album.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: c.text,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600)),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(album.folderPath,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: c.muted, fontSize: 12)),
+            ),
+          ),
+          const GxHLine(),
+          _sheetRow(
+              c,
+              hidden ? GxGlyph.eye : GxGlyph.eyeOff,
+              hidden
+                  ? tr('Показать папку', 'Show folder', 'Mostrar carpeta')
+                  : tr('Скрыть папку', 'Hide folder', 'Ocultar carpeta'),
+              () => _toggleHideFolder(album)),
+          if (canMerge)
+            _sheetRow(c, GxGlyph.archiveIn, mergeIntoArchiveLabel,
+                () => mergeFolderIntoArchive(context, album.folderPath)),
+        ]),
+      ),
+    );
+  }
+
+  /// «Влить в коллекцию» для выделения: уходит общая папка выбранных файлов.
+  Future<void> _selMerge() async {
+    final photos = _selectedPhotos();
+    final common =
+        commonParentFolder({for (final ph in photos) ph.folderPath});
+    if (common == null) {
+      _say(tr(
+          'У выбранных файлов нет общей папки — выберите файлы из одной папки.',
+          'The selected files have no common folder — select files from one folder.',
+          'Los archivos seleccionados no tienen carpeta común: elige archivos de una sola carpeta.'));
+      return;
+    }
+    await mergeFolderIntoArchive(context, common, selected: photos.length);
+    Selection.instance.clear();
+  }
+
+  /// Показывать ли «Влить в коллекцию» для выделения: только Windows и только
+  /// файлы вне библиотеки Goat Archive.
+  bool _canMergeSelection() {
+    if (!Platform.isWindows) return false;
+    final paths = Selection.instance.paths;
+    if (paths.isEmpty) return false;
+    return _bridge.countInLibrary(paths) == 0;
   }
 
   int _relinkNow() =>
@@ -919,9 +1228,7 @@ class _HomePageState extends State<HomePage> {
                         compact: compact,
                         onSearch: (q) => setState(() {
                           _query = q;
-                          _tagMatchPaths = q.trim().isEmpty
-                              ? const {}
-                              : TagService.instance.pathsMatchingTag(q);
+                          _matcher = SearchMatcher.resolve(q);
                           _invalidateVisible();
                         }),
                         onCell: SettingsService.instance.setCellSize,
@@ -985,6 +1292,9 @@ class _HomePageState extends State<HomePage> {
                   onLan: _openLan,
                   onTrash: _openTrash,
                   onFolders: _manageFolders,
+                  onArchive: Platform.isWindows || _bridge.libraries.isNotEmpty
+                      ? _showArchiveMenu
+                      : null,
                   onRescan: _rescan,
                   onSettings: _openSettings,
                 ),
@@ -1257,6 +1567,12 @@ class _HomePageState extends State<HomePage> {
           selected: _albumPath == node.path,
           expanded: !_albumsFlat && node.hasChildren ? open : null,
           onExpand: !_albumsFlat && node.hasChildren ? toggle : null,
+          archive: _bridge.isLibraryRoot(node.path),
+          onMenu: () => _showFolderMenu(AlbumItem(
+              name: node.name,
+              folderPath: node.path,
+              count: node.directCount,
+              cover: node.cover)),
           onTap: () => _selectAlbum(node, compact: compact),
         );
       },
@@ -1317,6 +1633,7 @@ class _HomePageState extends State<HomePage> {
                         onMove: () => _selCopyMove(move: true),
                         onShare: _selShare,
                         onCollections: _selCollections,
+                        onArchive: _canMergeSelection() ? _selMerge : null,
                         onDelete: _selDelete,
                       ),
                     )

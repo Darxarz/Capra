@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'theme.dart';
@@ -11,8 +12,10 @@ import 'error_log.dart';
 import 'perf_monitor.dart';
 import 'embed_store.dart';
 import 'collections_service.dart';
+import 'archive_bridge.dart';
+import 'update_service.dart' show kBuildNumber;
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
   // Перехватываем все ошибки в файловый журнал — для диагностики крашей на
   // устройствах, к которым нет прямого доступа. UI-зона ловит синхронные и
   // асинхронные исключения, onError — низкоуровневые.
@@ -47,6 +50,12 @@ Future<void> main() async {
       await CollectionsService.instance.init();
     } catch (e, s) {
       ErrorLog.recordError(e, s);
+    }
+    // Goat Archive (договор GALLERY_BRIDGE §3): сортировщик открывает галерею
+    // через `--open <путь>`, а сам находит её по gallery.json
+    if (Platform.isWindows) {
+      ArchiveBridge.launchOpenPath = GoatApps.openPathFromArgs(args);
+      GoatApps.writeGalleryJson(version: '0.1.0+$kBuildNumber');
     }
     PerfMonitor.instance.start(); // авто-детект слабого устройства по плавности
     runApp(const GoatApp());

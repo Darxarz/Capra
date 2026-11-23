@@ -23,6 +23,7 @@ class _Rail extends StatelessWidget {
   final VoidCallback onLan;
   final VoidCallback onTrash;
   final VoidCallback onFolders;
+  final VoidCallback? onArchive; // меню Goat Archive; null — не показывать
   final VoidCallback onRescan;
   final VoidCallback onSettings;
   const _Rail({
@@ -42,6 +43,7 @@ class _Rail extends StatelessWidget {
     required this.onLan,
     required this.onTrash,
     required this.onFolders,
+    required this.onArchive,
     required this.onRescan,
     required this.onSettings,
   });
@@ -126,6 +128,15 @@ class _Rail extends StatelessWidget {
               ]),
             ),
           ),
+          if (onArchive != null)
+            AnimatedBuilder(
+              animation: ArchiveBridge.instance,
+              builder: (_, __) => gap(GxIconBtn(
+                  GxGlyph.archive, 'Goat Archive',
+                  onTap: onArchive,
+                  active: ArchiveBridge.instance.importing,
+                  tint: c.current)),
+            ),
           gap(GxIconBtn(
               GxGlyph.plus,
               tr('Папки библиотеки', 'Library folders',
@@ -535,6 +546,7 @@ class _SelectionBar extends StatelessWidget {
   final VoidCallback onMove;
   final VoidCallback onShare;
   final VoidCallback onCollections;
+  final VoidCallback? onArchive; // «Влить в коллекцию (Goat Archive)»
   final VoidCallback onDelete;
   const _SelectionBar({
     required this.count,
@@ -546,6 +558,7 @@ class _SelectionBar extends StatelessWidget {
     required this.onMove,
     required this.onShare,
     required this.onCollections,
+    required this.onArchive,
     required this.onDelete,
   });
 
@@ -606,6 +619,9 @@ class _SelectionBar extends StatelessWidget {
                   tr('В коллекцию', 'To collection', 'A colección'),
                   onTap: on ? onCollections : null,
                   tint: on ? c.text : null),
+              if (onArchive != null)
+                GxIconBtn(GxGlyph.archiveIn, mergeIntoArchiveLabel,
+                    onTap: on ? onArchive : null, tint: on ? c.text : null),
               GxIconBtn(GxGlyph.bin, tr('Удалить', 'Delete', 'Eliminar'),
                   onTap: on ? onDelete : null, tint: on ? c.danger : null),
             ]),
@@ -649,6 +665,20 @@ class _StatusBar extends StatelessWidget {
               },
             ),
           ),
+          // ход импорта из Goat Archive: тот же вид, что у тегирования
+          AnimatedBuilder(
+            animation: ArchiveBridge.instance,
+            builder: (_, __) {
+              final a = ArchiveBridge.instance;
+              if (!a.importing) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: Text(
+                    '${tr('Из Goat Archive', 'From Goat Archive', 'De Goat Archive')}: ${a.done} / ${a.total}',
+                    style: TextStyle(color: c.current, fontSize: 12)),
+              );
+            },
+          ),
           // ход пакетного тегирования — как ход копирования в проводнике
           AnimatedBuilder(
             animation: BatchTagger.instance,
@@ -677,6 +707,8 @@ class _SideRow extends StatelessWidget {
   final GxGlyph glyph;
   final VoidCallback onTap;
   final VoidCallback? onExpand;
+  final VoidCallback? onMenu; // долгое нажатие / правая кнопка
+  final bool archive; // корень библиотеки Goat Archive
   const _SideRow({
     required this.name,
     required this.count,
@@ -685,6 +717,8 @@ class _SideRow extends StatelessWidget {
     required this.expanded,
     required this.onTap,
     this.onExpand,
+    this.onMenu,
+    this.archive = false,
     this.glyph = GxGlyph.folder,
   });
 
@@ -695,6 +729,8 @@ class _SideRow extends StatelessWidget {
       color: selected ? c.selected : Colors.transparent,
       child: InkWell(
         onTap: onTap,
+        onLongPress: onMenu,
+        onSecondaryTap: onMenu,
         child: SizedBox(
           height: 34,
           child: Row(children: [
@@ -726,6 +762,9 @@ class _SideRow extends StatelessWidget {
                       fontWeight:
                           selected ? FontWeight.w600 : FontWeight.w400)),
             ),
+            if (archive)
+              const Padding(
+                  padding: EdgeInsets.only(left: 6), child: ArchiveBadge()),
             Padding(
               padding: const EdgeInsets.only(left: 6, right: 10),
               child: Text('$count',

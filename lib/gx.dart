@@ -89,6 +89,16 @@ class GxGlyph {
       true);
   static const more = GxGlyph('M6 12h.2M12 12h.2M18 12h.2');
   static const play = GxGlyph('M8 5.5v13l10.5-6.5z', true);
+  // ── семейство Goat: Goat Archive (сортировщик) ──
+  static const archive = GxGlyph(
+      'M4 5.5h16v4H4zM5.5 9.5V18A1.5 1.5 0 0 0 7 19.5h10a1.5 1.5 0 0 0 1.5-1.5V9.5M10 13h4',
+      true);
+  static const archiveIn = GxGlyph(
+      'M12 3.5V13M8.5 9.5L12 13l3.5-3.5M4.5 14.5V18A1.5 1.5 0 0 0 6 19.5h12a1.5 1.5 0 0 0 1.5-1.5v-3.5');
+  static const eye = GxGlyph(
+      'M3.5 12s3-6.5 8.5-6.5 8.5 6.5 8.5 6.5-3 6.5-8.5 6.5S3.5 12 3.5 12zM14.5 12a2.5 2.5 0 1 1-5 0a2.5 2.5 0 0 1 5 0');
+  static const openExt = GxGlyph(
+      'M14 4.5h5.5V10M19.5 4.5L11 13M17.5 13.5V18a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 18V8A1.5 1.5 0 0 1 6 6.5h4.5');
   static const eyeOff = GxGlyph(
       'M4 4l16 16M9.5 5.8A9 9 0 0 1 12 5.5c5 0 8.5 6.5 8.5 6.5a15 15 0 0 1-2.6 3.3M14.5 14.6A3.5 3.5 0 0 1 9.4 9.5M6.3 7.7A15 15 0 0 0 3.5 12s3.5 6.5 8.5 6.5a8.5 8.5 0 0 0 3-.55');
 }

@@ -2,18 +2,74 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 
-/// Одна пользовательская коллекция («свой альбом»): id, название, дата создания.
+/// Одна коллекция: свой альбом пользователя либо серия из Goat Archive.
 class CollectionInfo {
   final int id;
   final String name;
   final int count; // сколько фото внутри
   final DateTime created;
+
+  /// true — это серия, которую ведёт Goat Archive: её состав и порядок страниц
+  /// приходят из индекса библиотеки и обновляются при каждом импорте.
+  final bool fromArchive;
   const CollectionInfo({
     required this.id,
     required this.name,
     required this.count,
     required this.created,
+    this.fromArchive = false,
   });
+}
+
+const String _archiveSource = 'goat-archive';
+
+bool _hasColumn(Database db, String table, String column) {
+  for (final r in db.select('PRAGMA table_info($table)')) {
+    if (r['name'] == column) return true;
+  }
+  return false;
+}
+
+/// Создать/обновить таблицы базы коллекций. Вынесено из [CollectionsService]:
+/// ту же базу открывает фоновый импорт индекса Goat Archive.
+///
+/// Миграция: у элементов появился порядок (`position`). У своих коллекций он
+/// пуст — они показываются как раньше, по дате добавления. У серий из Goat
+/// Archive это номер страницы.
+void ensureCollectionsSchema(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS collections(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      created INTEGER NOT NULL
+    );
+  ''');
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS collection_items(
+      collection_id INTEGER NOT NULL,
+      path TEXT NOT NULL,
+      added INTEGER NOT NULL,
+      PRIMARY KEY(collection_id, path)
+    );
+  ''');
+  db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_ci_path ON collection_items(path);');
+  db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_ci_coll ON collection_items(collection_id);');
+  if (!_hasColumn(db, 'collection_items', 'position')) {
+    db.execute('ALTER TABLE collection_items ADD COLUMN position INTEGER');
+  }
+  // откуда коллекция: NULL — своя; 'goat-archive' — серия из библиотеки
+  // ext_library (корень) с идентификатором серии ext_id
+  if (!_hasColumn(db, 'collections', 'source')) {
+    db.execute('ALTER TABLE collections ADD COLUMN source TEXT');
+  }
+  if (!_hasColumn(db, 'collections', 'ext_library')) {
+    db.execute('ALTER TABLE collections ADD COLUMN ext_library TEXT');
+  }
+  if (!_hasColumn(db, 'collections', 'ext_id')) {
+    db.execute('ALTER TABLE collections ADD COLUMN ext_id TEXT');
+  }
 }
 
 /// Локальное хранилище пользовательских коллекций (SQLite) — свои альбомы,
@@ -26,44 +82,55 @@ class CollectionsService {
   Database? _db;
   bool get ready => _db != null;
 
+  /// Файл базы — его же открывает фоновый импорт индекса Goat Archive.
+  String? dbPath;
+
   Future<void> init() async {
     if (_db != null) return;
     final dir = await getApplicationSupportDirectory();
-    final dbPath = p.join(dir.path, 'goat_collections.db');
-    final db = sqlite3.open(dbPath);
-    db.execute('''
-      CREATE TABLE IF NOT EXISTS collections(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        created INTEGER NOT NULL
-      );
-    ''');
-    db.execute('''
-      CREATE TABLE IF NOT EXISTS collection_items(
-        collection_id INTEGER NOT NULL,
-        path TEXT NOT NULL,
-        added INTEGER NOT NULL,
-        PRIMARY KEY(collection_id, path)
-      );
-    ''');
-    db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_ci_path ON collection_items(path);');
-    db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_ci_coll ON collection_items(collection_id);');
-    _db = db;
+    openAt(p.join(dir.path, 'goat_collections.db'));
   }
 
-  /// Все коллекции со счётчиком фото, новые сверху.
-  List<CollectionInfo> list() {
+  /// Открыть базу по явному пути (старт приложения и тесты).
+  void openAt(String path) {
+    close();
+    final db = sqlite3.open(path);
+    // фоновый импорт пишет в ту же базу — подождать, а не падать
+    db.execute('PRAGMA busy_timeout = 8000');
+    ensureCollectionsSchema(db);
+    _db = db;
+    dbPath = path;
+  }
+
+  void close() {
+    try {
+      _db?.dispose();
+    } catch (_) {}
+    _db = null;
+    dbPath = null;
+  }
+
+  /// Коллекции со счётчиком фото. Свои — новые сверху; серии из Goat Archive
+  /// — по названию. [archive]: null — все, false — только свои, true — только
+  /// серии.
+  List<CollectionInfo> list({bool? archive}) {
     final db = _db;
     if (db == null) return const [];
+    final where = archive == null
+        ? ''
+        : (archive
+            ? "WHERE c.source = '$_archiveSource'"
+            : "WHERE c.source IS NOT '$_archiveSource'");
     final rows = db.select('''
       SELECT c.id AS id, c.name AS name, c.created AS created,
-             COUNT(i.path) AS n
+             c.source AS source, COUNT(i.path) AS n
       FROM collections c
       LEFT JOIN collection_items i ON i.collection_id = c.id
+      $where
       GROUP BY c.id
-      ORDER BY c.created DESC
+      ORDER BY (c.source IS '$_archiveSource'),
+               CASE WHEN c.source IS '$_archiveSource' THEN NULL ELSE c.created END DESC,
+               c.name COLLATE NOCASE ASC
     ''');
     return [
       for (final r in rows)
@@ -72,8 +139,42 @@ class CollectionsService {
           name: r['name'] as String,
           count: r['n'] as int,
           created: DateTime.fromMillisecondsSinceEpoch(r['created'] as int),
+          fromArchive: r['source'] == _archiveSource,
         )
     ];
+  }
+
+  /// Серия Goat Archive, в которой лежит файл: название, номер страницы и
+  /// сколько страниц. null — файл не из серии.
+  ({String name, int page, int pages})? archiveSeriesOf(String path) {
+    final db = _db;
+    if (db == null) return null;
+    final rows = db.select('''
+      SELECT c.id AS id, c.name AS name, i.position AS pos
+      FROM collection_items i JOIN collections c ON c.id = i.collection_id
+      WHERE i.path = ? AND c.source = '$_archiveSource' AND i.position IS NOT NULL
+      LIMIT 1
+    ''', [path]);
+    if (rows.isEmpty) return null;
+    final id = rows.first['id'] as int;
+    final n = db.select(
+        'SELECT count(*) AS n FROM collection_items WHERE collection_id = ?',
+        [id]).first['n'] as int;
+    return (
+      name: rows.first['name'] as String,
+      page: rows.first['pos'] as int,
+      pages: n
+    );
+  }
+
+  /// Есть ли хоть одна серия из Goat Archive.
+  bool get hasArchiveSeries {
+    final db = _db;
+    if (db == null) return false;
+    return db
+        .select(
+            "SELECT 1 FROM collections WHERE source = '$_archiveSource' LIMIT 1")
+        .isNotEmpty;
   }
 
   /// Создать коллекцию, вернуть её id.
@@ -98,25 +199,27 @@ class CollectionsService {
     _db?.execute('DELETE FROM collections WHERE id = ?', [id]);
   }
 
-  /// Пути фото коллекции (по убыванию даты добавления — новые сверху).
+  /// Пути фото коллекции. Страницы серии (у них есть порядок) идут первыми,
+  /// по номеру; остальное — как раньше, по убыванию даты добавления.
   List<String> pathsOf(int id) {
     final db = _db;
     if (db == null) return const [];
     final rows = db.select(
       'SELECT path FROM collection_items WHERE collection_id = ? '
-      'ORDER BY added DESC',
+      'ORDER BY (position IS NULL), position ASC, added DESC, path ASC',
       [id],
     );
     return [for (final r in rows) r['path'] as String];
   }
 
-  /// Путь для обложки (первое добавленное фото) — или null, если пусто.
+  /// Путь для обложки: первая страница серии, а у своей коллекции — первое
+  /// добавленное фото. null, если пусто.
   String? coverPath(int id) {
     final db = _db;
     if (db == null) return null;
     final rows = db.select(
       'SELECT path FROM collection_items WHERE collection_id = ? '
-      'ORDER BY added ASC LIMIT 1',
+      'ORDER BY (position IS NULL), position ASC, added ASC LIMIT 1',
       [id],
     );
     return rows.isEmpty ? null : rows.first['path'] as String;

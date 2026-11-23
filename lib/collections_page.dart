@@ -6,6 +6,7 @@ import 'collections_service.dart';
 import 'settings_service.dart';
 import 'viewer_page.dart';
 import 'i18n.dart';
+import 'archive_ui.dart';
 
 const _gPlay = GxGlyph('M8 5.5v13l10.5-6.5z', true);
 
@@ -62,7 +63,8 @@ class _AddToCollectionSheetState extends State<_AddToCollectionSheet> {
   @override
   void initState() {
     super.initState();
-    _items = CollectionsService.instance.list();
+    // серии Goat Archive ведёт сортировщик — вручную в них не добавляем
+    _items = CollectionsService.instance.list(archive: false);
   }
 
   Future<void> _createAndAdd() async {
@@ -306,13 +308,37 @@ class _CollectionsPageState extends State<CollectionsPage> {
                           CollectionsService.instance.coverPath(col.id);
                       final coverPhoto =
                           cover == null ? null : _findByPath(cover);
-                      return _CollectionCard(
+                      final card = _CollectionCard(
                         info: col,
                         cover: coverPhoto,
                         onTap: () => _open(col),
                         onRename: () => _renameCollection(col),
                         onDelete: () => _deleteCollection(col),
                       );
+                      // серии из Goat Archive идут после своих коллекций
+                      if (col.fromArchive &&
+                          (i == 0 || !_items[i - 1].fromArchive)) {
+                        return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Padding(
+                                padding:
+                                    const EdgeInsets.fromLTRB(14, 14, 14, 6),
+                                child: Row(children: [
+                                  const ArchiveBadge(),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                      tr('Серии из Goat Archive',
+                                          'Series from Goat Archive',
+                                          'Series de Goat Archive'),
+                                      style: TextStyle(
+                                          color: c.muted, fontSize: 12.5)),
+                                ]),
+                              ),
+                              card,
+                            ]);
+                      }
+                      return card;
                     },
                   ),
           ),
@@ -363,7 +389,8 @@ class _CollectionCard extends StatelessWidget {
                   width: coverSize,
                   height: coverSize,
                   child: cover == null
-                      ? placeholder(GxGlyph.library)
+                      ? placeholder(
+                          info.fromArchive ? GxGlyph.archive : GxGlyph.library)
                       : Image(
                           image: cover!.thumb(cacheWidth),
                           fit: BoxFit.cover,
@@ -383,6 +410,9 @@ class _CollectionCard extends StatelessWidget {
               ),
               Text('${info.count} ${tr('фото', 'photos', 'fotos')}',
                   style: TextStyle(color: c.muted, fontSize: 12)),
+              if (info.fromArchive)
+                const SizedBox(width: 14)
+              else
               PopupMenuButton<String>(
                 padding: EdgeInsets.zero,
                 child: SizedBox(

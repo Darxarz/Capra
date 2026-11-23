@@ -664,7 +664,7 @@ class _ClientViewState extends State<_ClientView> {
             if (!_addOpen)
               FilledButton.icon(
                 style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(44),
+                  minimumSize: const Size.fromHeight(40),
                 ),
                 onPressed: () => setState(() => _addOpen = true),
                 icon: GxIcon(GxGlyph.plus, color: c.onAccent, size: 18),
@@ -700,7 +700,7 @@ class _ClientViewState extends State<_ClientView> {
                         if (Platform.isAndroid || Platform.isIOS) ...[
                           OutlinedButton.icon(
                             style: OutlinedButton.styleFrom(
-                              minimumSize: const Size.fromHeight(44),
+                              minimumSize: const Size.fromHeight(40),
                             ),
                             onPressed: _busy ? null : _scanQr,
                             icon: GxIcon(_gScan, color: c.text, size: 18),
@@ -756,7 +756,7 @@ class _ClientViewState extends State<_ClientView> {
                         const SizedBox(height: 16),
                         FilledButton.icon(
                           style: FilledButton.styleFrom(
-                            minimumSize: const Size.fromHeight(44),
+                            minimumSize: const Size.fromHeight(40),
                           ),
                           onPressed: _busy ? null : _pairNew,
                           icon: _busy

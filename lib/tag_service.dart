@@ -5,6 +5,72 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 
+/// Источник тегов, пришедших из индекса Goat Archive (см. archive_bridge.dart).
+const String kArchiveSource = 'goat-archive';
+
+/// Создать таблицы базы тегов, если их ещё нет. Вынесено из [TagService],
+/// потому что ту же базу открывает фоновый импорт индекса Goat Archive.
+void ensureTagSchema(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS tags(
+      path TEXT NOT NULL,
+      tag TEXT NOT NULL,
+      category TEXT,
+      source TEXT,
+      confidence REAL,
+      PRIMARY KEY(path, tag)
+    );
+  ''');
+  db.execute('CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag);');
+  db.execute('CREATE INDEX IF NOT EXISTS idx_tags_path ON tags(path);');
+  // сигнатуры файлов: точный хеш (дубли/перепривязка тегов), перцептивный
+  // хеш (похожие), размеры и состояние целостности. Кэш по mtime+size.
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS file_sig(
+      path TEXT PRIMARY KEY,
+      size INTEGER,
+      mtime INTEGER,
+      sha TEXT,
+      phash INTEGER,
+      width INTEGER,
+      height INTEGER,
+      status INTEGER
+    );
+  ''');
+  db.execute('CREATE INDEX IF NOT EXISTS idx_sig_sha ON file_sig(sha);');
+  // что Goat Archive знает о файле своей библиотеки: автор, страница-источник,
+  // серия. epoch — отметка индекса, из которого запись пришла.
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS archive_files(
+      path TEXT PRIMARY KEY,
+      library TEXT NOT NULL,
+      artist TEXT,
+      source_url TEXT,
+      series_id TEXT,
+      series_page INTEGER,
+      epoch INTEGER
+    );
+  ''');
+  db.execute('CREATE INDEX IF NOT EXISTS idx_archive_files_library '
+      'ON archive_files(library, epoch);');
+}
+
+/// Сведения Goat Archive о файле (для инфопанели просмотрщика).
+class ArchiveFileInfo {
+  final String library;
+  final String? artist;
+  final String? sourceUrl;
+  final String? seriesId;
+  final int? seriesPage;
+  const ArchiveFileInfo({
+    required this.library,
+    this.artist,
+    this.sourceUrl,
+    this.seriesId,
+    this.seriesPage,
+  });
+}
+
 /// Локальная база тегов (SQLite). Хранит теги по пути файла — тянет 100к+
 /// изображений с быстрым поиском. Работает на Windows и Android.
 class TagService {
@@ -13,6 +79,9 @@ class TagService {
 
   Database? _db;
   bool get ready => _db != null;
+
+  /// Файл базы — его же открывает фоновый импорт индекса Goat Archive.
+  String? dbPath;
 
   Future<void> init() async {
     if (_db != null) return;
@@ -25,35 +94,147 @@ class TagService {
         oldDb.renameSync(dbPath);
       } catch (_) {/* если переезд не удался — стартуем с пустой БД */}
     }
-    final db = sqlite3.open(dbPath);
-    db.execute('''
-      CREATE TABLE IF NOT EXISTS tags(
-        path TEXT NOT NULL,
-        tag TEXT NOT NULL,
-        category TEXT,
-        source TEXT,
-        confidence REAL,
-        PRIMARY KEY(path, tag)
-      );
-    ''');
-    db.execute('CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag);');
-    db.execute('CREATE INDEX IF NOT EXISTS idx_tags_path ON tags(path);');
-    // сигнатуры файлов: точный хеш (дубли/перепривязка тегов), перцептивный
-    // хеш (похожие), размеры и состояние целостности. Кэш по mtime+size.
-    db.execute('''
-      CREATE TABLE IF NOT EXISTS file_sig(
-        path TEXT PRIMARY KEY,
-        size INTEGER,
-        mtime INTEGER,
-        sha TEXT,
-        phash INTEGER,
-        width INTEGER,
-        height INTEGER,
-        status INTEGER
-      );
-    ''');
-    db.execute('CREATE INDEX IF NOT EXISTS idx_sig_sha ON file_sig(sha);');
+    openAt(dbPath);
+  }
+
+  /// Открыть базу по явному пути (старт приложения и тесты).
+  void openAt(String path) {
+    close();
+    final db = sqlite3.open(path);
+    // фоновый импорт пишет в ту же базу пачками — подождать, а не падать
+    db.execute('PRAGMA busy_timeout = 8000');
+    ensureTagSchema(db);
     _db = db;
+    dbPath = path;
+  }
+
+  void close() {
+    try {
+      _db?.dispose();
+    } catch (_) {}
+    _db = null;
+    dbPath = null;
+    invalidateCaches();
+  }
+
+  // ───────────────────────── словарь тегов ─────────────────────────
+
+  List<String>? _vocab;
+
+  /// Сбросить кэши, зависящие от содержимого базы (после записи тегов).
+  void invalidateCaches() => _vocab = null;
+
+  /// Все различные теги. Берутся «прыжками» по индексу тегов (один поиск на
+  /// каждый различный тег), а не перебором миллионов строк; держатся в памяти
+  /// до следующей записи.
+  List<String> vocabulary() {
+    final cached = _vocab;
+    if (cached != null) return cached;
+    final db = _db;
+    if (db == null) return const [];
+    final rows = db.select('''
+      WITH RECURSIVE t(tag) AS (
+        SELECT min(tag) FROM tags
+        UNION ALL
+        SELECT (SELECT min(tag) FROM tags WHERE tag > t.tag)
+        FROM t WHERE t.tag IS NOT NULL
+      )
+      SELECT tag FROM t WHERE tag IS NOT NULL
+    ''');
+    return _vocab = [for (final r in rows) r['tag'] as String];
+  }
+
+  /// Пути файлов, у которых есть хотя бы один из [tags] (точное совпадение,
+  /// по индексу тегов).
+  Set<String> pathsWithAnyTag(Iterable<String> tags) {
+    final db = _db;
+    final list = tags.toSet().toList();
+    if (db == null || list.isEmpty) return const {};
+    final out = <String>{};
+    const chunk = 400;
+    for (var i = 0; i < list.length; i += chunk) {
+      final part = list.sublist(i, (i + chunk).clamp(0, list.length));
+      final ph = List.filled(part.length, '?').join(',');
+      final rows =
+          db.select('SELECT DISTINCT path FROM tags WHERE tag IN ($ph)', part);
+      for (final r in rows) {
+        out.add(r['path'] as String);
+      }
+    }
+    return out;
+  }
+
+  /// Пути с точным тегом [tag]. Как в Goat Archive, «_» и пробел равнозначны.
+  Set<String> pathsWithTag(String tag) => pathsWithAnyTag(tagSpellings(tag));
+
+  /// Написания тега, которые считаются одним и тем же: `long_hair` / `long hair`.
+  static List<String> tagSpellings(String tag) {
+    final t = tag.trim().toLowerCase();
+    if (t.isEmpty) return const [];
+    return {t, t.replaceAll('_', ' '), t.replaceAll(' ', '_')}.toList();
+  }
+
+  /// Теги словаря, содержащие [fragment] (без учёта «_»/пробела). Сначала
+  /// точное совпадение, потом начинающиеся с фрагмента, потом остальные; не
+  /// больше [limit] — слишком общий фрагмент всё равно совпал бы почти со всем.
+  List<String> tagsContaining(String fragment, {int limit = 400}) {
+    final q = fragment.trim().toLowerCase().replaceAll(' ', '_');
+    if (q.isEmpty) return const [];
+    final exact = <String>[], prefix = <String>[], inner = <String>[];
+    for (final tag in vocabulary()) {
+      final t = tag.replaceAll(' ', '_');
+      final at = t.indexOf(q);
+      if (at < 0) continue;
+      if (t.length == q.length) {
+        exact.add(tag);
+      } else if (at == 0) {
+        prefix.add(tag);
+      } else {
+        inner.add(tag);
+      }
+    }
+    final out = [...exact, ...prefix, ...inner];
+    return out.length > limit ? out.sublist(0, limit) : out;
+  }
+
+  /// Пути с автором [name] — тегом `artist:<имя>` (его ставит импорт из Goat
+  /// Archive; можно набрать и руками). Как в сортировщике: имя ищется как
+  /// часть, а буквы и цифры сравниваются без регистра и знаков.
+  Set<String> pathsWithArtist(String name) {
+    final q = name.trim().toLowerCase().replaceAll(' ', '_');
+    if (q.isEmpty) return const {};
+    final key = _artistKey(q);
+    final hits = <String>[];
+    for (final tag in vocabulary()) {
+      if (!tag.startsWith('artist:')) continue;
+      final a = tag.substring(7).replaceAll(' ', '_');
+      if (a.contains(q) || (key.isNotEmpty && _artistKey(a) == key)) {
+        hits.add(tag);
+      }
+    }
+    return pathsWithAnyTag(hits);
+  }
+
+  static final RegExp _notAlnum = RegExp(r'[^\p{L}\p{N}]', unicode: true);
+  static String _artistKey(String s) => s.replaceAll(_notAlnum, '');
+
+  /// Сведения Goat Archive о файле: автор, страница-источник, серия.
+  ArchiveFileInfo? archiveInfo(String path) {
+    final db = _db;
+    if (db == null) return null;
+    final rows = db.select(
+        'SELECT library, artist, source_url, series_id, series_page '
+        'FROM archive_files WHERE path = ? LIMIT 1',
+        [path]);
+    if (rows.isEmpty) return null;
+    final r = rows.first;
+    return ArchiveFileInfo(
+      library: r['library'] as String,
+      artist: r['artist'] as String?,
+      sourceUrl: r['source_url'] as String?,
+      seriesId: r['series_id'] as String?,
+      seriesPage: r['series_page'] as int?,
+    );
   }
 
   // ───────────────────────── сигнатуры файлов ─────────────────────────
@@ -148,6 +329,8 @@ class TagService {
   void forgetPath(String path) {
     _db?.execute('DELETE FROM tags WHERE path = ?', [path]);
     _db?.execute('DELETE FROM file_sig WHERE path = ?', [path]);
+    _db?.execute('DELETE FROM archive_files WHERE path = ?', [path]);
+    invalidateCaches();
   }
 
   /// Точный хеш файла из кэша (без проверки актуальности) — для перепривязки.
@@ -192,8 +375,11 @@ class TagService {
   String exportJson() {
     final db = _db;
     if (db == null) return '{"version":1,"tags":[]}';
+    // теги из индекса Goat Archive в копию не идут: их миллионы, и они в любой
+    // момент заново берутся из самой библиотеки
     final rows = db.select(
-        'SELECT path, tag, category, source, confidence FROM tags');
+        'SELECT path, tag, category, source, confidence FROM tags '
+        "WHERE source IS NOT '$kArchiveSource'");
     final list = [
       for (final r in rows)
         {
@@ -220,6 +406,7 @@ class TagService {
     final list = (data is Map ? data['tags'] : data) as List?;
     if (list == null) return 0;
     var n = 0;
+    invalidateCaches();
     db.execute('BEGIN');
     try {
       for (final e in list) {
@@ -274,6 +461,28 @@ class TagService {
       'VALUES(?, ?, ?, ?, ?)',
       [path, t, category, source, confidence],
     );
+    _vocabAdd(t);
+  }
+
+  // новый для словаря тег должен находиться поиском сразу; словарь отсортирован
+  // так же, как индекс базы (по байтам), поэтому вставляем на своё место
+  void _vocabAdd(String tag) {
+    final v = _vocab;
+    if (v == null) return;
+    var lo = 0, hi = v.length;
+    while (lo < hi) {
+      final mid = (lo + hi) >> 1;
+      if (v[mid].compareTo(tag) < 0) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    if (lo < v.length && v[lo] == tag) return;
+    // порядок сравнения строк в Dart и в SQLite может разойтись на редких
+    // символах — тогда просто перечитаем словарь при следующем поиске
+    if (v.contains(tag)) return;
+    v.insert(lo, tag);
   }
 
   void removeTag(String path, String tag) {
@@ -281,15 +490,12 @@ class TagService {
   }
 
   /// Пути файлов, у которых тег содержит подстроку [query] (для поиска).
+  /// Подстрока ищется в словаре тегов, а пути берутся по индексу — без
+  /// перебора всей таблицы (в ней бывают миллионы строк).
   Set<String> pathsMatchingTag(String query) {
-    final db = _db;
     final q = query.trim().toLowerCase();
-    if (db == null || q.isEmpty) return const {};
-    final rows = db.select(
-      'SELECT DISTINCT path FROM tags WHERE tag LIKE ?',
-      ['%$q%'],
-    );
-    return {for (final r in rows) r['path'] as String};
+    if (_db == null || q.isEmpty) return const {};
+    return pathsWithAnyTag(tagsContaining(q));
   }
 
   /// Все различные теги с количеством (для будущего обзора тегов).
@@ -309,7 +515,16 @@ class TagService {
   Set<String> taggedPaths() {
     final db = _db;
     if (db == null) return const {};
-    final rows = db.select('SELECT DISTINCT path FROM tags');
+    // «прыжками» по индексу путей: один поиск на файл, а не на каждый тег
+    final rows = db.select('''
+      WITH RECURSIVE t(path) AS (
+        SELECT min(path) FROM tags
+        UNION ALL
+        SELECT (SELECT min(path) FROM tags WHERE path > t.path)
+        FROM t WHERE t.path IS NOT NULL
+      )
+      SELECT path FROM t WHERE path IS NOT NULL
+    ''');
     return {for (final r in rows) r['path'] as String};
   }
 
@@ -336,9 +551,13 @@ class TagService {
     final db = _db;
     if (db == null) return const [];
     final order = byCount ? 'n DESC, tag ASC' : 'tag ASC';
+    // счёт идёт по одному индексу тегов; категорию дочитываем только для
+    // попавших в список — иначе на миллионах строк панель тегов замирает
     final rows = db.select(
-      'SELECT tag, COUNT(*) AS n, MAX(category) AS cat FROM tags '
-      'GROUP BY tag ORDER BY $order LIMIT ?',
+      'SELECT t.tag AS tag, t.n AS n, '
+      '(SELECT x.category FROM tags x WHERE x.tag = t.tag LIMIT 1) AS cat '
+      'FROM (SELECT tag, COUNT(*) AS n FROM tags GROUP BY tag '
+      'ORDER BY $order LIMIT ?) t',
       [limit],
     );
     return [

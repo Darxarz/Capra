@@ -50,7 +50,8 @@ class BackupService {
 
     final collections = <Map<String, dynamic>>[];
     if (CollectionsService.instance.ready) {
-      for (final col in CollectionsService.instance.list()) {
+      // серии из Goat Archive в копию не идут — они заново берутся из библиотеки
+      for (final col in CollectionsService.instance.list(archive: false)) {
         collections.add({
           'name': col.name,
           'created': col.created.toIso8601String(),
@@ -235,7 +236,7 @@ class BackupService {
       final raw = data['collections'];
       if (raw is List && CollectionsService.instance.ready) {
         final svc = CollectionsService.instance;
-        for (final old in svc.list()) {
+        for (final old in svc.list(archive: false)) {
           svc.delete(old.id);
         }
         for (final entry in raw) {

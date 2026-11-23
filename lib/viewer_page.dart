@@ -18,6 +18,7 @@ import 'settings_service.dart';
 import 'media_actions.dart';
 import 'similar_page.dart';
 import 'collections_page.dart';
+import 'archive_ui.dart';
 
 // Свои значки просмотрщика — в том же начертании, что и в gx.dart.
 const _gPlay = GxGlyph('M8 5.5v13l10.5-6.5z', true);
@@ -794,6 +795,7 @@ class _InfoPanel extends StatelessWidget {
         const GxHLine(),
         const SizedBox(height: 12),
         _TagsSection(photo: photo, colors: c),
+        ArchiveInfoSection(path: photo.path),
         const SizedBox(height: 14),
         ValueListenableBuilder<Set<String>>(
           valueListenable: Favorites.instance.notifier,

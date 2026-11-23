@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'model.dart';
+import 'archive_bridge.dart' show kArchiveDir;
 
 /// Сканирование папок и работа с библиотекой.
 class LibraryService {
@@ -399,38 +400,55 @@ Future<List<PhotoItem>> _scanFolder(String root) async {
   final out = <PhotoItem>[];
   if (!await dir.exists()) return out;
 
-  try {
-    await for (final ent in dir.list(recursive: true, followLinks: false)) {
-      if (ent is! File) continue;
-      final lower = ent.path.toLowerCase();
-      final dot = lower.lastIndexOf('.');
-      if (dot < 0) continue;
-      if (!kScanExtensions.contains(lower.substring(dot))) continue;
+  // Обход по папкам вручную (а не list(recursive: true)): так можно вовсе не
+  // заходить в служебную папку Goat Archive — в ней журнал и черновики
+  // сортировщика, а не картинки коллекции. Заодно недоступная подпапка больше
+  // не обрывает скан всего корня.
+  final sep = Platform.pathSeparator;
+  final stack = <Directory>[dir];
+  while (stack.isNotEmpty) {
+    final cur = stack.removeLast();
+    try {
+      await for (final ent in cur.list(followLinks: false)) {
+        if (ent is Directory) {
+          final cut = ent.path.lastIndexOf(sep);
+          final name = cut >= 0 ? ent.path.substring(cut + 1) : ent.path;
+          // `.thumbnails` — кэш миниатюр других программ: картинки в нём
+          // непригодны (решение владельца), в любой глубине и в любом регистре
+          if (name == kArchiveDir || name.toLowerCase() == '.thumbnails') {
+            continue;
+          }
+          stack.add(ent);
+          continue;
+        }
+        if (ent is! File) continue;
+        final lower = ent.path.toLowerCase();
+        final dot = lower.lastIndexOf('.');
+        if (dot < 0) continue;
+        if (!kScanExtensions.contains(lower.substring(dot))) continue;
 
-      FileStat st;
-      try {
-        st = await ent.stat();
-      } catch (_) {
-        continue;
+        FileStat st;
+        try {
+          st = await ent.stat();
+        } catch (_) {
+          continue;
+        }
+
+        final folderPath = ent.parent.path;
+        final segs = folderPath.split(sep).where((s) => s.isNotEmpty).toList();
+        out.add(PhotoItem(
+          path: ent.path,
+          isGif: lower.endsWith('.gif'),
+          isVideo: kVideoExtensions.contains(lower.substring(dot)),
+          folderPath: folderPath,
+          folderName: segs.isNotEmpty ? segs.last : folderPath,
+          modified: st.modified,
+          sizeBytes: st.size,
+        ));
       }
-
-      final folderPath = ent.parent.path;
-      final segs = folderPath
-          .split(Platform.pathSeparator)
-          .where((s) => s.isNotEmpty)
-          .toList();
-      out.add(PhotoItem(
-        path: ent.path,
-        isGif: lower.endsWith('.gif'),
-        isVideo: kVideoExtensions.contains(lower.substring(dot)),
-        folderPath: folderPath,
-        folderName: segs.isNotEmpty ? segs.last : folderPath,
-        modified: st.modified,
-        sizeBytes: st.size,
-      ));
+    } catch (_) {
+      // папки без доступа просто пропускаем
     }
-  } catch (_) {
-    // папки без доступа просто пропускаем
   }
 
   out.sort((a, b) => b.modified.compareTo(a.modified));

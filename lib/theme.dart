@@ -29,6 +29,7 @@ class AuroraColors {
   final Color dim; // недоступное, третьестепенное
   final Color current; // второй акцент (перивинкль): «текущее», избранное
   final Color danger; // удаление, ошибки
+  final Color warn; // нужно решение владельца (как в Goat Archive)
   final Color onAccent; // текст поверх залитой акцентом кнопки
 
   const AuroraColors({
@@ -51,6 +52,7 @@ class AuroraColors {
     required this.dim,
     required this.current,
     required this.danger,
+    required this.warn,
     required this.onAccent,
   });
 
@@ -354,6 +356,7 @@ class AuroraBase {
   final Color accent;
   final Color current;
   final Color danger;
+  final Color warn;
   final Color onAccent;
 
   const AuroraBase({
@@ -374,6 +377,7 @@ class AuroraBase {
     required this.accent,
     required this.current,
     required this.danger,
+    required this.warn,
     required this.onAccent,
   });
 }
@@ -399,6 +403,7 @@ const List<AuroraBase> kLightBases = [
     accent: Color(0xFF1B6F63),
     current: Color(0xFF4558B8),
     danger: Color(0xFFB04438),
+    warn: Color(0xFF8A6410),
     onAccent: Color(0xFFF2F4EE),
   ),
 ];
@@ -423,6 +428,7 @@ const List<AuroraBase> kDarkBases = [
     accent: Color(0xFF5FD6C8),
     current: Color(0xFF8FA6FF),
     danger: Color(0xFFFF9A8F),
+    warn: Color(0xFFF2C879),
     onAccent: Color(0xFF0B1622),
   ),
   AuroraBase(
@@ -443,6 +449,7 @@ const List<AuroraBase> kDarkBases = [
     accent: Color(0xFF5FD6C8),
     current: Color(0xFF8FA6FF),
     danger: Color(0xFFFF9A8F),
+    warn: Color(0xFFF2C879),
     onAccent: Color(0xFF000000),
   ),
 ];
@@ -495,6 +502,7 @@ AuroraColors composeColors(AuroraBase base, AuroraAccent accent) {
     dim: base.dim,
     current: base.current,
     danger: base.danger,
+    warn: base.warn,
     onAccent: base.onAccent,
   );
 }

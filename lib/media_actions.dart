@@ -10,6 +10,8 @@ import 'theme.dart';
 import 'trash_service.dart';
 import 'tag_service.dart';
 import 'i18n.dart';
+import 'archive_bridge.dart';
+import 'archive_ui.dart';
 
 /// Действия над фото (одиночные и массовые): удаление, копирование,
 /// перемещение, отправка, добавление тегов. Используются и из контекстных
@@ -61,33 +63,25 @@ class MediaActions {
   static Future<int> delete(BuildContext context, List<PhotoItem> photos) async {
     if (photos.isEmpty) return 0;
     final n = photos.length;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-            n == 1
-                ? tr('Удалить фото?', 'Delete photo?', '¿Eliminar la foto?')
-                : tr('Удалить $n фото?', 'Delete $n photos?',
-                    '¿Eliminar $n fotos?')),
-        content: Text(
-          Platform.isAndroid
-              ? tr(
-                  'Уйдут в системную корзину — можно вернуть из «Недавно удалённых».',
-                  'They go to the system trash — recoverable from “Recently deleted”.',
-                  'Irán a la papelera del sistema — recuperables en «Eliminados recientemente».')
-              : tr('Переедут в корзину GOAT — их можно вернуть.',
-                  'They move to the GOAT trash — recoverable.',
-                  'Se mueven a la papelera de GOAT — recuperables.'),
-        ),
-        actions: [
-          GxTextBtn(tr('Отмена', 'Cancel', 'Cancelar'),
-              onTap: () => Navigator.pop(ctx, false)),
-          GxTextBtn(tr('Удалить', 'Delete', 'Eliminar'),
-              primary: true, onTap: () => Navigator.pop(ctx, true)),
-        ],
-      ),
+    // файлы библиотеки Goat Archive: одно ясное предупреждение в том же окне
+    final inLib = archiveCount([for (final ph in photos) ph.path]);
+    final ok = await confirmAction(
+      context,
+      title: n == 1
+          ? tr('Удалить фото?', 'Delete photo?', '¿Eliminar la foto?')
+          : tr('Удалить $n фото?', 'Delete $n photos?', '¿Eliminar $n fotos?'),
+      body: Platform.isAndroid
+          ? tr(
+              'Уйдут в системную корзину — можно вернуть из «Недавно удалённых».',
+              'They go to the system trash — recoverable from “Recently deleted”.',
+              'Irán a la papelera del sistema — recuperables en «Eliminados recientemente».')
+          : tr('Переедут в корзину GOAT — их можно вернуть.',
+              'They move to the GOAT trash — recoverable.',
+              'Se mueven a la papelera de GOAT — recuperables.'),
+      notice: inLib > 0 ? archiveNotice(inLibrary: inLib, total: n) : null,
+      action: tr('Удалить', 'Delete', 'Eliminar'),
     );
-    if (ok != true) return -1;
+    if (!ok) return -1;
 
     final local = photos.where((ph) => !ph.isRemote).toList();
     var moved = 0;
@@ -140,6 +134,28 @@ class MediaActions {
             : tr('Скопировать в папку', 'Copy to folder',
                 'Copiar a la carpeta'));
     if (dest == null) return null;
+
+    // перенос из библиотеки Goat Archive или в неё меняет её состав
+    final bridge = ArchiveBridge.instance;
+    final fromLib = move ? archiveCount([for (final ph in photos) ph.path]) : 0;
+    final intoLib = bridge.inLibrary(dest);
+    if ((fromLib > 0 || intoLib) && context.mounted) {
+      final yes = await confirmAction(
+        context,
+        title: move
+            ? tr('Переместить ${photos.length} файлов?',
+                'Move ${photos.length} files?', '¿Mover ${photos.length} archivos?')
+            : tr('Скопировать ${photos.length} файлов?',
+                'Copy ${photos.length} files?', '¿Copiar ${photos.length} archivos?'),
+        body: dest,
+        notice: archiveNotice(
+            inLibrary: intoLib ? photos.length : fromLib, total: photos.length),
+        action: move
+            ? tr('Переместить', 'Move', 'Mover')
+            : tr('Скопировать', 'Copy', 'Copiar'),
+      );
+      if (!yes) return null;
+    }
 
     var ok = 0, fail = 0;
     for (final ph in photos) {
