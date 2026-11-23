@@ -499,6 +499,22 @@ void main() {
       };
     }
 
+    test('фоновый поиск находит то же, что обычный', () async {
+      import();
+      for (final query in ['forest', 'forest -wolf', 'drag', '-forest']) {
+        final background = await SearchMatcher.resolveInBackground(query);
+        final found = {
+          for (final f in baseFiles())
+            if (background.matches(abs(lib, f.rel),
+                p.basename(f.rel).toLowerCase(), p.dirname(f.rel).toLowerCase()))
+              f.rel
+        };
+        expect(found, run(query), reason: query);
+      }
+      // основное соединение после работы изолята остаётся рабочим
+      expect(TagService.instance.ready, isTrue);
+    });
+
     test('слово, -тег и artist:имя', () {
       import();
       // слово — имя файла, папка или тег (подстрокой, как раньше)

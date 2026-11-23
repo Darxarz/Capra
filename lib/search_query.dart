@@ -1,3 +1,5 @@
+import 'dart:isolate';
+
 import 'tag_service.dart';
 
 /// Разобранная строка поиска. Синтаксис тот же, что в Goat Archive, чтобы
@@ -71,6 +73,25 @@ class SearchMatcher {
       {for (final t in q.excluded) ...svc.pathsWithTag(t)},
       [for (final a in q.artists) svc.pathsWithArtist(a)],
     );
+  }
+
+  /// То же, что [SearchMatcher.resolve], но в отдельном изоляте со своим
+  /// соединением: на коллекции в сотни тысяч файлов сбор множеств путей занимает
+  /// секунды, и интерфейс не должен замирать при наборе.
+  static Future<SearchMatcher> resolveInBackground(String raw) async {
+    if (SearchQuery.parse(raw).isEmpty) return none;
+    final dbPath = TagService.instance.dbPath;
+    if (dbPath == null) return SearchMatcher.resolve(raw);
+    return Isolate.run(() {
+      // у изолята свой экземпляр сервиса и своё соединение с той же базой
+      final svc = TagService.instance;
+      svc.openAt(dbPath);
+      try {
+        return SearchMatcher.resolve(raw, tags: svc);
+      } finally {
+        svc.close();
+      }
+    });
   }
 
   /// Подходит ли файл. [nameLower] — имя файла, [folderLower] — путь папки

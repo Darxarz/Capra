@@ -84,6 +84,8 @@ class _HomePageState extends State<HomePage> {
   UpdateInfo? _update; // доступное обновление (null = нет)
   String _query = ''; // строка поиска
   SearchMatcher _matcher = SearchMatcher.none; // запрос, сверенный с тегами
+  Timer? _searchDelay;
+  int _searchGeneration = 0;
   final ArchiveBridge _bridge = ArchiveBridge.instance;
   bool _launchHandled = false; // `--open` от Goat Archive уже выполнен
   Set<String> _filterTags = {}; // активный фильтр по тегам (И)
@@ -416,6 +418,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
+    _searchDelay?.cancel();
     SettingsService.instance.removeListener(_onSettings);
     _bridge.removeListener(_onBridge);
     super.dispose();
@@ -703,8 +706,24 @@ class _HomePageState extends State<HomePage> {
       if (_filterTags.isNotEmpty) {
         _filterPaths = TagService.instance.pathsWithAllTags(_filterTags);
       }
-      _matcher = SearchMatcher.resolve(_query);
       _invalidateVisible();
+    });
+    _resolveSearch();
+  }
+
+  /// Сверяет строку поиска с тегами в фоне. Пока идёт сверка, на экране остаётся
+  /// прежний результат; ответ на устаревший запрос отбрасывается.
+  void _resolveSearch({Duration delay = Duration.zero}) {
+    final generation = ++_searchGeneration;
+    final query = _query;
+    _searchDelay?.cancel();
+    _searchDelay = Timer(delay, () async {
+      final matcher = await SearchMatcher.resolveInBackground(query);
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() {
+        _matcher = matcher;
+        _invalidateVisible();
+      });
     });
   }
 
@@ -1226,11 +1245,17 @@ class _HomePageState extends State<HomePage> {
                         cell: SettingsService.instance.cellSize,
                         query: _query,
                         compact: compact,
-                        onSearch: (q) => setState(() {
-                          _query = q;
-                          _matcher = SearchMatcher.resolve(q);
-                          _invalidateVisible();
-                        }),
+                        onSearch: (q) {
+                          setState(() {
+                            _query = q;
+                            if (q.trim().isEmpty) {
+                              _matcher = SearchMatcher.none;
+                              _invalidateVisible();
+                            }
+                          });
+                          _resolveSearch(
+                              delay: const Duration(milliseconds: 220));
+                        },
                         onCell: SettingsService.instance.setCellSize,
                         update: _update,
                         onUpdate: _startUpdate,
