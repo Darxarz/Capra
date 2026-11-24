@@ -232,9 +232,10 @@ jobs:
         shell: pwsh
         run: |
           $ver = '1.20.1'
-          Invoke-WebRequest "https://github.com/microsoft/onnxruntime/releases/download/v$ver/onnxruntime-win-x64-$ver.zip" -OutFile ort.zip
+          # The GitHub release download is gone; the official NuGet package carries the same DLL.
+          Invoke-WebRequest "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime/$ver" -OutFile ort.zip
           Expand-Archive ort.zip -DestinationPath ort -Force
-          Copy-Item "ort/onnxruntime-win-x64-$ver/lib/onnxruntime.dll" "build/windows/x64/runner/Release/onnxruntime.dll" -Force
+          Copy-Item "ort/runtimes/win-x64/native/onnxruntime.dll" "build/windows/x64/runner/Release/onnxruntime.dll" -Force
           Write-Host "onnxruntime.dll заменён на $ver"
 
       - name: Упаковать Windows в zip
