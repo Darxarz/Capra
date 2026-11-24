@@ -243,12 +243,15 @@ jobs:
         run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath GOAT-windows.zip -Force
 
       # ───────────────── Android ─────────────────
+      # --build-number = versionCode APK. Должен расти с каждым релизом: Android
+      # ставит обновление поверх, только если versionCode не ниже установленного,
+      # и отказывается откатывать на старую сборку. Раньше он всегда был 1.
       - name: Собрать APK под Android
         env:
           GOAT_STORE_PW: ${{ secrets.GOAT_KEYSTORE_PASSWORD }}
           GOAT_KEY_PW: ${{ secrets.GOAT_KEY_PASSWORD }}
           GOAT_KEY_ALIAS: ${{ secrets.GOAT_KEY_ALIAS }}
-        run: flutter build apk --release --dart-define=BUILD_NUMBER=${{ github.run_number }}
+        run: flutter build apk --release --build-number=${{ github.run_number }} --dart-define=BUILD_NUMBER=${{ github.run_number }}
 
       - name: Переименовать APK
         shell: pwsh

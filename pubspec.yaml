@@ -38,6 +38,9 @@ dependencies:
   # Goat Link: коллекция с ПК через Goat Explorer (Android)
   goat_link:
     path: packages/goat_link
+  # самообновление на Android: GOAT.apk из релиза → системный установщик
+  goat_update:
+    path: packages/goat_update
 
 dev_dependencies:
   flutter_lints: ^4.0.0

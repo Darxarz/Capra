@@ -1,0 +1,19 @@
+name: goat_update
+description: Android side of GOAT's self-update. Hands a downloaded GOAT.apk to the system installer through a FileProvider; Android shows its own confirm screen and checks the signature.
+version: 1.0.0
+publish_to: "none"
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+  flutter: ">=3.19.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: dev.goat.update
+        pluginClass: GoatUpdatePlugin

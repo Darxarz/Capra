@@ -13,6 +13,7 @@ import 'model.dart';
 import 'library_service.dart';
 import 'viewer_page.dart';
 import 'update_service.dart';
+import 'android_update.dart';
 import 'favorites.dart';
 import 'folder_tree.dart';
 import 'tree_view.dart';
@@ -512,9 +513,17 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _checkUpdates() async {
-    final u = await UpdateService.check();
+    final check = await UpdateService.checkDetailed();
+    // планшет: убрать скачанный APK, когда он уже установлен или устарел
+    if (Platform.isAndroid) unawaited(AndroidUpdater.instance.tidy(check));
+    final u = check.info;
     if (mounted && u != null) setState(() => _update = u);
   }
+
+  /// « (≈146 МБ)» — сколько скачивать; пусто, если GitHub не сообщил размер.
+  String _sizeNote(UpdateInfo u) => u.size <= 0
+      ? ''
+      : ' (≈${(u.size / (1024 * 1024)).round()} ${tr('МБ', 'MB', 'MB')})';
 
   Future<void> _startUpdate() async {
     final u = _update;
@@ -528,10 +537,15 @@ class _HomePageState extends State<HomePage> {
           title: Text(tr('Обновить GOAT?', 'Update GOAT?', '¿Actualizar GOAT?'),
               style: TextStyle(color: c.text)),
           content: Text(
-            tr(
-                'Доступна сборка №${u.build}. Приложение скачает её, заменит файлы и перезапустится.',
-                'Build #${u.build} is available. The app will download it, replace the files and restart.',
-                'La compilación n.º ${u.build} está disponible. La app la descargará, reemplazará los archivos y se reiniciará.'),
+            Platform.isAndroid
+                ? tr(
+                    'Доступна сборка №${u.build}${_sizeNote(u)}. GOAT скачает её, а Android попросит подтвердить установку — фото, теги и настройки останутся на месте.',
+                    'Build #${u.build} is available${_sizeNote(u)}. GOAT will download it and Android will ask you to confirm the installation — photos, tags and settings stay.',
+                    'La compilación n.º ${u.build} está disponible${_sizeNote(u)}. GOAT la descargará y Android pedirá confirmar la instalación; fotos, etiquetas y ajustes se conservan.')
+                : tr(
+                    'Доступна сборка №${u.build}. Приложение скачает её, заменит файлы и перезапустится.',
+                    'Build #${u.build} is available. The app will download it, replace the files and restart.',
+                    'La compilación n.º ${u.build} está disponible. La app la descargará, reemplazará los archivos y se reiniciará.'),
             style: TextStyle(color: c.muted),
           ),
           actions: [
@@ -549,6 +563,16 @@ class _HomePageState extends State<HomePage> {
       },
     );
     if (ok != true || !mounted) return;
+    if (Platform.isAndroid) {
+      // планшет: разрешение → скачивание с отменой → системный установщик
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) =>
+            AndroidUpdateDialog(info: u, updater: AndroidUpdater.instance),
+      );
+      return;
+    }
     // диалог прогресса сам запускает скачивание; при успехе приложение выходит
     await showDialog<void>(
       context: context,

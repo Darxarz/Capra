@@ -1,0 +1,38 @@
+// Java only, like goat_link: CI regenerates android/ and picks the Kotlin setup itself.
+group = "dev.goat.update"
+version = "1.0"
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: "com.android.library"
+
+android {
+    namespace = "dev.goat.update"
+    compileSdk = 36
+
+    defaultConfig {
+        minSdk = 24
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // FileProvider: the installer reads the APK through a content:// URI
+    implementation "androidx.core:core:1.13.1"
+}
