@@ -269,6 +269,12 @@ Database _openIndexCopy(String path) {
   }
 }
 
+/// Открыть частную копию индекса только на чтение (для импорта коллекции с ПК).
+Database openArchiveIndexCopy(String path) => _openIndexCopy(path);
+
+/// Шапка открытого индекса. null — это не индекс версии 1.
+ArchiveIndexInfo? archiveIndexInfoOf(Database db) => _infoFromMeta(_readMeta(db));
+
 /// Импорт индекса библиотеки в базы галереи. Синхронный и долгий (сотни тысяч
 /// файлов, миллионы тегов) — запускать ТОЛЬКО в фоновом изоляте, см.
 /// [ArchiveBridge.sync]. Индекс читается потоком, запись идёт пачками: одна

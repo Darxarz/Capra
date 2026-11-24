@@ -16,12 +16,16 @@ import 'archive_ui.dart';
 /// Действия над фото (одиночные и массовые): удаление, копирование,
 /// перемещение, отправка, добавление тегов. Используются и из контекстных
 /// действий, и из режима массового выделения.
+/// Только то, что можно менять: файлы коллекции с ПК сюда не попадают.
+List<PhotoItem> writablePhotos(Iterable<PhotoItem> photos) =>
+    [for (final ph in photos) if (!ph.isLinked) ph];
+
 class MediaActions {
   /// Открыть файл в ассоциированном редакторе (KRA → Krita, PSD → Photoshop
   /// и т.п. — что назначено в системе). На ПК через системный «открыть».
   static Future<void> openInEditor(
       BuildContext context, PhotoItem photo) async {
-    if (photo.isRemote) return;
+    if (photo.isRemote || photo.isLinked) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
       if (Platform.isWindows) {
@@ -48,7 +52,7 @@ class MediaActions {
   static Future<int> share(List<PhotoItem> photos) async {
     final files = <XFile>[];
     for (final ph in photos) {
-      if (ph.isRemote) continue;
+      if (ph.isRemote || ph.isLinked) continue;
       // на Android путь может быть недоступен — берём читаемый файл через ассет
       final f = await ph.resolveFile();
       if (f != null) files.add(XFile(f.path));
@@ -60,7 +64,9 @@ class MediaActions {
 
   /// Удалить с подтверждением. Android — в системную корзину (MediaStore по
   /// assetId), ПК — в корзину GOAT. Возвращает число удалённых (−1 = отмена).
-  static Future<int> delete(BuildContext context, List<PhotoItem> photos) async {
+  static Future<int> delete(BuildContext context, List<PhotoItem> all) async {
+    // коллекция с ПК только для чтения: такие файлы сюда не проходят
+    final photos = writablePhotos(all);
     if (photos.isEmpty) return 0;
     final n = photos.length;
     // файлы библиотеки Goat Archive: одно ясное предупреждение в том же окне
@@ -115,9 +121,11 @@ class MediaActions {
   /// или null, если платформа не поддерживается / папка не выбрана.
   static Future<({int ok, int fail})?> copyOrMove(
     BuildContext context,
-    List<PhotoItem> photos, {
+    List<PhotoItem> all, {
     required bool move,
   }) async {
+    final photos = writablePhotos(all);
+    if (photos.isEmpty) return null;
     final messenger = ScaffoldMessenger.of(context);
     // на Android произвольное перемещение файлов ограничено (scoped storage)
     if (Platform.isAndroid || Platform.isIOS) {
@@ -187,7 +195,9 @@ class MediaActions {
   }
 
   /// Диалог ввода тегов и применение их ко всем фото. Возвращает число фото.
-  static Future<int> addTags(BuildContext context, List<PhotoItem> photos) async {
+  static Future<int> addTags(BuildContext context, List<PhotoItem> all) async {
+    final photos = writablePhotos(all);
+    if (photos.isEmpty) return 0;
     final c = AuroraTheme.of(context).colors;
     final ctl = TextEditingController();
     final raw = await showDialog<String>(

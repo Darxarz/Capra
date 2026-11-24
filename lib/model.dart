@@ -5,6 +5,9 @@ import 'preview_service.dart';
 import 'settings_service.dart';
 import 'asset_image.dart';
 import 'i18n.dart';
+import 'link_images.dart';
+
+export 'link_images.dart' show LinkRef;
 
 /// Расширения, которые считаем изображениями.
 const Set<String> kImageExtensions = {
@@ -64,6 +67,9 @@ class PhotoItem {
   final String? remoteToken; // токен сессии, выданный хостом при сопряжении
   final String? remoteId; // id фото на хосте
 
+  // ── файл коллекции на ПК (Goat Link, через Goat Explorer) ──
+  final LinkRef? link;
+
   const PhotoItem({
     required this.path,
     required this.isGif,
@@ -76,16 +82,20 @@ class PhotoItem {
     this.remoteBase,
     this.remoteToken,
     this.remoteId,
+    this.link,
   });
 
   /// true — фото получено с другого устройства, файла на диске нет.
   bool get isRemote => remoteBase != null;
 
+  /// true — файл коллекции на ПК: только смотреть, ничего не менять.
+  bool get isLinked => link != null;
+
   /// Читаемый файл для операций, которым нужны пиксели/байты (поделиться,
   /// тегирование, метаданные). На Android с MediaStore прямой путь может быть
   /// недоступен — тогда берём файл через ассет (система отдаёт читаемую копию).
   Future<File?> resolveFile() async {
-    if (isRemote) return null;
+    if (isRemote || isLinked) return null;
     if (Platform.isAndroid && assetId != null) {
       try {
         final a = await AssetEntity.fromId(assetId!);
@@ -109,6 +119,7 @@ class PhotoItem {
 
   String get fileName {
     if (isRemote) return path; // у удалённого в path лежит имя
+    if (isLinked) return link!.rel.split('/').last;
     final sep = path.contains('/') ? '/' : Platform.pathSeparator;
     final i = path.lastIndexOf(sep);
     return i >= 0 ? path.substring(i + 1) : path;
@@ -117,6 +128,7 @@ class PhotoItem {
   /// Превью: декодируется уменьшённым (cacheWidth) — это и держит сетку лёгкой.
   /// Для удалённого фото — с хоста; для KRA/PSD — встроенное превью.
   ImageProvider thumb(int cacheWidth) {
+    if (isLinked) return LinkThumbImage(link!, linkThumbSize(cacheWidth));
     if (isRemote) {
       return NetworkImage(
           '$remoteBase/thumb?token=$remoteToken&id=$remoteId&w=$cacheWidth');
@@ -146,6 +158,15 @@ class PhotoItem {
   /// вешает/роняет приложение (особенно на Windows). Маленькие не трогаются
   /// (allowUpscaling: false) — для них качество полное.
   ImageProvider get full {
+    if (isLinked) {
+      return ResizeImage(
+        LinkFullImage(link!),
+        width: _kFullDecodeMax,
+        height: _kFullDecodeMax,
+        policy: ResizeImagePolicy.fit,
+        allowUpscaling: false,
+      );
+    }
     if (isRemote) {
       return NetworkImage('$remoteBase/file?token=$remoteToken&id=$remoteId');
     }
@@ -165,6 +186,15 @@ class PhotoItem {
       allowUpscaling: false,
     );
   }
+}
+
+/// Размер миниатюры с ПК: несколько ступеней, чтобы смена плотности сетки не
+/// заставляла заново просить у ПК те же картинки.
+int linkThumbSize(int cacheWidth) {
+  for (final s in const [192, 256, 384, 512]) {
+    if (cacheWidth <= s) return s;
+  }
+  return 512;
 }
 
 /// Альбом = папка на диске.

@@ -34,3 +34,42 @@ String tr(String ru, String en, [String? es]) {
       return ru;
   }
 }
+
+/// Русская форма слова при числе: 1 файл, 2 файла, 5 файлов, 11 файлов, 21 файл.
+String pluralRu(int n, String one, String few, String many) {
+  final a = n.abs();
+  final tens = a % 100;
+  if (tens >= 11 && tens <= 14) return many;
+  final last = a % 10;
+  if (last == 1) return one;
+  if (last >= 2 && last <= 4) return few;
+  return many;
+}
+
+/// «3 изображения» / «3 images» / «3 imágenes».
+String picturesLabel(int n) => '$n ${tr(
+      pluralRu(n, 'изображение', 'изображения', 'изображений'),
+      n == 1 ? 'image' : 'images',
+      n == 1 ? 'imagen' : 'imágenes',
+    )}';
+
+/// «3 видео» / «3 videos» / «3 vídeos» (по-русски слово не склоняется).
+String videosLabel(int n) => '$n ${tr(
+      'видео',
+      n == 1 ? 'video' : 'videos',
+      n == 1 ? 'vídeo' : 'vídeos',
+    )}';
+
+/// «3 файла» — когда неизвестно, сколько среди них картинок и видео.
+String filesLabel(int n) => '$n ${tr(
+      pluralRu(n, 'файл', 'файла', 'файлов'),
+      n == 1 ? 'file' : 'files',
+      n == 1 ? 'archivo' : 'archivos',
+    )}';
+
+/// Строка состояния: картинки и видео отдельно, пустая часть не показывается.
+String mediaCountLabel(int pictures, int videos) {
+  if (videos == 0) return picturesLabel(pictures);
+  if (pictures == 0) return videosLabel(videos);
+  return '${picturesLabel(pictures)} · ${videosLabel(videos)}';
+}

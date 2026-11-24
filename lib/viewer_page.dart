@@ -19,6 +19,8 @@ import 'media_actions.dart';
 import 'similar_page.dart';
 import 'collections_page.dart';
 import 'archive_ui.dart';
+import 'link_images.dart';
+import 'link_service.dart';
 
 // Свои значки просмотрщика — в том же начертании, что и в gx.dart.
 const _gPlay = GxGlyph('M8 5.5v13l10.5-6.5z', true);
@@ -82,7 +84,7 @@ class _ViewerPageState extends State<ViewerPage>
   // ниже), а не через GestureDetector.onVerticalDrag* — иначе жест конкурирует
   // за арену жестов с внутренним ScaleGestureRecognizer у InteractiveViewer
   // (он «съедает» одиночный палец ещё до нашего распознавателя) и не срабатывает.
-  late final AnimationController _dismissCtrl = AnimationController(vsync: this);
+  late final AnimationController _dismissCtrl;
   double _dismissDy = 0; // смещение фото вниз во время жеста (0 — на месте)
   bool _dismissDragging = false; // уже определили, что это жест закрытия
   int? _dismissPointer; // id пальца, за которым следим
@@ -100,10 +102,25 @@ class _ViewerPageState extends State<ViewerPage>
     super.initState();
     _index = widget.initialIndex;
     _controller = PageController(initialPage: _index);
+    // не лениво: иначе первое обращение случалось бы уже в dispose()
+    _dismissCtrl = AnimationController(vsync: this);
+    HardwareKeyboard.instance.addHandler(_onEscape);
+  }
+
+  /// Esc закрывает просмотрщик, где бы ни был фокус: плеер видео забирает
+  /// клавиши себе. Поверх открыт диалог или полный экран плеера — не наше.
+  bool _onEscape(KeyEvent e) {
+    if (e is! KeyDownEvent || e.logicalKey != LogicalKeyboardKey.escape) {
+      return false;
+    }
+    if (!mounted || !ModalRoute.isCurrentOf(context)!) return false;
+    Navigator.of(context).maybePop();
+    return true;
   }
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onEscape);
     _slideTimer?.cancel();
     _controller.dispose();
     _dismissCtrl.dispose();
@@ -230,13 +247,15 @@ class _ViewerPageState extends State<ViewerPage>
     } else if (k == LogicalKeyboardKey.arrowLeft ||
         k == LogicalKeyboardKey.pageUp) {
       _go(-1);
-    } else if (k == LogicalKeyboardKey.escape ||
-        k == LogicalKeyboardKey.backspace) {
+    } else if (k == LogicalKeyboardKey.backspace) {
       Navigator.of(context).maybePop();
     } else if (k == LogicalKeyboardKey.space) {
       _toggleSlideshow();
     } else if (k == LogicalKeyboardKey.keyF) {
-      Favorites.instance.toggle(widget.photos[_index].path);
+      // коллекция с ПК только для просмотра
+      if (!widget.photos[_index].isLinked) {
+        Favorites.instance.toggle(widget.photos[_index].path);
+      }
     } else if (k == LogicalKeyboardKey.keyR) {
       _random();
     } else if (k == LogicalKeyboardKey.keyI) {
@@ -296,10 +315,12 @@ class _ViewerPageState extends State<ViewerPage>
                 if (p.isVideo) return _VideoPlayerPane(photo: p);
                 // Hero — только для текущей страницы, иначе PageView строит
                 // соседние кадры заранее и получаются два героя с одним тегом
-                final heroTag = (i == _index && !SettingsService.instance.motionReduced)
+                final heroTag = (i == _index &&
+                        !p.isLinked &&
+                        !SettingsService.instance.motionReduced)
                     ? photoHeroTag(p)
                     : null;
-                return _ZoomableImage(
+                final page = _ZoomableImage(
                   key: ValueKey(p.path),
                   photo: p,
                   heroTag: heroTag,
@@ -310,6 +331,13 @@ class _ViewerPageState extends State<ViewerPage>
                   },
                   onTap: () => setState(() => _chrome = !_chrome),
                 );
+                // файл с ПК: пролистанная страница отменяет свою загрузку
+                return p.isLinked
+                    ? LinkLoadLease(
+                        key: ValueKey('lease:${p.path}'),
+                        loadKey: LinkLoads.fullKey(p.link!),
+                        child: page)
+                    : page;
               },
             ),
           ),
@@ -334,20 +362,27 @@ class _ViewerPageState extends State<ViewerPage>
                   top: 10,
                   left: 0,
                   right: 0,
+                  // только подпись: нажатия проходят сквозь неё. Без widthFactor
+                  // Container с выравниванием растягивался на всю ширину экрана
+                  // и незаметно перекрывал крестик
                   child: Center(
-                    child: Container(
-                      height: 40,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.45),
-                        borderRadius: gxCorner,
+                    child: IgnorePointer(
+                      child: Container(
+                        height: 40,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.45),
+                          borderRadius: gxCorner,
+                        ),
+                        child: Center(
+                          widthFactor: 1,
+                          child: Text('${_index + 1} / ${widget.photos.length}',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600)),
+                        ),
                       ),
-                      child: Text('${_index + 1} / ${widget.photos.length}',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600)),
                     ),
                   ),
                 ),
@@ -586,6 +621,7 @@ class _VideoPlayerPaneState extends State<_VideoPlayerPane> {
   Player? _player;
   VideoController? _controller;
   String? _error;
+  int? _linkFd; // открытый файл с ПК (Goat Link): закрываем сами
 
   @override
   void initState() {
@@ -601,34 +637,88 @@ class _VideoPlayerPaneState extends State<_VideoPlayerPane> {
 
   Future<void> _load() async {
     final old = _player;
+    final oldFd = _linkFd;
     _player = null;
     _controller = null;
     _error = null;
+    _linkFd = null;
     await old?.dispose();
-    final player = Player();
+    _closeLinkFd(oldFd);
+    final photo = widget.photo;
+    String source;
+    int? fd;
+    final link = photo.link;
+    if (link != null) {
+      // поток с ПК: плеер сам читает нужные куски и перематывает, файл целиком
+      // не скачивается. Дескриптор открываем в фоне — ПК может отвечать не сразу.
+      try {
+        fd = await LinkService.instance.api.openFd(link.treeUri, link.rel);
+      } catch (_) {
+        if (mounted && widget.photo.path == photo.path) {
+          setState(() => _error = tr(
+              'ПК сейчас недоступен.',
+              'The PC is unavailable right now.',
+              'El PC no está disponible ahora.'));
+        }
+        return;
+      }
+      if (!mounted || widget.photo.path != photo.path) {
+        _closeLinkFd(fd);
+        return;
+      }
+      source = 'fd://$fd';
+    } else if (photo.isRemote) {
+      source =
+          '${photo.remoteBase}/file?token=${photo.remoteToken}&id=${photo.remoteId}';
+    } else {
+      source = photo.path;
+    }
+    // файл с ПК идёт по сети: запас поменьше, чтобы не тянуть лишнего на паузе
+    final player = link == null
+        ? Player()
+        : Player(
+            configuration:
+                const PlayerConfiguration(bufferSize: 12 * 1024 * 1024));
     final controller = VideoController(player);
-    final source = widget.photo.isRemote
-        ? '${widget.photo.remoteBase}/file?token=${widget.photo.remoteToken}&id=${widget.photo.remoteId}'
-        : widget.photo.path;
     try {
+      if (link != null && player.platform is NativePlayer) {
+        // запас держим в памяти и не дальше минуты вперёд: иначе плеер заранее
+        // тянул по сети треть большого файла и складывал её на диск планшета
+        final native = player.platform as NativePlayer;
+        await native.setProperty('cache-on-disk', 'no');
+        await native.setProperty('cache-secs', '60');
+      }
       await player.open(Media(source), play: false);
-      if (!mounted) {
+      if (!mounted || widget.photo.path != photo.path) {
         await player.dispose();
+        _closeLinkFd(fd);
         return;
       }
       setState(() {
         _player = player;
         _controller = controller;
+        _linkFd = fd;
       });
     } catch (e) {
       await player.dispose();
+      _closeLinkFd(fd);
       if (mounted) setState(() => _error = '$e');
     }
   }
 
+  void _closeLinkFd(int? fd) {
+    if (fd != null) unawaited(LinkService.instance.api.closeFd(fd));
+  }
+
   @override
   void dispose() {
-    _player?.dispose();
+    final player = _player;
+    final fd = _linkFd;
+    // сначала плеер, потом дескриптор: иначе он читал бы закрытый файл
+    unawaited(() async {
+      await player?.dispose();
+      _closeLinkFd(fd);
+    }());
     super.dispose();
   }
 
@@ -707,6 +797,9 @@ class _InfoPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (photo.isLinked) {
+      return _LinkInfoPanel(photo: photo, colors: colors, asSheet: asSheet);
+    }
     final c = colors;
     Widget row(String k, String v) => Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
@@ -851,6 +944,117 @@ class _InfoPanel extends StatelessWidget {
         const GxHLine(),
         const SizedBox(height: 12),
         _MetaSection(photo: photo, colors: c),
+      ]),
+    );
+  }
+}
+
+/// Сведения о файле коллекции с ПК. Только чтение: ни избранного, ни правки
+/// тегов, ни действий над файлом.
+class _LinkInfoPanel extends StatelessWidget {
+  final PhotoItem photo;
+  final AuroraColors colors;
+  final bool asSheet;
+  const _LinkInfoPanel(
+      {required this.photo, required this.colors, required this.asSheet});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = colors;
+    final link = photo.link!;
+    final info = LinkService.instance.db?.info(link.fileId);
+    final url = info?.sourceUrl;
+    final canOpen = url != null && isOpenableSourceUrl(url);
+    Widget row(String k, String v) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            SizedBox(
+                width: 84,
+                child: Text(k, style: TextStyle(color: c.muted, fontSize: 13))),
+            Expanded(
+                child: Text(v,
+                    style: TextStyle(
+                        color: c.text,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500))),
+          ]),
+        );
+    return Container(
+      decoration: BoxDecoration(
+        color: c.panel,
+        border: Border(
+          left: asSheet ? BorderSide.none : BorderSide(color: c.line),
+          top: asSheet ? BorderSide(color: c.line) : BorderSide.none,
+        ),
+      ),
+      child: ListView(padding: const EdgeInsets.fromLTRB(14, 14, 14, 16), children: [
+        Text(photo.fileName,
+            style: TextStyle(
+                fontSize: 15, fontWeight: FontWeight.w600, color: c.text)),
+        const SizedBox(height: 3),
+        Text(
+            tr('На компьютере · только просмотр', 'On the PC · view only',
+                'En el PC · solo lectura'),
+            style: TextStyle(fontSize: 12, color: c.muted)),
+        const SizedBox(height: 12),
+        const GxHLine(),
+        const SizedBox(height: 6),
+        if (info?.artist != null) row(tr('Автор', 'Artist', 'Autor'), info!.artist!),
+        if (info?.seriesTitle != null)
+          row(
+              tr('Серия', 'Series', 'Serie'),
+              info?.seriesPage == null
+                  ? info!.seriesTitle!
+                  : '${info!.seriesTitle} · ${tr('стр.', 'page', 'pág.')} ${info.seriesPage} ${tr('из', 'of', 'de')} ${info.seriesPages}'),
+        if (info?.rating != null)
+          row(tr('Рейтинг', 'Rating', 'Clasificación'), info!.rating!),
+        if (photo.sizeBytes > 0)
+          row(tr('Размер', 'Size', 'Tamaño'), prettySize(photo.sizeBytes)),
+        if (photo.folderName.isNotEmpty)
+          row(tr('Папка', 'Folder', 'Carpeta'), photo.folderName),
+        if (url != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 7),
+            child: InkWell(
+              onTap: canOpen ? () => openSourceUrl(url) : null,
+              child: Text(url,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: canOpen ? c.accent : c.text,
+                      fontSize: 12.5,
+                      decoration: canOpen
+                          ? TextDecoration.underline
+                          : TextDecoration.none)),
+            ),
+          ),
+        const SizedBox(height: 8),
+        const GxHLine(),
+        const SizedBox(height: 12),
+        Row(children: [
+          GxIcon(GxGlyph.tag, size: 16, color: c.muted),
+          const SizedBox(width: 8),
+          Text(tr('Теги', 'Tags', 'Etiquetas'),
+              style: TextStyle(
+                  color: c.text, fontSize: 14, fontWeight: FontWeight.w600)),
+        ]),
+        const SizedBox(height: 10),
+        if (info == null || info.tags.isEmpty)
+          Text(tr('Тегов нет.', 'No tags.', 'Sin etiquetas.'),
+              style: TextStyle(color: c.muted, fontSize: 12))
+        else
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            for (final t in info.tags)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: c.selected,
+                  borderRadius: gxCorner,
+                  border: Border.all(color: c.accent.withValues(alpha: 0.35)),
+                ),
+                child: Text(t, style: TextStyle(color: c.text, fontSize: 12.5)),
+              ),
+          ]),
       ]),
     );
   }

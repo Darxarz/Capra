@@ -1,0 +1,27 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace = "dev.filebridge.app"
+    compileSdk = 36
+
+    defaultConfig {
+        applicationId = "dev.filebridge.app"
+        minSdk = 26
+        targetSdk = 36
+        versionCode = 1
+        versionName = "fixture"
+    }
+
+    // the library has ".goat-archive-export" and "_Other files": by default aapt
+    // silently drops asset names that start with a dot or an underscore
+    androidResources {
+        ignoreAssetsPattern = "!.svn:!.git"
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+}

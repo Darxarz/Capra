@@ -10,6 +10,7 @@ class _Rail extends StatelessWidget {
   final ViewMode mode;
   final ValueChanged<ViewMode> onMode;
   final VoidCallback? onExplorer; // null — проводник не установлен
+  final VoidCallback? onLink; // коллекция с ПК; null — кнопки нет
   final bool sideOpen;
   final VoidCallback onSide;
   final bool favOnly;
@@ -30,6 +31,7 @@ class _Rail extends StatelessWidget {
     required this.mode,
     required this.onMode,
     required this.onExplorer,
+    this.onLink,
     required this.sideOpen,
     required this.onSide,
     required this.favOnly,
@@ -72,6 +74,12 @@ class _Rail extends StatelessWidget {
                   gap(GxIconBtn(GxGlyph.list,
                       tr('Проводник', 'Explorer', 'Explorador'),
                       onTap: onExplorer)),
+                  rule(),
+                ],
+                if (onLink != null) ...[
+                  gap(GxIconBtn(_gPc,
+                      tr('Коллекция на ПК', 'PC collection', 'Colección del PC'),
+                      onTap: onLink)),
                   rule(),
                 ],
                 gap(GxIconBtn(
@@ -284,7 +292,7 @@ class _Crumbs extends StatelessWidget {
 class _SearchField extends StatefulWidget {
   final String initial;
   final ValueChanged<String> onSearch;
-  const _SearchField({required this.initial, required this.onSearch});
+  const _SearchField({super.key, required this.initial, required this.onSearch});
 
   @override
   State<_SearchField> createState() => _SearchFieldState();
@@ -363,6 +371,7 @@ class _FilterRow extends StatelessWidget {
   final ValueChanged<FolderView> onFolderView;
   final SortMode sort;
   final ValueChanged<SortMode> onSort;
+  final List<SortMode> sortModes; // какие порядки предлагать
   final int nsfwMode; // 0 все, 1 только 18+, 2 без 18+
   final VoidCallback onNsfw;
   const _FilterRow({
@@ -373,6 +382,7 @@ class _FilterRow extends StatelessWidget {
     required this.onFolderView,
     required this.sort,
     required this.onSort,
+    this.sortModes = SortMode.values,
     required this.nsfwMode,
     required this.onNsfw,
   });
@@ -448,7 +458,7 @@ class _FilterRow extends StatelessWidget {
             onSelected: onSort,
             position: PopupMenuPosition.under,
             itemBuilder: (ctx) => [
-              for (final m in SortMode.values)
+              for (final m in sortModes)
                 PopupMenuItem(
                   value: m,
                   height: 38,
@@ -634,9 +644,11 @@ class _SelectionBar extends StatelessWidget {
 
 // ───────────────────────── строка состояния ─────────────────────────
 class _StatusBar extends StatelessWidget {
-  final int total;
+  final int pictures;
+  final int videos;
   final String? where;
-  const _StatusBar({required this.total, required this.where});
+  const _StatusBar(
+      {required this.pictures, required this.videos, required this.where});
 
   @override
   Widget build(BuildContext context) {
@@ -651,12 +663,10 @@ class _StatusBar extends StatelessWidget {
               animation: Selection.instance,
               builder: (_, __) {
                 final sel = Selection.instance;
-                final images = tr('изображений', 'images', 'imágenes');
+                final counts = mediaCountLabel(pictures, videos);
                 final text = sel.active
-                    ? '${tr('Выбрано', 'Selected', 'Seleccionadas')} ${sel.count} ${tr('из', 'of', 'de')} $total'
-                    : (where == null
-                        ? '$total $images'
-                        : '$total $images · $where');
+                    ? '${tr('Выбрано', 'Selected', 'Seleccionadas')} ${sel.count} ${tr('из', 'of', 'de')} ${pictures + videos}'
+                    : (where == null ? counts : '$counts · $where');
                 return Text(text,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -700,7 +710,7 @@ class _StatusBar extends StatelessWidget {
 /// Одна строка панели альбомов — как строка папки в панели папок проводника.
 class _SideRow extends StatelessWidget {
   final String name;
-  final int count;
+  final int? count; // null — число ещё считается
   final int depth;
   final bool selected;
   final bool? expanded; // null — раскрывать нечего
@@ -767,7 +777,7 @@ class _SideRow extends StatelessWidget {
                   padding: EdgeInsets.only(left: 6), child: ArchiveBadge()),
             Padding(
               padding: const EdgeInsets.only(left: 6, right: 10),
-              child: Text('$count',
+              child: Text(count == null ? '' : '$count',
                   style: TextStyle(color: c.dim, fontSize: 12)),
             ),
           ]),

@@ -13,6 +13,10 @@ linux/
 windows/
 macos/
 web/
+# а вот код локальных плагинов — настоящий исходник, его храним
+!/packages/*/android/
+/packages/*/android/.gradle/
+/packages/*/android/build/
 
 # IDE
 .idea/

@@ -34,10 +34,16 @@ import 'archive_ui.dart';
 import 'search_query.dart';
 import 'i18n.dart';
 import 'gx.dart';
+import 'error_log.dart';
+import 'link_images.dart';
+import 'link_index.dart';
+import 'link_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
 
 part 'home_shell.dart';
+part 'link_home.dart';
 
 enum ViewMode { all, dates, albums }
 
@@ -66,6 +72,7 @@ class _HomePageState extends State<HomePage> {
   List<PhotoItem>? _mediaShownCache;
   List<AlbumItem>? _mediaAlbumsCache;
   List<PhotoItem>? _visibleCache;
+  int _visibleVideos = 0; // сколько видео в _visibleCache
 
   /// Сбросить весь производный кэш (после смены набора фото/фильтра медиа).
   void _invalidateLists() {
@@ -87,6 +94,11 @@ class _HomePageState extends State<HomePage> {
   Timer? _searchDelay;
   int _searchGeneration = 0;
   final ArchiveBridge _bridge = ArchiveBridge.instance;
+  final LinkService _link = LinkService.instance;
+  bool _linkOpen = false; // экран коллекции с ПК сейчас открыт
+  bool _linkAutoDone = false; // сам открываем его один раз за запуск
+  int _linkHandoffs = 0;
+  bool _linkOfferHidden = true; // строка «Подключить коллекцию» убрана
   bool _launchHandled = false; // `--open` от Goat Archive уже выполнен
   Set<String> _filterTags = {}; // активный фильтр по тегам (И)
   Set<String> _filterPaths = const {}; // пути, подходящие под фильтр тегов
@@ -221,7 +233,10 @@ class _HomePageState extends State<HomePage> {
       r = r.where((p) => _matcher.matches(
           p.path, p.fileName.toLowerCase(), p.folderName.toLowerCase()));
     }
-    return r.toList();
+    final out = r.toList();
+    // считаем здесь, один раз на набор: строка состояния строится каждый кадр
+    _visibleVideos = out.where((p) => p.isVideo).length;
+    return out;
   }
 
   /// Сортирует мастер-список ОДИН раз (а не на каждом кадре): фильтры в
@@ -411,9 +426,11 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     SettingsService.instance.addListener(_onSettings);
     _bridge.addListener(_onBridge);
+    _link.addListener(_onLink);
     _restore();
     _checkUpdates();
     _checkExplorer();
+    unawaited(_startLink());
   }
 
   @override
@@ -421,7 +438,60 @@ class _HomePageState extends State<HomePage> {
     _searchDelay?.cancel();
     SettingsService.instance.removeListener(_onSettings);
     _bridge.removeListener(_onBridge);
+    _link.removeListener(_onLink);
     super.dispose();
+  }
+
+  // ───────────────────────── коллекция с ПК (Goat Link) ─────────────────────────
+  static const _linkOfferPref = 'goat_link_offer_hidden';
+
+  Future<void> _startLink() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _linkOfferHidden = prefs.getBool(_linkOfferPref) ?? false;
+      await _link.start();
+    } catch (e, s) {
+      // связь с ПК не должна мешать галерее планшета
+      ErrorLog.recordError(e, s);
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _onLink() {
+    if (!mounted) return;
+    setState(() {});
+    final handoff = _link.handoffSerial != _linkHandoffs;
+    if (!_link.hasConnection || _linkOpen) {
+      _linkHandoffs = _link.handoffSerial;
+      return;
+    }
+    if (_linkAutoDone && !handoff) return;
+    _linkAutoDone = true;
+    _linkHandoffs = _link.handoffSerial;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _openLink());
+  }
+
+  Future<void> _openLink() async {
+    if (!mounted || _linkOpen) return;
+    _linkOpen = true;
+    await Navigator.of(context).push(PageRouteBuilder<void>(
+      pageBuilder: (_, __, ___) => const LinkHomePage(),
+      transitionDuration: Duration.zero,
+      reverseTransitionDuration: Duration.zero,
+    ));
+    _linkOpen = false;
+  }
+
+  void _startConnect() {
+    unawaited(_link.connect());
+    unawaited(_openLink());
+  }
+
+  Future<void> _hideLinkOffer() async {
+    setState(() => _linkOfferHidden = true);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_linkOfferPref, true);
   }
 
   void _onSettings() => setState(_applyHidden);
@@ -1228,6 +1298,7 @@ class _HomePageState extends State<HomePage> {
     final c = AuroraTheme.of(context).colors;
     final compact = _compactUi(context);
     final sideOpen = _sideOpenPref ?? !compact;
+    final visibleCount = _visiblePhotos.length; // заодно считает _visibleVideos
     return _SelPopScope(
       child: Scaffold(
         backgroundColor: c.bg,
@@ -1289,6 +1360,10 @@ class _HomePageState extends State<HomePage> {
                     if (compact) _sideOpenPref = false;
                   }),
                   onExplorer: _explorerInstalled ? _openExplorer : null,
+                  onLink: Platform.isAndroid &&
+                          (_link.explorerInstalled || _link.hasConnection)
+                      ? _openLink
+                      : null,
                   sideOpen: sideOpen,
                   onSide: () => setState(() => _sideOpenPref = !sideOpen),
                   favOnly: _favOnly,
@@ -1327,7 +1402,8 @@ class _HomePageState extends State<HomePage> {
             ),
             const GxHLine(),
             _StatusBar(
-              total: _visiblePhotos.length,
+              pictures: visibleCount - _visibleVideos,
+              videos: _visibleVideos,
               where: _albumPath != null
                   ? _albumName
                   : (_folders.isNotEmpty
@@ -1609,6 +1685,8 @@ class _HomePageState extends State<HomePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (!_linkOfferHidden && _link.phase == LinkPhase.needsConnect)
+          _LinkOffer(onConnect: _startConnect, onDismiss: _hideLinkOffer),
         _FilterRow(
           mode: _mode,
           media: _mediaFilter,
@@ -2073,8 +2151,27 @@ class PhotoTile extends StatelessWidget {
               fit: StackFit.expand,
               children: [
                 Container(color: c.surface2),
-                if (photo.isVideo)
+                if (photo.isVideo && !photo.isLinked)
                   _VideoTileFace(colors: c)
+                else if (photo.isLinked)
+                  // файл на ПК: загрузка отменяется, когда плитка уходит с экрана
+                  LinkLoadLease(
+                    loadKey: LinkLoads.thumbKey(
+                        photo.link!, linkThumbSize(cacheWidth)),
+                    child: Image(
+                      image: photo.thumb(cacheWidth),
+                      fit: s.squareThumbs ? BoxFit.cover : BoxFit.contain,
+                      gaplessPlayback: true,
+                      filterQuality: FilterQuality.low,
+                      frameBuilder: (ctx, child, frame, wasSync) {
+                        if (wasSync || frame != null) return child;
+                        return Container(color: c.surface2);
+                      },
+                      errorBuilder: (ctx, e, st) => photo.isVideo
+                          ? _VideoTileFace(colors: c)
+                          : GxIcon(GxGlyph.gallery, color: c.muted, size: 18),
+                    ),
+                  )
                 else
                   _HeroableThumb(
                     photo: photo,
@@ -2390,7 +2487,8 @@ class _AllGrid extends StatefulWidget {
   // (например, для содержимого отдельной папки, чтобы не путать с главной лентой)
   final Object? scrollKey;
   const _AllGrid(
-      {required this.photos,
+      {super.key,
+      required this.photos,
       required this.cell,
       this.selectable = true,
       this.scrollKey});
@@ -2530,6 +2628,8 @@ class _AllGridState extends State<_AllGrid> {
     if (idx < 0) idx = 0;
     if (idx >= widget.photos.length) idx = widget.photos.length - 1;
     final ph = widget.photos[idx];
+    // у файлов с ПК в индексе нет дат: подпись — папка
+    if (ph.isLinked) return ph.folderName;
     switch (SettingsService.instance.sortMode) {
       case SortMode.nameAsc:
         return ph.fileName.isNotEmpty ? ph.fileName[0].toUpperCase() : '';
@@ -2543,7 +2643,8 @@ class _AllGridState extends State<_AllGrid> {
   @override
   Widget build(BuildContext context) {
     final s = SettingsService.instance;
-    if (s.gridLayout == GridLayout.mosaic) {
+    // мозаике нужны размеры каждого файла с диска; для коллекции с ПК — ровная сетка
+    if (s.gridLayout == GridLayout.mosaic && widget.photos is! LinkPhotoList) {
       return _MosaicGrid(
           photos: widget.photos,
           cell: widget.cell,
@@ -3177,7 +3278,7 @@ class _AlbumCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                   fontSize: 14, fontWeight: FontWeight.w600, color: c.text)),
-          Text('${album.count} ${tr('изображений', 'images', 'imágenes')}',
+          Text(filesLabel(album.count),
               style: TextStyle(fontSize: 12, color: c.muted)),
         ],
       ),
